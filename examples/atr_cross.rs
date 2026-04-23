@@ -21,44 +21,53 @@ use quant_research_framework_rs::{run_with_csv, Bar};
 // Indicators (copied from indicators_tradingview.py for parity with Python).
 // ---------------------------------------------------------------------------
 
-/// Wilder's ATR: RMA of true-range over `length` bars.
-/// Matches `data['...'].ewm(alpha=1/length, min_periods=length).mean()` in pandas.
+/// Pandas-style adjusted EWM with `min_periods`. Matches
+/// `series.ewm(alpha=alpha, min_periods=mp).mean()` (default `adjust=True`,
+/// `ignore_na=False` — NaN entries decay the weight but don't contribute a
+/// value). Used as the building block for both compute_atr and compute_rsi
+/// so the indicators here track their pandas counterparts in
+/// indicators_tradingview.py.
+fn ewm_adjusted(series: &[f64], alpha: f64, min_periods: usize) -> Vec<f64> {
+    let n = series.len();
+    let mut out = vec![f64::NAN; n];
+    let gamma = 1.0 - alpha;
+    let mut num = 0.0f64;
+    let mut den = 0.0f64;
+    let mut seen = 0usize;
+    for i in 0..n {
+        let x = series[i];
+        num *= gamma;
+        den *= gamma;
+        if !x.is_nan() {
+            num += x;
+            den += 1.0;
+            seen += 1;
+        }
+        if seen >= min_periods && den > 0.0 {
+            out[i] = num / den;
+        }
+    }
+    out
+}
+
+/// ATR = adjusted EWM (alpha=1/length, min_periods=length) of true range.
+/// Matches `compute_atr` in indicators_tradingview.py bit-for-bit.
 fn compute_atr(bars: &[Bar], length: usize) -> Vec<f64> {
     let n = bars.len();
-    let mut out = vec![f64::NAN; n];
-    if n < 2 || length == 0 {
-        return out;
-    }
-    let alpha = 1.0 / length as f64;
     let mut tr = vec![f64::NAN; n];
+    if n == 0 {
+        return tr;
+    }
+    // Pandas sets TR[0] = high[0] - low[0] because hc/lc are NaN there and
+    // DataFrame.max(axis=1) skips NaN.
+    tr[0] = bars[0].high - bars[0].low;
     for i in 1..n {
         let hl = bars[i].high - bars[i].low;
         let hc = (bars[i].high - bars[i - 1].close).abs();
         let lc = (bars[i].low - bars[i - 1].close).abs();
         tr[i] = hl.max(hc).max(lc);
     }
-    // RMA seeded at the first `length` bars (min_periods=length)
-    let mut sum = 0.0;
-    let mut count = 0usize;
-    let mut rma = f64::NAN;
-    for i in 1..n {
-        let v = tr[i];
-        if v.is_nan() {
-            continue;
-        }
-        if count < length {
-            sum += v;
-            count += 1;
-            if count == length {
-                rma = sum / length as f64;
-                out[i] = rma;
-            }
-        } else {
-            rma = alpha * v + (1.0 - alpha) * rma;
-            out[i] = rma;
-        }
-    }
-    out
+    ewm_adjusted(&tr, 1.0 / length as f64, length)
 }
 
 /// Simple moving average. Returns NaN before enough bars are accumulated.
@@ -96,43 +105,40 @@ fn ewm(series: &[f64], span: usize) -> Vec<f64> {
     out
 }
 
-/// RSI with Wilder smoothing (ewm com=length-1, min_periods=length).
+/// RSI = 100 - 100 / (1 + avg_gain/avg_loss) where the averages are pandas
+/// adjusted EWM with `com=length-1` (equivalently `alpha = 1/length`).
+/// Matches `compute_rsi` in indicators_tradingview.py.
 fn compute_rsi(bars: &[Bar], length: usize) -> Vec<f64> {
     let n = bars.len();
     let mut out = vec![f64::NAN; n];
     if n < 2 || length == 0 {
         return out;
     }
-    let alpha = 1.0 / length as f64;
-    let mut gain_sum = 0.0;
-    let mut loss_sum = 0.0;
-    let mut count = 0usize;
-    let mut avg_gain = f64::NAN;
-    let mut avg_loss = f64::NAN;
+    // delta[0] is NaN in pandas (diff), and `delta.where(delta>0, 0)` maps
+    // NaN → 0 (since NaN > 0 is False), so gain/loss are 0 at index 0.
+    let mut gain = vec![0.0f64; n];
+    let mut loss = vec![0.0f64; n];
     for i in 1..n {
-        let delta = bars[i].close - bars[i - 1].close;
-        let g = if delta > 0.0 { delta } else { 0.0 };
-        let l = if delta < 0.0 { -delta } else { 0.0 };
-        if count < length {
-            gain_sum += g;
-            loss_sum += l;
-            count += 1;
-            if count == length {
-                avg_gain = gain_sum / length as f64;
-                avg_loss = loss_sum / length as f64;
-            }
+        let d = bars[i].close - bars[i - 1].close;
+        if d > 0.0 {
+            gain[i] = d;
+        } else if d < 0.0 {
+            loss[i] = -d;
+        }
+    }
+    let alpha = 1.0 / length as f64;
+    let avg_gain = ewm_adjusted(&gain, alpha, length);
+    let avg_loss = ewm_adjusted(&loss, alpha, length);
+    for i in 0..n {
+        if avg_gain[i].is_nan() || avg_loss[i].is_nan() {
+            continue;
+        }
+        out[i] = if avg_loss[i] == 0.0 {
+            100.0
         } else {
-            avg_gain = alpha * g + (1.0 - alpha) * avg_gain;
-            avg_loss = alpha * l + (1.0 - alpha) * avg_loss;
-        }
-        if count >= length {
-            out[i] = if avg_loss == 0.0 {
-                100.0
-            } else {
-                let rs = avg_gain / avg_loss;
-                100.0 - 100.0 / (1.0 + rs)
-            };
-        }
+            let rs = avg_gain[i] / avg_loss[i];
+            100.0 - 100.0 / (1.0 + rs)
+        };
     }
     out
 }
