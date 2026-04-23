@@ -16,15 +16,27 @@ The CSV must have a header and the columns `time,open,high,low,close` where `tim
 
 ## What's Included
 
-- **`src/main.rs`** — Main research backtester. 1-to-1 port of `backtester.py`:
-  - In-sample (IS) vs out-of-sample (OOS) split with `iloc`-style negative indexing
-  - Smart-optimised look-back search (neighbourhood PF sanity check)
-  - Auto risk-to-reward ratio (RRR) selection
-  - Rolling walk-forward optimisation, candle- or trade-triggered
-  - Robustness overlays: entry drift, fee shock, slippage shock, indicator variance
-  - Monte Carlo bootstrap/shuffle diagnostics
-  - Trade export to `trade_list.csv`
-- **`data/SOLUSDT_1h.csv`** — Sample OHLC dataset (SOL/USDT, 1h candles) so the backtester runs out-of-the-box.
+- **`src/lib.rs`** — Backtester engine. Pub types (`Bar`, `Trade`, `Metrics`, `Config`), indicator and metric primitives, the IS/OOS pipeline, smart-optimised look-back search with auto-RRR, candle- or trade-triggered walk-forward, robustness overlays (entry drift, fee shock, slippage shock, indicator variance), Monte Carlo diagnostics, and trade export. 1-to-1 port of `backtester.py`.
+- **`src/main.rs`** — Reference strategy binary: EMA(20) vs EMA(lb) crossover, ~40 lines. This is the default you get from `cargo run --release`.
+- **`examples/atr_cross.rs`** — Second strategy: ATR-cross with RSI≥50 confluence, matching the proprietary `ATR_x_EMA50_RSIge50` spec. Run with `cargo run --release --example atr_cross`.
+- **`examples/README.md`** — Short tutorial on how to write your own strategy against the `RawSignalsFn` contract.
+- **`data/SOLUSDT_1h.csv`** — Sample OHLC dataset (SOL/USDT, 1h candles) so both binaries run out-of-the-box.
+
+## Adding your own strategy
+
+A strategy is a single function:
+
+```rust
+fn my_strategy(bars: &[Bar], lb: usize) -> Vec<i8> {
+    // compute indicators on `bars`, return +1/-1/0 per bar (no look-ahead).
+}
+
+fn main() {
+    quant_research_framework_rs::run_with_csv("data/ohlc.csv", "my-strategy", my_strategy);
+}
+```
+
+See [`examples/README.md`](examples/README.md) for the contract in detail and `examples/atr_cross.rs` for a worked example.
 
 ## Key Features
 
