@@ -12,13 +12,26 @@ cargo build --release
 ./target/release/backtester path/to/ohlc.csv # or pass a CSV as the first arg
 ```
 
-The CSV must have a header and the columns `time,open,high,low,close` where `time` is UNIX seconds (UTC). This is exactly the format produced by the Python sibling project's `binance_ohlc_downloader.py`.
+The CSV must have a header and the columns `time,open,high,low,close` where `time` is UNIX seconds (UTC).
+
+### Getting OHLC data
+
+Three ways, in order of effort:
+
+1. **Use the bundled sample** — `data/SOLUSDT_1h.csv` ships with the repo (SOL/USDT, 1h, 48 094 bars).
+2. **Generate synthetic data** — `cargo run --release --example gen_synthetic` writes `data/SYNTHETIC.csv` (GBM-based OHLC, no network required). Handy for smoke-tests or reproducible demos.
+3. **Download real data via the Python sibling** — the Rust binary reads the exact CSV format that the sibling project's [`binance_ohlc_downloader.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/binance_ohlc_downloader.py) emits, so you can point it straight at a file you fetched there:
+   ```bash
+   python binance_ohlc_downloader.py --symbol DOGEUSDT --interval 30m --market spot --source api --since 2017-11-01 --until now --out /tmp/DOGEUSDT_30m.csv
+   cargo run --release -- /tmp/DOGEUSDT_30m.csv
+   ```
 
 ## What's Included
 
 - **`src/lib.rs`** — Backtester engine. Pub types (`Bar`, `Trade`, `Metrics`, `Config`), indicator and metric primitives, the IS/OOS pipeline, smart-optimised look-back search with auto-RRR, candle- or trade-triggered walk-forward, robustness overlays (entry drift, fee shock, slippage shock, indicator variance), Monte Carlo diagnostics, and trade export. 1-to-1 port of `backtester.py`.
 - **`src/main.rs`** — Reference strategy binary: EMA(20) vs EMA(lb) crossover, ~40 lines. This is the default you get from `cargo run --release`.
 - **`examples/atr_cross.rs`** — Second strategy: ATR-cross with RSI≥50 confluence, matching the proprietary `ATR_x_EMA50_RSIge50` spec. Run with `cargo run --release --example atr_cross`.
+- **`examples/gen_synthetic.rs`** — Synthetic OHLC generator (GBM, no network). Run with `cargo run --release --example gen_synthetic`.
 - **`examples/README.md`** — Short tutorial on how to write your own strategy against the `RawSignalsFn` contract.
 - **`data/SOLUSDT_1h.csv`** — Sample OHLC dataset (SOL/USDT, 1h candles) so both binaries run out-of-the-box.
 
