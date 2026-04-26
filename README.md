@@ -58,11 +58,43 @@ See [`examples/README.md`](examples/README.md) for the contract in detail and `e
 - Per-window re-optimisation and forward testing
 - Configurable trigger: fixed candle count or fixed trade count per window
 - Replication ratio printed before and after optimisation
+- **Second OOS split** (`USE_OOS2`): doubles the final OOS so the
+  framework reports both halves separately as an extra layer of OOS
+  evidence.
 
 ### Realism Controls
 - **Fees** and **slippage** applied on entry and exit
-- **Funding fee** at 00:00, 08:00, 16:00 UTC (crypto; skipped in forex mode, which is off by default here)
+- **Funding fee** at 00:00, 08:00, 16:00 UTC (crypto). Gated by the new
+  `USE_FOREX` toggle in v0.2.0 — set it to `true` and funding is
+  skipped, matching FX broker semantics.
 - **Stop-loss / take-profit** with intrabar high/low checks (no look-ahead)
+- **Session mode** (`USE_SESSIONS`): restricts entries to a UTC window
+  (`SESSION_START_HOUR..SESSION_END_HOUR`) and force-closes any open
+  position on the last in-session bar of each day. Defaults to off so
+  existing parity numbers are unaffected.
+
+### Regime segmentation
+- v0.2.0 ships the **contract** (`RegimeDetectorFn = fn(&[Bar]) -> Vec<u8>`,
+  `REGIME_LABELS` const slice up to length 5) so user code can already
+  adopt the same shape as the Python reference. See
+  [`examples/regime_custom.rs`](examples/regime_custom.rs) for a
+  4-regime trend×volatility detector.
+- The **engine** (per-regime LB optimisation, OOS LB rotation,
+  regime-aware filters) is scheduled for v0.3.0; setting
+  `USE_REGIME_SEG = true` today still hits the 200-bar warmup stub.
+  Track progress in [CHANGELOG.md](CHANGELOG.md).
+
+### ML-driven strategies
+- The signal contract `RawSignalsFn = fn(&[Bar], usize) -> Vec<i8>` is
+  unchanged, so any model that produces per-bar long/short scores plugs
+  in. Two patterns shipped:
+  - [`examples/ml_precomputed.rs`](examples/ml_precomputed.rs) — train
+    offline, plug a per-bar score slice into the strategy fn, threshold
+    it. Fastest path; framework-agnostic.
+  - [`examples/ml_callback.rs`](examples/ml_callback.rs) — keep a model
+    in memory and call `predict(features)` per bar (online / stateful).
+    Hand-coded linear model so the example has zero extra dependencies;
+    swap for `linfa`, `smartcore`, `ort`, `tch`, or a Python FFI bridge.
 
 ### Robustness / Stress Tests
 Configurable scenarios run against the optimised baseline and every WFO window:
@@ -70,11 +102,20 @@ Configurable scenarios run against the optimised baseline and every WFO window:
 - `FEE_SHOCK` — 2× fees
 - `SLIPPAGE_SHOCK` — 3× slippage
 - `INDICATOR_VARIANCE` — ±1 perturbation on the selected look-back
+- `NEWS_CANDLES_INJECTION` — synthetic high-vol wicks every 500–1000
+  bars (added in v0.2.0; matches the Python reference's 5-scenario set)
 - Any combination of the above
+
+### Versioning
+
+The crate follows [Semantic Versioning](https://semver.org/). See
+[`CHANGELOG.md`](CHANGELOG.md) for what changed in each release.
 
 ## Parity with the Python reference
 
-This repo is a line-by-line port of [`backtester.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/backtester.py). Running both on the same CSV with matching config (`USE_MONTE_CARLO=False`) produces identical deterministic output — every `IS-raw`, `OOS-raw`, `IS-opt`, `OOS-opt`, `Baseline`, `ENT`, `FEE`, `SLI`, and `W01..W18 IS/OOS` line matches byte-for-byte in the trade count, ROI, PF, Sharpe, win rate, expectancy and max drawdown.
+This repo is a line-by-line port of [`backtester.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/backtester.py). For the **`v0.1.0` feature set** — IS/OOS baseline, smart-optimised look-back search with auto-RRR, candle/trade WFO, and the four `v0.1.0` robustness scenarios (ENTRY_DRIFT, FEE_SHOCK, SLIPPAGE_SHOCK, INDICATOR_VARIANCE) — running both on the same CSV with matching config (`USE_MONTE_CARLO=False`) produces identical deterministic output: every `IS-raw`, `OOS-raw`, `IS-opt`, `OOS-opt`, `Baseline`, `ENT`, `FEE`, `SLI`, and `W01..W18 IS/OOS` line matches byte-for-byte in the trade count, ROI, PF, Sharpe, win rate, expectancy and max drawdown.
+
+The **`v0.2.0` additions** — `USE_FOREX`, session mode, `NEWS_CANDLES_INJECTION`, the regime-detector contract, the WFO+regime fix in Python — are present in both implementations but have not yet been jointly validated by an automated parity harness; that harness is being staged for a follow-up release. See [CHANGELOG.md](CHANGELOG.md) for the precise scope of each.
 
 Two non-deterministic sections intentionally diverge, by design of the reference:
 

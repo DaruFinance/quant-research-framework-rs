@@ -37,12 +37,31 @@ const WFO_TRIGGER_MODE: &str = "candles";
 const WFO_TRIGGER_VAL: usize = 5000;
 const FAST_EMA_SPAN: usize = 20;
 
+// Forex mode: when true, funding fees are skipped (FX brokers don't charge
+// crypto-style perpetual funding). PnL semantics follow the Python reference.
+const USE_FOREX: bool = false;
+
+// Session mode: when true, only entries inside the NY [SESSION_START_HOUR,
+// SESSION_END_HOUR) window are taken; positions are force-closed at the
+// session-end bar of each day. Times are interpreted in UTC for now (Python
+// uses America/New_York with DST; UTC is a safe approximation when bars are
+// already aligned to NY session boundaries).
+const USE_SESSIONS: bool = false;
+const SESSION_START_HOUR: u32 = 13;   // 08:00 NY (no DST) ≈ 13:00 UTC
+const SESSION_END_HOUR: u32 = 21;     // 16:50 NY ≈ 21:00 UTC
+
+// Robustness scenario flag: news-candle injection (sparse high-vol wicks).
+// When the scenario list contains "NEWS_CANDLES_INJECTION", inject_news_candles
+// produces a perturbed copy of the bar series before backtest.
+const NEWS_INJECTION_SEED: u64 = 42;
+
 fn robustness_scenarios() -> Vec<(&'static str, Vec<&'static str>)> {
     vec![
         ("Test 1", vec!["ENTRY_DRIFT"]),
         ("Test 2", vec!["FEE_SHOCK"]),
         ("Test 3", vec!["SLIPPAGE_SHOCK"]),
         ("Test 4", vec!["ENTRY_DRIFT", "INDICATOR_VARIANCE"]),
+        ("Test 5", vec!["NEWS_CANDLES_INJECTION"]),
     ]
 }
 const MAX_ROBUSTNESS_SCENARIOS: usize = 5;
@@ -195,6 +214,19 @@ pub fn compute_ema(close: &[f64], span: usize) -> Vec<f64> {
 // ============================================================================
 pub type RawSignalsFn = fn(&[Bar], usize) -> Vec<i8>;
 
+/// Pluggable regime-detector contract — mirrors Python's `detect_regimes`.
+/// Returns one label per bar drawn from `REGIME_LABELS` (encoded as a u8
+/// index into that slice). Length must match `bars`. Detectors must be free
+/// of look-ahead — only data from bars `0..i` may inform the label at bar `i`.
+///
+/// The full regime-segmentation engine (per-regime LB optimisation, OOS
+/// LB rotation, regime-aware filters) is scheduled for v0.3.0 — for v0.2.0
+/// this type alias and the `REGIME_LABELS` const exist so user examples can
+/// already adopt the contract; setting `USE_REGIME_SEG = true` still hits the
+/// 200-bar warmup stub in the inner loop.
+pub type RegimeDetectorFn = fn(&[Bar]) -> Vec<u8>;
+pub const REGIME_LABELS: &[&str] = &["Uptrend", "Downtrend", "Ranging"];
+
 // ============================================================================
 // 4. PARSE SIGNALS (flip detection)
 // ============================================================================
@@ -224,10 +256,34 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let sl_perc = SL_PERCENTAGE;
     let tp_perc = cfg.tp_percentage;
 
-    let funding_mask: Vec<bool> = bars.iter().map(|b| {
-        let (h, m) = utc_hour_minute(b.time_unix);
-        m == 0 && (h == 0 || h == 8 || h == 16)
+    let funding_mask: Vec<bool> = if USE_FOREX {
+        // Forex brokers do not levy crypto-style perpetual funding.
+        vec![false; bars.len()]
+    } else {
+        bars.iter().map(|b| {
+            let (h, m) = utc_hour_minute(b.time_unix);
+            m == 0 && (h == 0 || h == 8 || h == 16)
+        }).collect()
+    };
+
+    // Session mask: True for bars inside the NY trading window. When
+    // USE_SESSIONS is off, every bar is "in session". `session_end_bar[i]`
+    // marks the last in-session bar of each day so we can force-close on it.
+    let in_session: Vec<bool> = bars.iter().map(|b| {
+        if !USE_SESSIONS { return true; }
+        let (h, _m) = utc_hour_minute(b.time_unix);
+        h >= SESSION_START_HOUR && h < SESSION_END_HOUR
     }).collect();
+    let session_end_bar: Vec<bool> = {
+        let mut out = vec![false; bars.len()];
+        if USE_SESSIONS {
+            for i in 0..bars.len() {
+                let next_in = if i + 1 < bars.len() { in_session[i + 1] } else { false };
+                if in_session[i] && !next_in { out[i] = true; }
+            }
+        }
+        out
+    };
 
     let mut trades: Vec<Trade> = Vec::new();
     let mut equity_list: Vec<f64> = vec![ACCOUNT_SIZE];
@@ -245,8 +301,21 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let last = equity_list.len() - 1;
             equity_list[last] -= fee_f;
         }
-        let code = sig[idx];
+        let mut code = sig[idx];
         if USE_REGIME_SEG && idx < 200 { continue; }
+
+        // Session mode: block any new entry outside the session window. The
+        // exit codes (2, 4) and SL/TP checks below are still evaluated so an
+        // already-open position can be closed even out-of-session.
+        if USE_SESSIONS && !in_session[idx] && (code == 1 || code == 3) {
+            code = 0;
+        }
+        // Force-close at the last in-session bar of the day so positions never
+        // span a session gap.
+        if USE_SESSIONS && session_end_bar[idx] && open_pos != 0 {
+            if open_pos == 1 && code != 3 { code = 2; }
+            else if open_pos == -1 && code != 1 { code = 4; }
+        }
         let price_open = bars[idx].open;
 
         // SL/TP check
@@ -703,7 +772,7 @@ fn drift_entries(sig: &[i8]) -> Vec<i8> {
 }
 
 #[derive(Clone)]
-struct RobustnessOpts { fee_mult: f64, slip_mult: f64, drift_on: bool, var_on: bool }
+struct RobustnessOpts { fee_mult: f64, slip_mult: f64, drift_on: bool, var_on: bool, news_on: bool }
 
 fn opts_from_flags(flags: &[&str]) -> RobustnessOpts {
     let tokens: Vec<String> = flags.iter().map(|f| f.trim().to_lowercase().replace(' ', "_")).collect();
@@ -712,15 +781,60 @@ fn opts_from_flags(flags: &[&str]) -> RobustnessOpts {
         slip_mult: if tokens.iter().any(|t| t == "slippage_shock") { 3.0 } else { 1.0 },
         drift_on: tokens.iter().any(|t| t == "entry_drift"),
         var_on: tokens.iter().any(|t| t == "indicator_variance"),
+        news_on: tokens.iter().any(|t| t == "news_candles_injection"),
     }
 }
 
 fn label_from_flags(flags: &[&str]) -> String {
     let parts: Vec<&str> = flags.iter().map(|f| match f.trim().to_lowercase().replace(' ', "_").as_str() {
         "fee_shock" => "FEE", "slippage_shock" => "SLI", "entry_drift" => "ENT",
-        "indicator_variance" => "IND", _ => "???",
+        "indicator_variance" => "IND", "news_candles_injection" => "NEWS", _ => "???",
     }).collect();
     if parts.is_empty() { "NONE".to_string() } else { parts.join("+") }
+}
+
+/// Return a perturbed copy of `bars` where every 500..1000 bars a burst of
+/// 1..2 candles gets oversized wicks (~2..5× the average true range over
+/// the previous 100 bars). Open/close are unchanged; only high/low stretch.
+/// Mirrors `inject_news_candles` in `backtester.py`.
+fn inject_news_candles(bars: &[Bar], seed: u64) -> Vec<Bar> {
+    let mut out = bars.to_vec();
+    if out.is_empty() { return out; }
+    let mut rng = StdRng::seed_from_u64(seed);
+    let n = out.len();
+    let mut i: usize = 0;
+    loop {
+        i += rng.gen_range(500..=1000);
+        if i >= n { break; }
+        let burst = rng.gen_range(1..=2);
+        for j in 0..burst {
+            let idx = i + j;
+            if idx >= n { break; }
+            let w_start = idx.saturating_sub(100);
+            let mut total = 0.0; let mut count = 0usize;
+            for k in w_start..idx {
+                total += (out[k].high - out[k].low).abs();
+                count += 1;
+            }
+            let avg_range = if count > 0 { total / count as f64 } else {
+                let mut t2 = 0.0; let mut c2 = 0usize;
+                for b in &out { t2 += (b.high - b.low).abs(); c2 += 1; }
+                if c2 > 0 { t2 / c2 as f64 } else { 0.0 }
+            };
+            if avg_range == 0.0 || !avg_range.is_finite() { continue; }
+            let extent = avg_range * (2.0 + rng.gen::<f64>() * 3.0);
+            let direction = rng.gen_range(0..3);     // 0=up, 1=down, 2=both
+            let op = out[idx].open; let cp = out[idx].close;
+            let hi = out[idx].high; let lo = out[idx].low;
+            let top = op.max(cp).max(hi); let bot = op.min(cp).min(lo);
+            match direction {
+                0 => { out[idx].high = top + extent; }
+                1 => { out[idx].low  = bot - extent; }
+                _ => { out[idx].high = top + extent; out[idx].low = bot - extent; }
+            }
+        }
+    }
+    out
 }
 
 // ============================================================================
@@ -842,7 +956,7 @@ fn run_wfo_window(is_bars: &[Bar], oos_bars: &[Bar], lb: usize, window_tag: &str
 
     // Robustness overlays
     for (label, opts) in rb_scenarios {
-        if opts.fee_mult == 1.0 && opts.slip_mult == 1.0 && !opts.drift_on && !opts.var_on { continue; }
+        if opts.fee_mult == 1.0 && opts.slip_mult == 1.0 && !opts.drift_on && !opts.var_on && !opts.news_on { continue; }
         let mut cfg_rb = cfg.clone();
         cfg_rb.fee_pct *= opts.fee_mult;
         cfg_rb.slippage_pct *= opts.slip_mult;
@@ -851,15 +965,26 @@ fn run_wfo_window(is_bars: &[Bar], oos_bars: &[Bar], lb: usize, window_tag: &str
             (lb as i32 + offset).max(1) as usize
         } else { lb };
 
-        let raw_is_rb = sig_fn(is_bars, lb_rb);
+        let is_owned: Vec<Bar>;
+        let oos_owned: Vec<Bar>;
+        let is_work: &[Bar] = if opts.news_on {
+            is_owned = inject_news_candles(is_bars, NEWS_INJECTION_SEED);
+            &is_owned
+        } else { is_bars };
+        let oos_work: &[Bar] = if opts.news_on {
+            oos_owned = inject_news_candles(oos_bars, NEWS_INJECTION_SEED.wrapping_add(1));
+            &oos_owned
+        } else { oos_bars };
+
+        let raw_is_rb = sig_fn(is_work, lb_rb);
         let mut sig_is_rb = parse_signals(&raw_is_rb);
         if opts.drift_on { sig_is_rb = drift_entries(&sig_is_rb); }
-        let (_, met_is_rb, _, _) = run_backtest(is_bars, &sig_is_rb, &cfg_rb);
+        let (_, met_is_rb, _, _) = run_backtest(is_work, &sig_is_rb, &cfg_rb);
 
-        let raw_oos_rb = sig_fn(oos_bars, lb_rb);
+        let raw_oos_rb = sig_fn(oos_work, lb_rb);
         let mut sig_oos_rb = parse_signals(&raw_oos_rb);
         if opts.drift_on { sig_oos_rb = drift_entries(&sig_oos_rb); }
-        let (_, met_oos_rb, _, _) = run_backtest(oos_bars, &sig_oos_rb, &cfg_rb);
+        let (_, met_oos_rb, _, _) = run_backtest(oos_work, &sig_oos_rb, &cfg_rb);
 
         prettyprint(&format!("{} IS+{}", window_tag, label), &met_is_rb, Some(lb_rb));
         prettyprint(&format!("{} OOS+{}", window_tag, label), &met_oos_rb, Some(lb_rb));
@@ -945,7 +1070,7 @@ fn run_robustness_tests(all_bars: &[Bar], best_lb: Option<usize>, best_rrr: Opti
     let scenarios = robustness_scenarios();
     for (name, flags) in scenarios.iter().take(MAX_ROBUSTNESS_SCENARIOS) {
         let opts = opts_from_flags(flags);
-        if opts.fee_mult == 1.0 && opts.slip_mult == 1.0 && !opts.drift_on && !opts.var_on { continue; }
+        if opts.fee_mult == 1.0 && opts.slip_mult == 1.0 && !opts.drift_on && !opts.var_on && !opts.news_on { continue; }
         let label = label_from_flags(flags);
         println!("\n Robustness Test: {} ({}) ", label, name);
         let mut cfg_rb = cfg.clone();
@@ -962,8 +1087,19 @@ fn run_robustness_tests(all_bars: &[Bar], best_lb: Option<usize>, best_rrr: Opti
         let oos_candles = cfg.oos_candles;
         let oos_start = python_iloc_idx(n as isize - oos_candles as isize, n);
         let is_start = python_iloc_idx(n as isize - oos_candles as isize - BACKTEST_CANDLES as isize, n);
-        let is_bars = &all_bars[is_start..oos_start];
-        let oos_bars = &all_bars[oos_start..n];
+        let is_bars_view = &all_bars[is_start..oos_start];
+        let oos_bars_view = &all_bars[oos_start..n];
+
+        let is_owned: Vec<Bar>;
+        let oos_owned: Vec<Bar>;
+        let is_bars: &[Bar] = if opts.news_on {
+            is_owned = inject_news_candles(is_bars_view, NEWS_INJECTION_SEED);
+            &is_owned
+        } else { is_bars_view };
+        let oos_bars: &[Bar] = if opts.news_on {
+            oos_owned = inject_news_candles(oos_bars_view, NEWS_INJECTION_SEED.wrapping_add(1));
+            &oos_owned
+        } else { oos_bars_view };
 
         let raw_is = sig_fn(is_bars, lb_use);
         let mut sig_is = parse_signals(&raw_is);
