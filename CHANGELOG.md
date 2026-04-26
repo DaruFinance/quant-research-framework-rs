@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] — 2026-04-25
+
+### Added
+- **Full regime-segmentation engine** (`src/lib.rs`). The 200-bar warmup
+  stub is replaced with a real implementation:
+  - `default_regime_detector` — EMA-200 / 8-bar consistency, 3 labels
+    (Uptrend / Downtrend / Ranging) matching the Python reference.
+  - `optimize_regimes_sequential_rs` — per-regime LB optimiser with
+    coarse/fine search; works for any `REGIME_LABELS.len()` in [2, 5].
+  - `create_regime_signals_internal` — bar-by-bar EMA-crossover signals
+    with the active LB rotating per bar based on the regime label.
+  - `walk_forward_regime` — WFO loop that walks `WFO_TRIGGER_VAL` cadence
+    and rotates per-regime LBs in OOS, with all 5 robustness overlays
+    (FEE / SLI / ENT / IND / NEWS) running per window. Same bug fix as
+    Python: regime flips never re-anchor the IS window.
+  - `run_with_regime(bars, strategy, sig_fn, regime_cfg)` — public
+    entry point, supersedes the v0.2.0 surface-only stub.
+- **`RegimeConfig`** struct exposes `labels: Vec<String>` and
+  `detector: RegimeDetectorFn` to user code; `RegimeConfig::new` panics
+  loudly if the label count is outside [2, 5]. Default = the 3-regime
+  EMA detector.
+- **Runtime-configurable engine flags.** `Config` gained `use_forex`,
+  `use_sessions`, `session_start_hour`, `session_end_hour`, `use_oos2`
+  (with builders `with_forex`, `with_sessions`, `with_oos2`). The
+  backtest core consults these fields instead of compile-time consts so
+  tests can exercise each flag without rebuilding.
+- **`examples/regime_custom.rs`** rewritten to actually plug a 4-regime
+  trend × volatility detector into `run_with_regime` and exercise the
+  engine end-to-end.
+- **Behavioural test suite** (`tests/behavioural.rs`, 8 tests) covering
+  forex / session / OOS2 / regime config + detector contract.
+- **Cross-language parity harness** (`tools/parity_check.py`). Runs both
+  engines on the same dataset with matching defaults and asserts
+  agreement on IS-raw / OOS-raw / IS-opt / OOS-opt / Baseline IS / OOS /
+  W01 IS / W01 OOS. Verified at byte-identity on the bundled
+  SOLUSDT_1h dataset: 56/56 metric points match exactly (0% relative
+  difference) at 0.1% tolerance.
+
+### Changed
+- README: removed the v0.2.0 caveat about the parity claim being
+  unqualified for v0.2.x additions; the harness now backs the claim
+  with a re-runnable check.
+
 ## [0.2.0] — 2026-04-25
 
 ### Added

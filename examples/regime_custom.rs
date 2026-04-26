@@ -1,37 +1,39 @@
 //! Custom regime-detector contract example.
 //!
 //! Mirrors the Python `examples/regime_custom/regime_custom.py` demo. The
-//! library exposes a type alias `RegimeDetectorFn = fn(&[Bar]) -> Vec<u8>`
-//! and a `REGIME_LABELS` const slice that names each regime; user code
-//! wires up its own detector by passing a function with that signature.
+//! library exposes a `RegimeConfig { labels, detector }` struct and a
+//! `run_with_regime()` entry point; user code wires up its own detector
+//! (any function with the `RegimeDetectorFn = fn(&[Bar]) -> Vec<u8>`
+//! signature) and a label set of length 2..=5.
 //!
-//! Note: the full per-regime LB optimiser, OOS LB rotation and
-//! regime-aware filters are scheduled for v0.3.0 in the Rust port. This
-//! example demonstrates the *contract* (and how a user's detector would be
-//! shaped) so downstream code can already adopt it. Until v0.3.0 lands the
-//! detector output is computed and printed but not applied to the
-//! backtest's signal pipeline (matching the v0.2.0 stub described in
-//! lib.rs).
+//! In v0.2.1 the engine actually consumes both of those: the WFO loop
+//! pre-computes regimes once via your detector, optimises one LB per
+//! label on each IS window, and rotates the active LB bar-by-bar in OOS.
+//! The WFO walk cadence is driven by `WFO_TRIGGER_VAL` — regime flips
+//! never re-anchor the IS window.
 //!
 //! Run:
 //!   cargo run --release --example regime_custom
 //!   cargo run --release --example regime_custom -- path/to/ohlc.csv
 
-use quant_research_framework_rs::{run_with_csv, Bar, RegimeDetectorFn};
+use quant_research_framework_rs::{run_with_regime, Bar, RegimeConfig, compute_ema};
 
-// 4-regime trend × volatility detector (vol-up / vol-down / calm-up / calm-down).
-const VOL4_LABELS: &[&str] = &["CalmUp", "CalmDown", "VolUp", "VolDown"];
+// 4-regime trend × volatility detector (CalmUp / CalmDown / VolUp / VolDown).
+const VOL4_LABELS: [&str; 4] = ["CalmUp", "CalmDown", "VolUp", "VolDown"];
 
 fn detect_regimes_vol4(bars: &[Bar]) -> Vec<u8> {
     let n = bars.len();
-    let mut out = vec![0u8; n];                 // default = CalmUp
+    let mut out = vec![0u8; n];                 // default = CalmUp (label 0)
     if n < 251 { return out; }
 
     let closes: Vec<f64> = bars.iter().map(|b| b.close).collect();
     let mut rets = vec![0.0f64; n];
-    for i in 1..n { rets[i] = (closes[i] - closes[i - 1]) / closes[i - 1].max(1e-12); }
+    for i in 1..n {
+        let denom = closes[i - 1].max(1e-12);
+        rets[i] = (closes[i] - closes[i - 1]) / denom;
+    }
 
-    // 50-bar rolling stdev, shifted by 1 to keep look-ahead-clean.
+    // 50-bar rolling stdev (computed from rets[i-50..i], so look-ahead-clean for i).
     let mut sd = vec![f64::NAN; n];
     for i in 51..n {
         let win = &rets[i - 50 .. i];
@@ -63,11 +65,10 @@ fn detect_regimes_vol4(bars: &[Bar]) -> Vec<u8> {
     out
 }
 
-// Same shape as the reference EMA-crossover strategy — kept here so the
-// example can be run end-to-end. When v0.3.0 lands, swap this for a
-// regime-aware variant that branches on the detector's output.
+// Reference EMA-crossover strategy. The signal fn is consulted for the
+// IS/OOS baseline + classic optimiser phases; the WFO+regime path uses a
+// regime-rotated EMA crossover internally.
 fn ema_crossover(bars: &[Bar], lb: usize) -> Vec<i8> {
-    use quant_research_framework_rs::compute_ema;
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
     let fast = compute_ema(&close, 20);
     let slow = compute_ema(&close, lb);
@@ -81,8 +82,14 @@ fn ema_crossover(bars: &[Bar], lb: usize) -> Vec<i8> {
 }
 
 fn main() {
-    let detector: RegimeDetectorFn = detect_regimes_vol4;
-    let labels = VOL4_LABELS;
-    println!("Custom detector configured: {:?} (labels = {:?})", detector as usize, labels);
-    run_with_csv("data/SOLUSDT_1h.csv", "Regime-custom-vol4", ema_crossover);
+    let regime_cfg = RegimeConfig::new(
+        VOL4_LABELS.iter().map(|s| s.to_string()).collect(),
+        detect_regimes_vol4,
+    );
+
+    let csv_path = std::env::args().nth(1)
+        .unwrap_or_else(|| "data/SOLUSDT_1h.csv".to_string());
+    let bars = quant_research_framework_rs::load_ohlc(&csv_path);
+    println!("Loaded {} bars from {}", bars.len(), csv_path);
+    run_with_regime(&bars, "Regime-custom-vol4", ema_crossover, regime_cfg);
 }

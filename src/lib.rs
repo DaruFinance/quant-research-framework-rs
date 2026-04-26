@@ -142,13 +142,31 @@ pub struct Config {
     pub slippage_pct: f64,
     pub oos_candles: usize,
     pub position_size: f64,
+    pub use_forex: bool,
+    pub use_sessions: bool,
+    pub session_start_hour: u32,
+    pub session_end_hour: u32,
+    pub use_oos2: bool,
 }
 impl Config {
     pub fn new() -> Self {
         let oos = if USE_OOS2 { OOS_CANDLES_BASE * 2 } else { OOS_CANDLES_BASE };
         Config { tp_percentage: TP_PERCENTAGE_DEFAULT, use_tp: USE_TP_DEFAULT,
                  fee_pct: FEE_PCT_DEFAULT, slippage_pct: SLIPPAGE_PCT_DEFAULT,
-                 oos_candles: oos, position_size: RISK_AMOUNT }
+                 oos_candles: oos, position_size: RISK_AMOUNT,
+                 use_forex: USE_FOREX, use_sessions: USE_SESSIONS,
+                 session_start_hour: SESSION_START_HOUR,
+                 session_end_hour: SESSION_END_HOUR,
+                 use_oos2: USE_OOS2 }
+    }
+    pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
+    pub fn with_sessions(mut self, on: bool, start_h: u32, end_h: u32) -> Self {
+        self.use_sessions = on; self.session_start_hour = start_h; self.session_end_hour = end_h; self
+    }
+    pub fn with_oos2(mut self, on: bool) -> Self {
+        self.use_oos2 = on;
+        self.oos_candles = if on { OOS_CANDLES_BASE * 2 } else { OOS_CANDLES_BASE };
+        self
     }
     fn fee_rate(&self) -> f64 { self.fee_pct / 100.0 }
     fn slip(&self) -> f64 { self.slippage_pct * 0.01 }
@@ -256,8 +274,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let sl_perc = SL_PERCENTAGE;
     let tp_perc = cfg.tp_percentage;
 
-    let funding_mask: Vec<bool> = if USE_FOREX {
-        // Forex brokers do not levy crypto-style perpetual funding.
+    let funding_mask: Vec<bool> = if cfg.use_forex {
         vec![false; bars.len()]
     } else {
         bars.iter().map(|b| {
@@ -266,17 +283,14 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         }).collect()
     };
 
-    // Session mask: True for bars inside the NY trading window. When
-    // USE_SESSIONS is off, every bar is "in session". `session_end_bar[i]`
-    // marks the last in-session bar of each day so we can force-close on it.
     let in_session: Vec<bool> = bars.iter().map(|b| {
-        if !USE_SESSIONS { return true; }
+        if !cfg.use_sessions { return true; }
         let (h, _m) = utc_hour_minute(b.time_unix);
-        h >= SESSION_START_HOUR && h < SESSION_END_HOUR
+        h >= cfg.session_start_hour && h < cfg.session_end_hour
     }).collect();
     let session_end_bar: Vec<bool> = {
         let mut out = vec![false; bars.len()];
-        if USE_SESSIONS {
+        if cfg.use_sessions {
             for i in 0..bars.len() {
                 let next_in = if i + 1 < bars.len() { in_session[i + 1] } else { false };
                 if in_session[i] && !next_in { out[i] = true; }
@@ -304,15 +318,10 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         let mut code = sig[idx];
         if USE_REGIME_SEG && idx < 200 { continue; }
 
-        // Session mode: block any new entry outside the session window. The
-        // exit codes (2, 4) and SL/TP checks below are still evaluated so an
-        // already-open position can be closed even out-of-session.
-        if USE_SESSIONS && !in_session[idx] && (code == 1 || code == 3) {
+        if cfg.use_sessions && !in_session[idx] && (code == 1 || code == 3) {
             code = 0;
         }
-        // Force-close at the last in-session bar of the day so positions never
-        // span a session gap.
-        if USE_SESSIONS && session_end_bar[idx] && open_pos != 0 {
+        if cfg.use_sessions && session_end_bar[idx] && open_pos != 0 {
             if open_pos == 1 && code != 3 { code = 2; }
             else if open_pos == -1 && code != 1 { code = 4; }
         }
@@ -1160,4 +1169,297 @@ pub fn run_with_csv(default_csv: &str, strategy: &str, sig_fn: RawSignalsFn) {
     let bars = load_ohlc(&csv_path);
     println!("Loaded {} bars in {:.2}s", bars.len(), load_start.elapsed().as_secs_f64());
     run(&bars, strategy, sig_fn);
+}
+
+// ============================================================================
+// 12. REGIME SEGMENTATION ENGINE (v0.2.1)
+// Mirrors backtester.py's get_regimes / optimize_regimes_sequential /
+// create_regime_signals / walk_forward (regime path). User-pluggable via
+// RegimeConfig: pass any (labels, detector) pair with 2..=5 labels.
+// ============================================================================
+
+/// Default 3-regime EMA-200 / 8-bar consistency detector. Matches Python's
+/// `get_regimes`: bar `i` is Uptrend (0) if close[i-1..i-8] all > EMA200[i-1..i-8],
+/// Downtrend (1) if all <, else Ranging (2).
+pub fn default_regime_detector(bars: &[Bar]) -> Vec<u8> {
+    let n = bars.len();
+    let mut out = vec![2u8; n];                // default = Ranging
+    if n < 9 { return out; }
+    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
+    let ema200 = compute_ema(&close, 200);
+    const LEN: usize = 8;
+    for i in LEN..n {
+        let mut all_up = true; let mut all_dn = true;
+        for k in 0..LEN {
+            let idx = i - k - 1;               // shift(1): yesterday and back
+            if !(close[idx] > ema200[idx]) { all_up = false; }
+            if !(close[idx] < ema200[idx]) { all_dn = false; }
+            if !all_up && !all_dn { break; }
+        }
+        if all_up      { out[i] = 0; }
+        else if all_dn { out[i] = 1; }
+    }
+    out
+}
+
+/// User-supplied regime detector + label set. Length must be in [2, 5].
+#[derive(Clone)]
+pub struct RegimeConfig {
+    pub labels: Vec<String>,
+    pub detector: RegimeDetectorFn,
+}
+impl Default for RegimeConfig {
+    fn default() -> Self {
+        Self {
+            labels:  REGIME_LABELS.iter().map(|s| s.to_string()).collect(),
+            detector: default_regime_detector,
+        }
+    }
+}
+impl RegimeConfig {
+    pub fn new(labels: Vec<String>, detector: RegimeDetectorFn) -> Self {
+        assert!(labels.len() >= 2 && labels.len() <= 5,
+            "RegimeConfig.labels must have length 2..=5, got {}", labels.len());
+        Self { labels, detector }
+    }
+}
+
+/// Build raw +1/-1 signals where the slow EMA span rotates per bar based on
+/// the regime label. Mirrors Python's `create_regime_signals`.
+fn create_regime_signals_internal(
+    close: &[f64], ema20: &[f64],
+    best_lbs: &[Option<usize>], regimes: &[u8],
+) -> Vec<i8> {
+    let n = close.len();
+    let mut raw = vec![0i8; n];
+    let unique: HashSet<usize> = best_lbs.iter().filter_map(|x| *x).collect();
+    let lb_emas: HashMap<usize, Vec<f64>> = unique.iter()
+        .map(|&lb| (lb, compute_ema(close, lb))).collect();
+    for i in 1..n {
+        let r = regimes[i] as usize;
+        if r >= best_lbs.len() { continue; }
+        let lb = match best_lbs[r] { Some(l) => l, None => continue };
+        let slow = match lb_emas.get(&lb) { Some(v) => v, None => continue };
+        if ema20[i-1].is_nan() || slow[i-1].is_nan() { continue; }
+        raw[i] = if ema20[i-1] > slow[i-1] { 1 } else { -1 };
+    }
+    raw
+}
+
+/// Per-regime LB optimiser. For each regime in turn, sweeps coarse LBs while
+/// holding other regimes at their current best (or DEFAULT_LB initially), then
+/// fine-tunes the winner by ±1. Mirrors Python's `optimize_regimes_sequential`.
+/// Returns `Vec<Option<usize>>` indexed by regime u8.
+fn optimize_regimes_sequential_rs(
+    bars: &[Bar], regimes: &[u8], n_regimes: usize, cfg: &Config,
+) -> Vec<Option<usize>> {
+    let mut best_lbs: Vec<Option<usize>> = vec![Some(DEFAULT_LB); n_regimes];
+    let all_lbs = lookback_range();
+    if all_lbs.is_empty() { return vec![None; n_regimes]; }
+    let coarse_lbs: Vec<usize> = all_lbs.iter().step_by(2).copied().collect();
+
+    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
+    let ema20 = compute_ema(&close, 20);
+
+    let evaluate = |best_lbs: &[Option<usize>], r: usize, lb: usize, cfg: &Config| -> Option<f64> {
+        let mut cand = best_lbs.to_vec(); cand[r] = Some(lb);
+        let raw = create_regime_signals_internal(&close, &ema20, &cand, regimes);
+        let sig = parse_signals(&raw);
+        let (_, met, _, _) = run_backtest(bars, &sig, cfg);
+        if met.trades < MIN_TRADES { return None; }
+        if let Some(dd_c) = cfg.dd_constraint() {
+            if met.max_drawdown > dd_c { return None; }
+        }
+        let val = if OPT_METRIC == "MaxDrawdown" { -met.get(OPT_METRIC) } else { met.get(OPT_METRIC) };
+        Some(val)
+    };
+
+    for r in 0..n_regimes {
+        // Skip regimes that don't appear in this slice — keep them at DEFAULT_LB
+        if !regimes.iter().any(|&v| v as usize == r) { continue; }
+
+        let mut coarse: Vec<(f64, usize)> = Vec::new();
+        for &lb in &coarse_lbs {
+            if let Some(v) = evaluate(&best_lbs, r, lb, cfg) { coarse.push((v, lb)); }
+        }
+        if coarse.is_empty() { best_lbs[r] = None; continue; }
+        coarse.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        let (best_val, best_lb) = coarse[0];
+
+        // Fine-tune: ±1
+        let mut cands: Vec<(f64, usize)> = vec![(best_val, best_lb)];
+        if let Some(idx) = all_lbs.iter().position(|&l| l == best_lb) {
+            for delta in [-1i64, 1i64] {
+                let n_idx = idx as i64 + delta;
+                if n_idx >= 0 && (n_idx as usize) < all_lbs.len() {
+                    let lb = all_lbs[n_idx as usize];
+                    if let Some(v) = evaluate(&best_lbs, r, lb, cfg) { cands.push((v, lb)); }
+                }
+            }
+        }
+        cands.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        best_lbs[r] = Some(cands[0].1);
+    }
+    best_lbs
+}
+
+fn fmt_lb_tag(best_lbs: &[Option<usize>], labels: &[String]) -> String {
+    best_lbs.iter().enumerate()
+        .filter_map(|(i, lb)| lb.map(|l| format!("{}:{}", labels[i], l)))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn prettyprint_str(tag: &str, m: &Metrics, lb_tag: &str) {
+    let lb_note = if lb_tag.is_empty() { String::new() } else { format!("(LB {}) ", lb_tag) };
+    let rrr_note = if let Some(r) = m.rrr { format!("  RRR:{}", r) } else { String::new() };
+    println!("{:>8} {}| Trades:{:4}  ROI:${}  PF:{:6.2}  Shp:{:6.2}  Win:{:6.2}%  Exp:${}  MaxDD:${}{}",
+        tag, lb_note, m.trades, fmt_money(m.roi * ACCOUNT_SIZE), m.pf, m.sharpe,
+        m.win_rate * 100.0, fmt_money(m.exp * ACCOUNT_SIZE), fmt_money(m.max_drawdown * ACCOUNT_SIZE), rrr_note);
+}
+
+/// Walk-forward path with regime segmentation. Mirrors the v0.2.0 Python
+/// fix exactly: the WFO walk is driven by `WFO_TRIGGER_VAL` (candles) /
+/// trade count, NOT by regime change indices. Inside each window the active
+/// LB rotates per bar based on the regime label; window boundaries are
+/// independent of regime flips.
+fn walk_forward_regime(
+    all_bars: &[Bar], cfg: &mut Config,
+    regime_cfg: &RegimeConfig, eq_is_baseline: &[f64],
+) {
+    let scenarios = robustness_scenarios();
+    let items: Vec<_> = scenarios.iter().take(MAX_ROBUSTNESS_SCENARIOS).collect();
+    let mut rb_scenarios_parsed: Vec<(String, RobustnessOpts)> = Vec::new();
+    for (_name, flags) in &items {
+        let opts = opts_from_flags(flags);
+        if opts.fee_mult != 1.0 || opts.slip_mult != 1.0 || opts.drift_on || opts.var_on || opts.news_on {
+            rb_scenarios_parsed.push((label_from_flags(flags), opts));
+        }
+    }
+
+    let regimes_full = (regime_cfg.detector)(all_bars);
+    assert_eq!(regimes_full.len(), all_bars.len(),
+        "regime detector returned {} labels for {} bars", regimes_full.len(), all_bars.len());
+    let n_regimes = regime_cfg.labels.len();
+
+    let n = all_bars.len();
+    let ni = n as i64;
+    let oos_candles = cfg.oos_candles as i64;
+    let start_total: i64 = ni - oos_candles;
+    let mut cur_start: i64 = start_total;
+    let mut window_no = 1usize;
+    let mut all_oos_rets: Vec<f64> = Vec::new();
+    let mut eq_is_first: Option<Vec<f64>> = None;
+
+    while cur_start < ni {
+        let cur_end: i64 = (cur_start + WFO_TRIGGER_VAL as i64).min(ni);
+        let is_raw_start = cur_start - BACKTEST_CANDLES as i64;
+        let (is_s, is_e) = python_iloc_slice(is_raw_start, cur_start, n);
+        let (oos_s, oos_e) = python_iloc_slice(cur_start, cur_end, n);
+        if is_e <= is_s || oos_e <= oos_s { break; }
+
+        let is_bars   = &all_bars[is_s..is_e];
+        let oos_bars  = &all_bars[oos_s..oos_e];
+        let regimes_is  = &regimes_full[is_s..is_e];
+        let regimes_oos = &regimes_full[oos_s..oos_e];
+
+        let best_lbs = optimize_regimes_sequential_rs(is_bars, regimes_is, n_regimes, cfg);
+        if best_lbs.iter().all(|x| x.is_none()) { break; }
+        let lb_tag = fmt_lb_tag(&best_lbs, &regime_cfg.labels);
+
+        // IS run (for equity seed and reporting)
+        let is_close: Vec<f64> = is_bars.iter().map(|b| b.close).collect();
+        let is_ema20 = compute_ema(&is_close, 20);
+        let raw_is = create_regime_signals_internal(&is_close, &is_ema20, &best_lbs, regimes_is);
+        let sig_is = parse_signals(&raw_is);
+        let (_, met_is, eq_is, _) = run_backtest(is_bars, &sig_is, cfg);
+
+        // OOS run
+        let oos_close: Vec<f64> = oos_bars.iter().map(|b| b.close).collect();
+        let oos_ema20 = compute_ema(&oos_close, 20);
+        let raw_oos = create_regime_signals_internal(&oos_close, &oos_ema20, &best_lbs, regimes_oos);
+        let sig_oos = parse_signals(&raw_oos);
+        let (_, met_oos, _, rets_oos) = run_backtest(oos_bars, &sig_oos, cfg);
+
+        prettyprint_str(&format!("W{:02} IS",  window_no), &met_is,  &lb_tag);
+        prettyprint_str(&format!("W{:02} OOS", window_no), &met_oos, &lb_tag);
+
+        // Robustness overlays (regime-aware: rotate LBs with ±1 jitter on var_on)
+        for (label, opts) in &rb_scenarios_parsed {
+            let mut cfg_rb = cfg.clone();
+            cfg_rb.fee_pct *= opts.fee_mult;
+            cfg_rb.slippage_pct *= opts.slip_mult;
+            let lbs_rb: Vec<Option<usize>> = if opts.var_on {
+                best_lbs.iter().map(|lb| lb.map(|v| {
+                    let off: i32 = if rand::random::<bool>() { 1 } else { -1 };
+                    (v as i32 + off).max(1) as usize
+                })).collect()
+            } else { best_lbs.clone() };
+            let lb_tag_rb = fmt_lb_tag(&lbs_rb, &regime_cfg.labels);
+
+            // News injection (replaces bar series with a perturbed copy)
+            let is_owned: Vec<Bar>;
+            let oos_owned: Vec<Bar>;
+            let is_w: &[Bar] = if opts.news_on {
+                is_owned = inject_news_candles(is_bars, NEWS_INJECTION_SEED); &is_owned
+            } else { is_bars };
+            let oos_w: &[Bar] = if opts.news_on {
+                oos_owned = inject_news_candles(oos_bars, NEWS_INJECTION_SEED.wrapping_add(1)); &oos_owned
+            } else { oos_bars };
+
+            let is_close_rb: Vec<f64> = is_w.iter().map(|b| b.close).collect();
+            let is_ema20_rb = compute_ema(&is_close_rb, 20);
+            let mut raw_is_rb = create_regime_signals_internal(&is_close_rb, &is_ema20_rb, &lbs_rb, regimes_is);
+            let mut sig_is_rb = parse_signals(&raw_is_rb);
+            if opts.drift_on { sig_is_rb = drift_entries(&sig_is_rb); }
+            let (_, met_is_rb, _, _) = run_backtest(is_w, &sig_is_rb, &cfg_rb);
+
+            let oos_close_rb: Vec<f64> = oos_w.iter().map(|b| b.close).collect();
+            let oos_ema20_rb = compute_ema(&oos_close_rb, 20);
+            raw_is_rb = create_regime_signals_internal(&oos_close_rb, &oos_ema20_rb, &lbs_rb, regimes_oos);
+            let mut sig_oos_rb = parse_signals(&raw_is_rb);
+            if opts.drift_on { sig_oos_rb = drift_entries(&sig_oos_rb); }
+            let (_, met_oos_rb, _, _) = run_backtest(oos_w, &sig_oos_rb, &cfg_rb);
+
+            prettyprint_str(&format!("W{:02} IS+{}",  window_no, label), &met_is_rb,  &lb_tag_rb);
+            prettyprint_str(&format!("W{:02} OOS+{}", window_no, label), &met_oos_rb, &lb_tag_rb);
+        }
+
+        if eq_is_first.is_none() { eq_is_first = Some(eq_is); }
+        all_oos_rets.extend_from_slice(&rets_oos);
+        cur_start = cur_end;
+        window_no += 1;
+    }
+
+    let eq_seed = eq_is_first.as_deref().unwrap_or(eq_is_baseline);
+    let seed_last = *eq_seed.last().unwrap_or(&1.0);
+    let cum: f64 = all_oos_rets.iter().sum();
+    println!("\n WFO+Regime Summary ");
+    println!("  Total OOS return segments: {}", all_oos_rets.len());
+    println!("  Total OOS ROI: ${:.2}", cum * ACCOUNT_SIZE);
+    println!("  Final equity: ${:.2}", (seed_last + cum) * ACCOUNT_SIZE);
+}
+
+/// Run the full pipeline with regime segmentation. Use this entry point
+/// instead of `run()` when you have a custom regime detector or label set.
+/// The signal function (`sig_fn`) is still consulted for the IS/OOS
+/// baseline + classic optimisation phases; the WFO+regime path uses the
+/// regime-rotated EMA crossover internally.
+pub fn run_with_regime(
+    bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn, regime_cfg: RegimeConfig,
+) {
+    let total_start = Instant::now();
+    let bars = age_dataset(bars.to_vec(), AGE_DATASET);
+    let mut cfg = Config::new();
+    let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
+
+    println!(" Baseline Optimized Metrics ");
+    if let Some(ref met) = base.met_is_opt { prettyprint("Baseline IS", met, base.best_lb); }
+    if let Some(ref met) = base.met_oos_opt { prettyprint("Baseline OOS", met, base.best_lb); }
+    run_robustness_tests(&bars, base.best_lb, base.best_rrr, &cfg, sig_fn);
+
+    println!("\n Running Walk-Forward Windows (regime-rotated LB) ");
+    walk_forward_regime(&bars, &mut cfg, &regime_cfg, &base.eq_is_raw);
+
+    println!("\nTotal runtime: {:.2}s", total_start.elapsed().as_secs_f64());
 }
