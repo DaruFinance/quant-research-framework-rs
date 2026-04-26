@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-04-26
+
+### Added
+- **Regime+WFO byte-identical parity** with the Python reference. The
+  regime-segmentation code path was shipped as a contract in v0.2.0 and
+  partially implemented from v0.2.1, but produced metrics that differed
+  from Python on every WFO window. v0.3.0 closes the gap. Verified by
+  the new `tools/parity_regime.py` harness on the bundled `SOLUSDT_1h.csv`
+  at 0.001 relative tolerance: every `IS-raw`, `OOS-raw`, `IS-opt`,
+  `OOS-opt`, `Baseline IS/OOS`, and `W01..W04 IS/OOS` line matches
+  byte-for-byte in trade count, ROI, PF, Sharpe, win rate, expectancy
+  and max drawdown.
+- **`tools/bench.py`** — cross-language benchmark harness. Times both
+  engines across multiple dataset sizes with `/usr/bin/time -v`, emits a
+  reproducible markdown table for the README. Replaces the unsourced
+  "~24× faster" claim with measured numbers.
+- **`tools/parity_regime.py`** — dedicated regime+WFO parity check (sets
+  `USE_REGIME_SEG=True, USE_WFO=True` and leaves all other flags at
+  default). Asserts byte-identity at the chosen tolerance and returns
+  exit 1 on any divergence.
+- **Comparison matrix** in `README.md` — this framework vs vectorbt /
+  backtrader / NautilusTrader / zipline-reloaded / Lean / bt across
+  built-in WFO, per-regime LB optimisation, strict-LAH property tests,
+  cross-language byte-parity. Verified against primary docs as of
+  2026-04.
+- **`CITATION.cff`** with sibling cross-reference to the Python repo so
+  citing either implies citing the framework as a whole.
+- `Config::use_regime_seg` field — gates the 200-bar warm-up in the
+  backtest core, mirroring Python's global `USE_REGIME_SEG` flag.
+  `run_with_regime` and `run_with_regime_cfg` flip this on
+  automatically; default `Config::new()` keeps it off (zero-cost for
+  classic-path users).
+- `tests/contract_v0_2.rs::config_use_regime_seg_defaults_off_and_is_settable`
+  pinning the new field's contract. 23 Rust tests total now passing.
+
+### Fixed
+- Three regime-path bugs that drove the v0.2.x parity gap, all now
+  byte-identical with the Python reference:
+  1. **`optimize_regimes_sequential_rs` did not probe RRR per regime.**
+     Each LB candidate is now scored at its regime-best RRR (probe
+     TP=5×SL → restrict R-collection to in-regime trades → pick
+     `RRR ∈ {1..5}` maximising sum-of-R → re-run at chosen RRR), exactly
+     mirroring Python's `optimize_regimes_sequential::_evaluate`.
+     Returns `(best_lbs, best_rrrs)` instead of just `best_lbs`.
+  2. **LB candidate list now excludes `FAST_EMA_SPAN`** — Python's
+     regime-path optimiser uses
+     `[lb for lb in range(*LOOKBACK_RANGE) if lb != FAST_EMA_SPAN]`
+     while the classic optimiser keeps it. Rust used the classic list
+     for both, shifting the coarse-pass step-by-2 indices and picking
+     different LBs per regime.
+  3. **RRR probe used raw `close[idx]` instead of the trade's
+     slippage-adjusted entry/exit price.** Python's regime probe reads
+     `entry` and `exit_p` from the trade tuple (which include slippage);
+     Rust now reads `t.entry_price` / `t.exit_price` to match. The
+     classic-path optimiser still uses `close[idx]` because Python's
+     classic optimiser does too — they're separate code paths.
+- **`optimize_regimes_sequential_rs` re-detects regimes locally on the
+  IS slice**, mirroring Python's `optimize_regimes_sequential` (which
+  computes EMA_200 on the local copy, then `detect_regimes(dfi)`). The
+  actual IS/OOS run still uses globally-detected regimes sliced — same
+  two-regime-source design Python uses.
+- Removed the orphaned `if USE_REGIME_SEG && idx < 200 { continue; }`
+  warm-up stub. The 200-bar warm-up now lives at the same position in
+  the inner loop but is gated by `cfg.use_regime_seg` instead of a dead
+  compile-time const, so it can actually fire.
+
+### Notes
+- `tools/parity_check.py --tol 0.001` still reports **56/56**
+  byte-identical metric points against the Python reference (the
+  default-config surface is unchanged).
+- `tools/parity_combo.py` (regime + WFO + forex + session +
+  `OPTIMIZE_RRR=False` + `MIN_TRADES=1`, all on at once) still reports
+  diffs in trade counts even on the classic baseline (`Baseline IS`,
+  `Baseline OOS`). The remaining gap is in the forex/session
+  *interaction*, not in the regime engine itself; combinations that
+  layer all four v0.2.x features are not part of v0.3.0's parity
+  guarantee. Single-feature parity (default, regime+WFO) is.
+
 ## [0.2.4] — 2026-04-26
 
 ### Fixed

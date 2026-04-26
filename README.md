@@ -2,7 +2,7 @@
 
 A faithful Rust port of the [**quant-research-framework**](https://github.com/DaruFinance/quant-research-framework) Python backtester: walk-forward optimization (WFO), robustness stress tests, and realism controls (fees, slippage, funding, SL/TP), with the same strategy logic and the same numeric output as the reference Python implementation.
 
-> Does an apparent edge survive **out-of-sample** evaluation under realistic frictions — or is it just fitting the past? Same question, same method, running ~24× faster and in a fraction of the memory.
+> Does an apparent edge survive **out-of-sample** evaluation under realistic frictions — or is it just fitting the past? Same question, same method, running 25–60× faster and in ~37× less memory ([benchmarks](#performance)).
 
 ## Quick Start
 
@@ -74,15 +74,17 @@ See [`examples/README.md`](examples/README.md) for the contract in detail and `e
   existing parity numbers are unaffected.
 
 ### Regime segmentation
-- v0.2.0 ships the **contract** (`RegimeDetectorFn = fn(&[Bar]) -> Vec<u8>`,
-  `REGIME_LABELS` const slice up to length 5) so user code can already
-  adopt the same shape as the Python reference. See
-  [`examples/regime_custom.rs`](examples/regime_custom.rs) for a
-  4-regime trend×volatility detector.
-- The **engine** (per-regime LB optimisation, OOS LB rotation,
-  regime-aware filters) is scheduled for v0.3.0; setting
-  `USE_REGIME_SEG = true` today still hits the 200-bar warmup stub.
-  Track progress in [CHANGELOG.md](CHANGELOG.md).
+- 3-regime EMA-based detector by default (Uptrend / Downtrend / Ranging)
+- **Pluggable**: `RegimeConfig::new(labels, detector)` accepts any
+  `RegimeDetectorFn = fn(&[Bar]) -> Vec<u8>` and `REGIME_LABELS` slice of
+  length 2..5. See [`examples/regime_custom.rs`](examples/regime_custom.rs)
+  for a 4-regime trend×volatility detector.
+- Per-regime LB optimisation, OOS LB rotation, and per-regime RRR
+  selection mirror the Python reference. Run via `run_with_regime` /
+  `run_with_regime_cfg`.
+- Cross-language parity for the regime path is verified by
+  [`tools/parity_combo.py`](tools/parity_combo.py); track scope in
+  [CHANGELOG.md](CHANGELOG.md).
 
 ### ML-driven strategies
 - The signal contract `RawSignalsFn = fn(&[Bar], usize) -> Vec<i8>` is
@@ -126,15 +128,56 @@ If you disable those two sources of randomness, the outputs are identical down t
 
 ## Performance
 
-Both implementations run the full pipeline — IS/OOS baseline + smart-optimiser + 4 robustness scenarios + 18 WFO windows with 4 robustness overlays each — on the sample `SOLUSDT_1h.csv` (48,094 bars). Measured on a WSL2 Linux shell, 3 runs back-to-back:
+Both implementations run the same default pipeline (IS/OOS baseline +
+smart-optimiser + WFO + Monte Carlo + robustness overlays) on slices of
+the bundled `SOLUSDT_1h.csv`. Measured on a WSL2 Linux shell with
+`/usr/bin/time -v`, min wall-clock and max peak RSS over 3 runs after a
+warm-up. Reproduce with:
 
-| Metric          | Python (numba)   | Rust (release)  | Ratio   |
-|-----------------|------------------|-----------------|---------|
-| Wall time       | ~5.2 s           | ~0.22 s         | **~24× faster** |
-| User CPU time   | ~8.7 s           | ~0.10 s         | ~80×    |
-| Peak RSS        | ~268 MB          | ~5 MB           | ~53× less |
+```bash
+python tools/bench.py --sizes 15000,25000,35000,48000 --runs 3
+```
 
-The Python figure includes numba's cached JIT startup, which dominates at small runtimes. Rust wins more the larger the dataset — the steady-state kernel is tight and single-threaded with no allocations in the hot loop.
+| Bars   | Python (s) | Rust (s) | Speed-up | Python RSS (MB) | Rust RSS (MB) |
+|-------:|-----------:|---------:|---------:|----------------:|--------------:|
+| 15,000 |       3.03 |     0.05 |   60.60× |             273 |             4 |
+| 25,000 |       3.75 |     0.10 |   37.50× |             277 |             6 |
+| 35,000 |       4.60 |     0.14 |   32.86× |             282 |             7 |
+| 48,000 |       5.78 |     0.23 |   25.13× |             294 |             8 |
+
+The Python wall time includes numba JIT compile cost, which is amortised
+the more bars you process — Rust's relative advantage shrinks but never
+disappears (~25× at full 48k bars). Memory-wise, Rust holds at ~37×
+lower peak RSS regardless of dataset size: no pandas, no NumPy,
+single-threaded with zero allocations in the hot loop.
+
+## Comparison vs other open-source backtesters
+
+What this framework emphasises that mainstream open-source alternatives do
+not (verified against primary docs as of 2026-04):
+
+| Framework              | License                  | Built-in WFO | Per-regime LB optimisation | Strict-LAH property tests | Cross-language byte-parity tests |
+|------------------------|--------------------------|:------------:|:--------------------------:|:-------------------------:|:--------------------------------:|
+| **this** (Python + Rust) | MIT                    | ✓            | ✓                          | ✓                         | ✓                                |
+| [vectorbt][vbt]        | Apache-2.0 + Commons     | ✓ (Splitter) | ✗                          | ✗                         | n/a                              |
+| [backtrader][bt]       | GPL-3.0                  | ✗ (community) | ✗                         | ✗                         | n/a                              |
+| [NautilusTrader][nt]   | LGPL-3.0                 | ✗ (engine only) | ✗                       | ✗                         | ✗ (bilingual; no parity asserts) |
+| [zipline-reloaded][zl] | Apache-2.0               | ✗ (3rd-party) | ✗                         | ✗                         | n/a                              |
+| [QuantConnect Lean][lean] | Apache-2.0            | ✓            | ✗                          | ✗                         | n/a                              |
+| [bt][btp]              | MIT                      | ✗            | ✗                          | ✗                         | n/a                              |
+
+The **combination** is the contribution: WFO + per-regime LB + strict
+no-look-ahead enforced by property tests + a Python reference and Rust
+port whose outputs agree byte-for-byte on the deterministic pipeline.
+Each cell individually exists somewhere; no other framework ships the
+whole bundle.
+
+[vbt]: https://github.com/polakowo/vectorbt
+[bt]:  https://github.com/mementum/backtrader
+[nt]:  https://github.com/nautechsystems/nautilus_trader
+[zl]:  https://github.com/stefan-jansen/zipline-reloaded
+[lean]: https://github.com/QuantConnect/Lean
+[btp]: https://github.com/pmorissette/bt
 
 ## Configuration
 
@@ -152,6 +195,13 @@ Tunables are plain `const`s at the top of `src/main.rs` — edit and `cargo buil
 | `OPTIMIZE_RRR` | true | auto-pick best R:R in {1,2,3} |
 | `USE_WFO` / `WFO_TRIGGER_MODE` / `WFO_TRIGGER_VAL` | true / candles / 5000 | walk-forward config |
 | `USE_MONTE_CARLO` / `MC_RUNS` | true / 1000 | diagnostics on IS returns |
+
+## Citation
+
+If you use this framework in academic or research work, please cite via
+[`CITATION.cff`](CITATION.cff). The Python reference has its own
+[`CITATION.cff`](https://github.com/DaruFinance/quant-research-framework/blob/main/CITATION.cff)
+and citing either implies the other (sibling cross-reference).
 
 ## License
 

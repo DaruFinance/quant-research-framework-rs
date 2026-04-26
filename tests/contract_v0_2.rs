@@ -3,10 +3,11 @@
 //! news-injection helper produces a same-length, non-degenerate Vec, and
 //! the regime-detector type alias accepts an arbitrary user fn.
 //!
-//! These are deliberately fast contract checks — full parity with the
-//! Python reference is staged for the v0.3.0 parity harness.
+//! Regime+WFO byte-identical parity against Python is verified by
+//! `tools/parity_regime.py` (integration test). The contract checks
+//! below pin the public API shape only.
 
-use quant_research_framework_rs::{Bar, RegimeDetectorFn, REGIME_LABELS};
+use quant_research_framework_rs::{Bar, Config, RegimeDetectorFn, REGIME_LABELS};
 
 fn make_bars(n: usize) -> Vec<Bar> {
     (0..n).map(|i| {
@@ -42,4 +43,18 @@ fn raw_signal_contract_returns_correct_length() {
     let sig = always_long(&bars, 20);
     assert_eq!(sig.len(), bars.len());
     assert!(sig.iter().all(|&s| s == 1));
+}
+
+#[test]
+fn config_use_regime_seg_defaults_off_and_is_settable() {
+    // `use_regime_seg` gates the 200-bar warm-up in the backtest core,
+    // matching Python's `if use_regime and idx < 200: continue`. The
+    // regime entrypoints flip it to true; default config keeps it off so
+    // classic-path parity numbers (parity_check.py 56/56) stay byte-stable.
+    let cfg = Config::new();
+    assert!(!cfg.use_regime_seg, "default Config must keep use_regime_seg=false");
+
+    let mut cfg2 = Config::new();
+    cfg2.use_regime_seg = true;
+    assert!(cfg2.use_regime_seg);
 }

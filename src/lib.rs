@@ -38,7 +38,6 @@ const SL_PERCENTAGE: f64 = 1.0;
 const USE_TP_DEFAULT: bool = true;
 const TP_PERCENTAGE_DEFAULT: f64 = 3.0;
 const OPTIMIZE_RRR: bool = true;
-const USE_REGIME_SEG: bool = false;
 const USE_WFO: bool = true;
 const WFO_TRIGGER_MODE: &str = "candles";
 const WFO_TRIGGER_VAL: usize = 5000;
@@ -157,6 +156,14 @@ pub struct Config {
     pub session_start_hour: u32,
     pub session_end_hour: u32,
     pub use_oos2: bool,
+    /// When true, the backtest core skips the first 200 bars of each
+    /// segment (warm-up) — mirrors Python's `use_regime` flag passed to
+    /// `_backtest_numba_core`. Set true automatically by the
+    /// `run_with_regime` / `run_with_regime_cfg` entrypoints; otherwise
+    /// stays false and the warmup does not fire. Affects every backtest
+    /// in the run, not just the regime-rotated ones, matching Python's
+    /// global-flag semantics.
+    pub use_regime_seg: bool,
     /// pip size for forex mode. Default 0.0001 (4-decimal pairs); set to
     /// 0.01 for JPY pairs. Ignored unless `use_forex` is true.
     pub pip_size: f64,
@@ -170,7 +177,7 @@ impl Config {
                  use_forex: USE_FOREX, use_sessions: USE_SESSIONS,
                  session_start_hour: SESSION_START_HOUR,
                  session_end_hour: SESSION_END_HOUR,
-                 use_oos2: USE_OOS2, pip_size: 0.0001 }
+                 use_oos2: USE_OOS2, use_regime_seg: false, pip_size: 0.0001 }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
     pub fn with_sessions(mut self, on: bool, start_h: u32, end_h: u32) -> Self {
@@ -258,11 +265,9 @@ pub type RawSignalsFn = fn(&[Bar], usize) -> Vec<i8>;
 /// index into that slice). Length must match `bars`. Detectors must be free
 /// of look-ahead — only data from bars `0..i` may inform the label at bar `i`.
 ///
-/// The full regime-segmentation engine (per-regime LB optimisation, OOS
-/// LB rotation, regime-aware filters) is scheduled for v0.3.0 — for v0.2.0
-/// this type alias and the `REGIME_LABELS` const exist so user examples can
-/// already adopt the contract; setting `USE_REGIME_SEG = true` still hits the
-/// 200-bar warmup stub in the inner loop.
+/// Plug a custom detector through `RegimeConfig::new(labels, detector)` and
+/// run via `run_with_regime` / `run_with_regime_cfg`. The engine handles
+/// per-regime LB optimisation and OOS LB rotation inside each WFO window.
 pub type RegimeDetectorFn = fn(&[Bar]) -> Vec<u8>;
 pub const REGIME_LABELS: &[&str] = &["Uptrend", "Downtrend", "Ranging"];
 
@@ -401,7 +406,11 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             equity_list[last] -= fee_f;
         }
         let mut code = sig[idx];
-        if USE_REGIME_SEG && idx < 200 { continue; }
+
+        // 200-bar warmup mirrors Python's `if use_regime and idx < 200: continue`
+        // in `_backtest_numba_core`. Active only when the regime engine is in
+        // use; otherwise this is a no-op. See `Config::use_regime_seg`.
+        if cfg.use_regime_seg && idx < 200 { continue; }
 
         // v0.2.4 fix (matches Python v0.2.3): force-close fires whenever an
         // open position exists at a session-end bar. Prior versions guarded
@@ -1364,58 +1373,137 @@ fn create_regime_signals_internal(
 /// Per-regime LB optimiser. For each regime in turn, sweeps coarse LBs while
 /// holding other regimes at their current best (or DEFAULT_LB initially), then
 /// fine-tunes the winner by ±1. Mirrors Python's `optimize_regimes_sequential`.
-/// Returns `Vec<Option<usize>>` indexed by regime u8.
+/// Returns `(best_lbs, best_rrrs)` indexed by regime u8.
+///
+/// When `OPTIMIZE_RRR` is true each LB candidate is scored at its
+/// regime-best RRR (probe TP=5×SL → restrict to in-regime trades →
+/// pick RRR ∈ {1..5} maximising sum-of-R), exactly mirroring Python's
+/// `optimize_regimes_sequential::_evaluate` (peak cap 5.0, range 1..=5,
+/// in-regime trade filter on the entry index). Note: the regime-path
+/// caps/ranges differ from the classic optimiser (3.0 / 1..=3) — that's
+/// the Python reference's own choice, faithfully preserved here.
 fn optimize_regimes_sequential_rs(
     bars: &[Bar], regimes: &[u8], n_regimes: usize, cfg: &Config,
-) -> Vec<Option<usize>> {
+) -> (Vec<Option<usize>>, Vec<Option<usize>>) {
     let mut best_lbs: Vec<Option<usize>> = vec![Some(DEFAULT_LB); n_regimes];
-    let all_lbs = lookback_range();
-    if all_lbs.is_empty() { return vec![None; n_regimes]; }
+    let mut best_rrrs: Vec<Option<usize>> = vec![None; n_regimes];
+    // Mirrors Python's regime-path candidate list: range(*LOOKBACK_RANGE)
+    // *minus FAST_EMA_SPAN*. The classic optimiser does not apply this
+    // exclusion; it lives only in `optimize_regimes_sequential`.
+    let all_lbs: Vec<usize> = lookback_range().into_iter()
+        .filter(|&lb| lb != FAST_EMA_SPAN).collect();
+    if all_lbs.is_empty() { return (vec![None; n_regimes], vec![None; n_regimes]); }
     let coarse_lbs: Vec<usize> = all_lbs.iter().step_by(2).copied().collect();
 
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
     let ema20 = compute_ema(&close, 20);
 
-    let evaluate = |best_lbs: &[Option<usize>], r: usize, lb: usize, cfg: &Config| -> Option<f64> {
+    // Returns (score, rrr_used, met).
+    let evaluate = |best_lbs: &[Option<usize>], r: usize, lb: usize, cfg: &Config|
+        -> Option<(f64, Option<usize>, Metrics)>
+    {
         let mut cand = best_lbs.to_vec(); cand[r] = Some(lb);
         let raw = create_regime_signals_internal(&close, &ema20, &cand, regimes);
         let sig = parse_signals_for(&raw, bars, cfg);
-        let (_, met, _, _) = run_backtest(bars, &sig, cfg);
+
+        let (met, rrr_used);
+        if !OPTIMIZE_RRR {
+            let (_, m, _, _) = run_backtest(bars, &sig, cfg);
+            met = m;
+            rrr_used = None;
+        } else {
+            // Probe at TP = 5×SL, restrict R-collection to in-regime trades,
+            // pick best RRR ∈ {1..5}, rerun backtest with that RRR.
+            let mut cfg_probe = cfg.clone();
+            cfg_probe.tp_percentage = 5.0 * SL_PERCENTAGE;
+            cfg_probe.use_tp = true;
+            let (probe_trades, _, _, _) = run_backtest(bars, &sig, &cfg_probe);
+
+            let mut peak_rs: Vec<f64> = Vec::new();
+            let mut close_rs_vec: Vec<f64> = Vec::new();
+            for t in &probe_trades {
+                let e = t.entry_idx as usize;
+                let x = t.exit_idx as usize;
+                if e >= close.len() || x >= close.len() { continue; }
+                if (regimes[e] as usize) != r { continue; }     // in-regime only
+                // Python's regime optimiser uses the trade's slippage-adjusted
+                // entry / exit prices (`entry`, `exit_p` from the tuple), not
+                // raw close[idx]. Classic optimiser uses close[idx] in both
+                // engines — that's a separate code path.
+                let ep = t.entry_price;
+                let xp = t.exit_price;
+                let risk = ep * SL_PERCENTAGE / 100.0;
+                if risk == 0.0 { continue; }
+                // Mirrors Python's int-vs-string side-comparison quirk: all
+                // trades fall through to the short branch.
+                let trough = bars[e..=x].iter().map(|b| b.low).fold(f64::INFINITY, f64::min);
+                peak_rs.push(((ep - trough) / risk).min(5.0));
+                close_rs_vec.push((ep - xp) / risk);
+            }
+
+            let chosen_rrr = if peak_rs.is_empty() {
+                None
+            } else {
+                let mut best_r = 1usize;
+                let mut best_sum = f64::NEG_INFINITY;
+                for r_target in 1..=5usize {
+                    let sum: f64 = peak_rs.iter().zip(close_rs_vec.iter())
+                        .map(|(&p, &c)| if p >= r_target as f64 { r_target as f64 } else { c })
+                        .sum();
+                    if sum > best_sum { best_sum = sum; best_r = r_target; }
+                }
+                Some(best_r)
+            };
+
+            let mut cfg_run = cfg.clone();
+            if let Some(rv) = chosen_rrr {
+                cfg_run.tp_percentage = rv as f64 * SL_PERCENTAGE;
+                cfg_run.use_tp = true;
+            }
+            let (_, mut m, _, _) = run_backtest(bars, &sig, &cfg_run);
+            if let Some(rv) = chosen_rrr { m.rrr = Some(rv); }
+            met = m;
+            rrr_used = chosen_rrr;
+        }
+
         if met.trades < MIN_TRADES { return None; }
         if let Some(dd_c) = cfg.dd_constraint() {
             if met.max_drawdown > dd_c { return None; }
         }
         let val = if OPT_METRIC == "MaxDrawdown" { -met.get(OPT_METRIC) } else { met.get(OPT_METRIC) };
-        Some(val)
+        Some((val, rrr_used, met))
     };
 
     for r in 0..n_regimes {
-        // Skip regimes that don't appear in this slice — keep them at DEFAULT_LB
         if !regimes.iter().any(|&v| v as usize == r) { continue; }
 
-        let mut coarse: Vec<(f64, usize)> = Vec::new();
+        let mut coarse: Vec<(f64, usize, Option<usize>)> = Vec::new();
         for &lb in &coarse_lbs {
-            if let Some(v) = evaluate(&best_lbs, r, lb, cfg) { coarse.push((v, lb)); }
+            if let Some((v, rr, _)) = evaluate(&best_lbs, r, lb, cfg) {
+                coarse.push((v, lb, rr));
+            }
         }
-        if coarse.is_empty() { best_lbs[r] = None; continue; }
+        if coarse.is_empty() { best_lbs[r] = None; best_rrrs[r] = None; continue; }
         coarse.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
-        let (best_val, best_lb) = coarse[0];
+        let (best_val, best_lb, best_rrr) = coarse[0];
 
-        // Fine-tune: ±1
-        let mut cands: Vec<(f64, usize)> = vec![(best_val, best_lb)];
+        let mut cands: Vec<(f64, usize, Option<usize>)> = vec![(best_val, best_lb, best_rrr)];
         if let Some(idx) = all_lbs.iter().position(|&l| l == best_lb) {
             for delta in [-1i64, 1i64] {
                 let n_idx = idx as i64 + delta;
                 if n_idx >= 0 && (n_idx as usize) < all_lbs.len() {
                     let lb = all_lbs[n_idx as usize];
-                    if let Some(v) = evaluate(&best_lbs, r, lb, cfg) { cands.push((v, lb)); }
+                    if let Some((v, rr, _)) = evaluate(&best_lbs, r, lb, cfg) {
+                        cands.push((v, lb, rr));
+                    }
                 }
             }
         }
         cands.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
-        best_lbs[r] = Some(cands[0].1);
+        best_lbs[r]  = Some(cands[0].1);
+        best_rrrs[r] = cands[0].2;
     }
-    best_lbs
+    (best_lbs, best_rrrs)
 }
 
 fn fmt_lb_tag(best_lbs: &[Option<usize>], labels: &[String]) -> String {
@@ -1484,7 +1572,13 @@ fn walk_forward_regime(
         let regimes_is  = &regimes_full[is_s..is_e];
         let regimes_oos = &regimes_full[oos_s..oos_e];
 
-        let best_lbs = optimize_regimes_sequential_rs(is_bars, regimes_is, n_regimes, cfg);
+        // Mirrors Python: optimize_regimes_sequential() re-detects regimes
+        // *locally* on the IS slice (because EMA_200 with adjust=False on a
+        // slice differs from EMA_200 on the full series). The actual IS/OOS
+        // run still uses the globally-detected regimes sliced.
+        let regimes_is_local = (regime_cfg.detector)(is_bars);
+        let (best_lbs, _best_rrrs) = optimize_regimes_sequential_rs(
+            is_bars, &regimes_is_local, n_regimes, cfg);
         if best_lbs.iter().all(|x| x.is_none()) { break; }
         let lb_tag = fmt_lb_tag(&best_lbs, &regime_cfg.labels);
 
@@ -1572,6 +1666,7 @@ pub fn run_with_regime(
     let total_start = Instant::now();
     let bars = age_dataset(bars.to_vec(), AGE_DATASET);
     let mut cfg = Config::new();
+    cfg.use_regime_seg = true;       // matches Python's global USE_REGIME_SEG flag
     DISPLAY_FOREX.store(cfg.use_forex, Ordering::Relaxed);
     let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
 
@@ -1595,6 +1690,7 @@ pub fn run_with_regime_cfg(
 ) {
     let total_start = std::time::Instant::now();
     let bars = age_dataset(bars.to_vec(), AGE_DATASET);
+    cfg.use_regime_seg = true;       // matches Python's global USE_REGIME_SEG flag
     DISPLAY_FOREX.store(cfg.use_forex, Ordering::Relaxed);
     let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
     println!(" Baseline Optimized Metrics ");

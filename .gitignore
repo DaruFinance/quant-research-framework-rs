@@ -19,4 +19,9 @@ data/SYNTHETIC.csv
 
 # Local data overrides (uncomment if you want to keep data out of git)
 # data/
-examples/_parity_combo.rs
+
+# Auto-generated parity-harness scaffolding (written by tools/parity_*.py)
+examples/_parity_*.rs
+
+# Bench harness output (written by tools/bench.py --out)
+tools/bench_results.md
