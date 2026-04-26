@@ -1,6 +1,6 @@
 [package]
 name = "quant-research-framework-rs"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "Walk-forward backtester with robustness tests (Rust port of quant-research-framework)"
 license = "MIT"
@@ -8,6 +8,8 @@ repository = "https://github.com/DaruFinance/quant-research-framework-rs"
 
 [dependencies]
 rand = "0.8"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+chrono-tz = { version = "0.8", default-features = false }
 
 [[bin]]
 name = "backtester"

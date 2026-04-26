@@ -2,10 +2,17 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write as IoWrite};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
+
+/// Set by `run` / `run_with_regime` from cfg.use_forex so prettyprint can
+/// format ROI / Exp / MaxDD in R-units (forex) or dollars (crypto).
+static DISPLAY_FOREX: AtomicBool = AtomicBool::new(false);
 
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
+use chrono::{TimeZone, Timelike};
+use chrono_tz::America::New_York;
 
 // ============================================================================
 // CONFIGURATION — mirrors backtester.py constants
@@ -41,14 +48,17 @@ const FAST_EMA_SPAN: usize = 20;
 // crypto-style perpetual funding). PnL semantics follow the Python reference.
 const USE_FOREX: bool = false;
 
-// Session mode: when true, only entries inside the NY [SESSION_START_HOUR,
-// SESSION_END_HOUR) window are taken; positions are force-closed at the
-// session-end bar of each day. Times are interpreted in UTC for now (Python
-// uses America/New_York with DST; UTC is a safe approximation when bars are
-// already aligned to NY session boundaries).
+// Session mode: when true, only entries inside the NY tz
+// [SESSION_START_HOUR, SESSION_END_HOUR) window are taken; positions are
+// force-closed on the last in-session bar of each NY-tz day. Times are
+// interpreted in America/New_York with DST (matches Python's load_ohlc
+// + in_session semantics).
 const USE_SESSIONS: bool = false;
-const SESSION_START_HOUR: u32 = 13;   // 08:00 NY (no DST) ≈ 13:00 UTC
-const SESSION_END_HOUR: u32 = 21;     // 16:50 NY ≈ 21:00 UTC
+const SESSION_START_HOUR: u32 = 8;    // NY local hour
+const SESSION_END_HOUR: u32 = 17;     // NY local hour (exclusive); covers the
+                                      // 16:00..16:59 range which matches
+                                      // Python's "8:00".."16:50" window for
+                                      // any bar whose minute is < 50.
 
 // Robustness scenario flag: news-candle injection (sparse high-vol wicks).
 // When the scenario list contains "NEWS_CANDLES_INJECTION", inject_news_candles
@@ -147,6 +157,9 @@ pub struct Config {
     pub session_start_hour: u32,
     pub session_end_hour: u32,
     pub use_oos2: bool,
+    /// pip size for forex mode. Default 0.0001 (4-decimal pairs); set to
+    /// 0.01 for JPY pairs. Ignored unless `use_forex` is true.
+    pub pip_size: f64,
 }
 impl Config {
     pub fn new() -> Self {
@@ -157,7 +170,7 @@ impl Config {
                  use_forex: USE_FOREX, use_sessions: USE_SESSIONS,
                  session_start_hour: SESSION_START_HOUR,
                  session_end_hour: SESSION_END_HOUR,
-                 use_oos2: USE_OOS2 }
+                 use_oos2: USE_OOS2, pip_size: 0.0001 }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
     pub fn with_sessions(mut self, on: bool, start_h: u32, end_h: u32) -> Self {
@@ -175,13 +188,21 @@ impl Config {
 }
 
 // ============================================================================
-// UTC hour/minute from unix timestamp (no chrono needed)
+// Time helpers: UTC for funding (matches Python's UTC funding schedule),
+// New_York for sessions (matches Python's load_ohlc tz_convert + DST).
 // ============================================================================
 fn utc_hour_minute(unix_ts: i64) -> (u32, u32) {
     let secs_in_day = ((unix_ts % 86400) + 86400) % 86400;
     let hour = (secs_in_day / 3600) as u32;
     let minute = ((secs_in_day % 3600) / 60) as u32;
     (hour, minute)
+}
+
+fn ny_hour_minute(unix_ts: i64) -> (u32, u32) {
+    let dt = chrono::Utc.timestamp_opt(unix_ts, 0).single()
+        .expect("invalid unix timestamp");
+    let ny = dt.with_timezone(&New_York);
+    (ny.hour(), ny.minute())
 }
 
 // ============================================================================
@@ -249,17 +270,56 @@ pub const REGIME_LABELS: &[&str] = &["Uptrend", "Downtrend", "Ranging"];
 // 4. PARSE SIGNALS (flip detection)
 // ============================================================================
 pub fn parse_signals(raw: &[i8]) -> Vec<i8> {
+    parse_signals_with_flags(raw, None)
+}
+
+/// Session-aware parse: when an out-of-session bar is hit, `pos` is dropped
+/// and the *next* in-session bar snaps `pos` to that bar's raw value WITHOUT
+/// emitting a flip (matches Python's `_parse_signals_numba` semantics).
+/// `in_flags` must be the same length as `raw` if provided.
+pub fn parse_signals_with_flags(raw: &[i8], in_flags: Option<&[bool]>) -> Vec<i8> {
     let n = raw.len();
     let mut sig = vec![0i8; n];
     let mut pos: i8 = 0;
-    let mut in_prev = true;
+    let initial_in = in_flags.map(|f| f.first().copied().unwrap_or(true)).unwrap_or(true);
+    let mut in_prev = initial_in;
     for i in 0..n {
         let r = raw[i];
-        if !in_prev { pos = r; in_prev = true; continue; }
+        let in_now = in_flags.map(|f| f[i]).unwrap_or(true);
+        if !in_now {
+            in_prev = false;
+            continue;
+        }
+        if !in_prev {
+            pos = r;
+            in_prev = true;
+            continue;
+        }
         if r == 1 && pos != 1 { sig[i] = 1; pos = 1; }
         else if r == -1 && pos != -1 { sig[i] = 3; pos = -1; }
     }
     sig
+}
+
+/// Build the in-session mask for a slice of bars given a Config.
+/// Matches the in-session computation used inside `backtest_core`.
+pub fn compute_in_flags(bars: &[Bar], cfg: &Config) -> Vec<bool> {
+    bars.iter().map(|b| {
+        if !cfg.use_sessions { return true; }
+        let (h, _m) = ny_hour_minute(b.time_unix);
+        h >= cfg.session_start_hour && h < cfg.session_end_hour
+    }).collect()
+}
+
+/// Engine-internal session-aware parse: applies the session mask up front
+/// when `cfg.use_sessions` is set, mirroring Python's `parse_signals(raw, times)`.
+fn parse_signals_for(raw: &[i8], bars: &[Bar], cfg: &Config) -> Vec<i8> {
+    if cfg.use_sessions {
+        let flags = compute_in_flags(bars, cfg);
+        parse_signals_with_flags(raw, Some(&flags))
+    } else {
+        parse_signals_with_flags(raw, None)
+    }
 }
 
 // ============================================================================
@@ -268,11 +328,32 @@ pub fn parse_signals(raw: &[i8]) -> Vec<i8> {
 fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics, Vec<f64>, Vec<f64>) {
     let n = bars.len();
     let fee_rate = cfg.fee_rate();
-    let slip = cfg.slip();
     let funding_rate = cfg.funding_rate();
-    let position_size = cfg.position_size;
-    let sl_perc = SL_PERCENTAGE;
-    let tp_perc = cfg.tp_percentage;
+    // Forex switches sizing to 1 R-unit, slip to pip-distance, SL/TP to pip-distance.
+    let position_size = if cfg.use_forex { 1.0 } else { cfg.position_size };
+    let pip_size = cfg.pip_size;
+    let slip = if cfg.use_forex { cfg.slippage_pct * pip_size } else { cfg.slip() };
+    let sl_perc = if cfg.use_forex { SL_PERCENTAGE * pip_size } else { SL_PERCENTAGE };
+    let tp_perc = if cfg.use_forex { cfg.tp_percentage * pip_size } else { cfg.tp_percentage };
+    let rrr_fx = if cfg.use_forex && sl_perc > 0.0 { tp_perc / sl_perc } else { 1.0 };
+    let stop_pips_fx = if cfg.use_forex { sl_perc / pip_size } else { 1.0 };
+
+    // Closure to compute exit PnL — forex uses pip-based capped R units;
+    // crypto uses dollar qty * price diff. Both deduct entry+exit fees and
+    // (crypto only) any accumulated funding.
+    let pnl_for = |side: i8, entry_p: f64, exit_p: f64,
+                    qty_v: f64, fee_e: f64, fee_x: f64, funding_v: f64| -> f64 {
+        if cfg.use_forex {
+            let price_move = if side == 1 { exit_p - entry_p } else { entry_p - exit_p };
+            let price_move_pips = price_move / pip_size;
+            let trade_res = ((price_move_pips / (rrr_fx * stop_pips_fx)) * rrr_fx)
+                .max(-1.0).min(rrr_fx);
+            trade_res * position_size - (fee_e + fee_x)
+        } else {
+            let direction = if side == 1 { exit_p - entry_p } else { entry_p - exit_p };
+            qty_v * direction - (fee_e + fee_x + funding_v)
+        }
+    };
 
     let funding_mask: Vec<bool> = if cfg.use_forex {
         vec![false; bars.len()]
@@ -285,7 +366,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
 
     let in_session: Vec<bool> = bars.iter().map(|b| {
         if !cfg.use_sessions { return true; }
-        let (h, _m) = utc_hour_minute(b.time_unix);
+        let (h, _m) = ny_hour_minute(b.time_unix);
         h >= cfg.session_start_hour && h < cfg.session_end_hour
     }).collect();
     let session_end_bar: Vec<bool> = {
@@ -309,6 +390,10 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let mut fee_entry = 0.0f64;
 
     for idx in 0..n {
+        // Match Python's `for idx in session_idxs:` behaviour — out-of-session
+        // bars are skipped entirely so neither funding, SL/TP, nor entries fire.
+        if cfg.use_sessions && !in_session[idx] { continue; }
+
         if open_pos != 0 && funding_mask[idx] {
             let fee_f = qty * bars[idx].open * funding_rate;
             funding_acc += fee_f;
@@ -318,21 +403,28 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         let mut code = sig[idx];
         if USE_REGIME_SEG && idx < 200 { continue; }
 
-        if cfg.use_sessions && !in_session[idx] && (code == 1 || code == 3) {
-            code = 0;
-        }
-        if cfg.use_sessions && session_end_bar[idx] && open_pos != 0 {
+        // Match Python: force-close at session_end requires code != 0
+        // (Python guards the force-close path on `if open_pos != 0 and code != 0`).
+        if cfg.use_sessions && session_end_bar[idx] && open_pos != 0 && code != 0 {
             if open_pos == 1 && code != 3 { code = 2; }
             else if open_pos == -1 && code != 1 { code = 4; }
         }
         let price_open = bars[idx].open;
 
-        // SL/TP check
+        // SL/TP check — additive in forex (sl_perc/tp_perc are pre-converted
+        // to pip-distance fractions when use_forex), multiplicative in crypto.
         if open_pos != 0 && code != 1 && code != 3 {
-            let sl_pr = if open_pos == 1 { entry_price * (1.0 - sl_perc/100.0) }
-                        else { entry_price * (1.0 + sl_perc/100.0) };
-            let tp_pr = if open_pos == 1 { entry_price * (1.0 + tp_perc/100.0) }
-                        else { entry_price * (1.0 - tp_perc/100.0) };
+            let (sl_pr, tp_pr) = if cfg.use_forex {
+                let sl = if open_pos == 1 { entry_price - sl_perc } else { entry_price + sl_perc };
+                let tp = if open_pos == 1 { entry_price + tp_perc } else { entry_price - tp_perc };
+                (sl, tp)
+            } else {
+                let sl = if open_pos == 1 { entry_price * (1.0 - sl_perc/100.0) }
+                         else { entry_price * (1.0 + sl_perc/100.0) };
+                let tp = if open_pos == 1 { entry_price * (1.0 + tp_perc/100.0) }
+                         else { entry_price * (1.0 - tp_perc/100.0) };
+                (sl, tp)
+            };
             let hit_sl = if open_pos == 1 { bars[idx].low <= sl_pr } else { bars[idx].high >= sl_pr };
             let mut hit_tp = if open_pos == 1 { bars[idx].high >= tp_pr } else { bars[idx].low <= tp_pr };
             if hit_sl && hit_tp { hit_tp = false; }
@@ -344,11 +436,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let exit_price = if open_pos == 1 { raw_exit * (1.0 - slip) }
                                  else { raw_exit * (1.0 + slip) };
                 let fee_exit = qty * exit_price * fee_rate;
-                let pnl = if open_pos == 1 {
-                    qty * (exit_price - entry_price) - (fee_entry + fee_exit + funding_acc)
-                } else {
-                    qty * (entry_price - exit_price) - (fee_entry + fee_exit + funding_acc)
-                };
+                let pnl = pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
                 funding_acc = 0.0;
                 trades.push(Trade { side: open_pos, entry_idx: ent_bar, exit_idx: idx as i32,
                     entry_price, exit_price, qty, pnl });
@@ -363,7 +451,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             if open_pos == -1 {
                 let exit_price = price_open * (1.0 + slip);
                 let fee_exit = qty * exit_price * fee_rate;
-                let pnl = qty * (entry_price - exit_price) - (fee_entry + fee_exit + funding_acc);
+                let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
                 funding_acc = 0.0;
                 trades.push(Trade { side: -1, entry_idx: ent_bar, exit_idx: idx as i32,
                     entry_price, exit_price, qty, pnl });
@@ -381,7 +469,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             if open_pos == 1 {
                 let exit_price = price_open * (1.0 - slip);
                 let fee_exit = qty * exit_price * fee_rate;
-                let pnl = qty * (exit_price - entry_price) - (fee_entry + fee_exit + funding_acc);
+                let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
                 funding_acc = 0.0;
                 trades.push(Trade { side: 1, entry_idx: ent_bar, exit_idx: idx as i32,
                     entry_price, exit_price, qty, pnl });
@@ -398,7 +486,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         } else if code == 2 && open_pos == 1 {
             let exit_price = price_open * (1.0 - slip);
             let fee_exit = qty * exit_price * fee_rate;
-            let pnl = qty * (exit_price - entry_price) - (fee_entry + fee_exit + funding_acc);
+            let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
             funding_acc = 0.0;
             trades.push(Trade { side: 1, entry_idx: ent_bar, exit_idx: idx as i32,
                 entry_price, exit_price, qty, pnl });
@@ -408,7 +496,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         } else if code == 4 && open_pos == -1 {
             let exit_price = price_open * (1.0 + slip);
             let fee_exit = qty * exit_price * fee_rate;
-            let pnl = qty * (entry_price - exit_price) - (fee_entry + fee_exit + funding_acc);
+            let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
             funding_acc = 0.0;
             trades.push(Trade { side: -1, entry_idx: ent_bar, exit_idx: idx as i32,
                 entry_price, exit_price, qty, pnl });
@@ -424,20 +512,28 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         let exit_price = if open_pos == 1 { price_last * (1.0 - slip) }
                          else { price_last * (1.0 + slip) };
         let fee_exit = qty * exit_price * fee_rate;
-        let pnl = if open_pos == 1 {
-            qty * (exit_price - entry_price) - (fee_entry + fee_exit + funding_acc)
-        } else {
-            qty * (entry_price - exit_price) - (fee_entry + fee_exit + funding_acc)
-        };
+        let pnl = pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
         trades.push(Trade { side: open_pos, entry_idx: ent_bar, exit_idx: (n-1) as i32,
             entry_price, exit_price, qty, pnl });
         let last_eq = *equity_list.last().unwrap();
         equity_list.push(last_eq + pnl);
     }
 
-    let eq_frac: Vec<f64> = equity_list.iter().map(|e| e / ACCOUNT_SIZE).collect();
-    let rets: Vec<f64> = trades.iter().map(|t| t.pnl / ACCOUNT_SIZE).collect();
-    let metrics = compute_metrics(&rets, &eq_frac);
+    // Equity / returns scaling: forex normalises to position_size_fx (=1.0)
+    // → eq_frac becomes cumulative R-units starting at 0; crypto normalises
+    // to ACCOUNT_SIZE. Matches Python's `if use_forex` branch in numba_core.
+    let (eq_frac, rets): (Vec<f64>, Vec<f64>) = if cfg.use_forex {
+        let pnls: Vec<f64> = trades.iter().map(|t| t.pnl / position_size).collect();
+        let mut eq = vec![0.0f64];
+        let mut cum = 0.0;
+        for &r in &pnls { cum += r; eq.push(cum); }
+        (eq, pnls)
+    } else {
+        let eq: Vec<f64> = equity_list.iter().map(|e| e / ACCOUNT_SIZE).collect();
+        let r: Vec<f64> = trades.iter().map(|t| t.pnl / ACCOUNT_SIZE).collect();
+        (eq, r)
+    };
+    let metrics = compute_metrics_for(&rets, &eq_frac, cfg.use_forex);
     (trades, metrics, eq_frac, rets)
 }
 
@@ -446,6 +542,10 @@ fn run_backtest(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics,
 }
 
 fn compute_metrics(rets: &[f64], eq_frac: &[f64]) -> Metrics {
+    compute_metrics_for(rets, eq_frac, false)
+}
+
+fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Metrics {
     let tc = rets.len();
     if tc == 0 {
         let mut m = Metrics::default();
@@ -453,7 +553,7 @@ fn compute_metrics(rets: &[f64], eq_frac: &[f64]) -> Metrics {
         return m;
     }
     let wr = rets.iter().filter(|&&r| r > 0.0).count() as f64 / tc as f64;
-    let roi = eq_frac.last().unwrap() - 1.0;
+    let roi = if use_forex { *eq_frac.last().unwrap() } else { eq_frac.last().unwrap() - 1.0 };
     let wins_sum: f64 = rets.iter().filter(|&&r| r > 0.0).sum();
     let losses_sum: f64 = rets.iter().filter(|&&r| r <= 0.0).map(|r| -r).sum();
     let pf = if losses_sum > 0.0 { wins_sum / losses_sum } else { f64::INFINITY };
@@ -469,7 +569,11 @@ fn compute_metrics(rets: &[f64], eq_frac: &[f64]) -> Metrics {
     let mut hw = vec![0.0f64; eq_frac.len()];
     hw[0] = eq_frac[0];
     for i in 1..eq_frac.len() { hw[i] = hw[i-1].max(eq_frac[i]); }
-    let dd = (0..eq_frac.len()).map(|i| if hw[i] > 0.0 { (hw[i]-eq_frac[i])/hw[i] } else { 0.0 }).fold(0.0f64, f64::max);
+    let dd = if use_forex {
+        (0..eq_frac.len()).map(|i| hw[i] - eq_frac[i]).fold(0.0f64, f64::max)
+    } else {
+        (0..eq_frac.len()).map(|i| if hw[i] > 0.0 { (hw[i]-eq_frac[i])/hw[i] } else { 0.0 }).fold(0.0f64, f64::max)
+    };
     let w = [0.0117, 0.0317, 0.0861, 0.2341, 0.6364];
     let segments = split_into_5(rets);
     let seg_sums: Vec<f64> = segments.iter().map(|s| s.iter().sum::<f64>()).collect();
@@ -541,7 +645,7 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
     let mut evaluate = |lb: usize, cfg: &mut Config, cache: &mut HashMap<usize, Option<(f64, usize, Metrics)>>| -> Option<(f64, usize, Metrics)> {
         if let Some(cached) = cache.get(&lb) { return cached.clone(); }
         let raw = sig_fn(bars, lb);
-        let sig = parse_signals(&raw);
+        let sig = parse_signals_for(&raw, bars, cfg);
         let met;
         if !OPTIMIZE_RRR {
             let (_, m, _, _) = run_backtest(bars, &sig, cfg);
@@ -599,7 +703,7 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
     if coarse_results.is_empty() {
         println!("No lookback meets drawdown constraint, using raw LB {}", DEFAULT_LB);
         let raw = sig_fn(bars, DEFAULT_LB);
-        let sig = parse_signals(&raw);
+        let sig = parse_signals_for(&raw, bars, cfg);
         let (_, m, _, _) = run_backtest(bars, &sig, cfg);
         return (Some(DEFAULT_LB), m);
     }
@@ -740,9 +844,17 @@ fn fmt_money(val: f64) -> String {
 fn prettyprint(tag: &str, m: &Metrics, lb: Option<usize>) {
     let lb_note = if let Some(l) = lb { format!("(LB {}) ", l) } else { String::new() };
     let rrr_note = if let Some(r) = m.rrr { format!("  RRR:{}", r) } else { String::new() };
-    println!("{:>8} {}| Trades:{:4}  ROI:${}  PF:{:6.2}  Shp:{:6.2}  Win:{:6.2}%  Exp:${}  MaxDD:${}{}",
-        tag, lb_note, m.trades, fmt_money(m.roi * ACCOUNT_SIZE), m.pf, m.sharpe,
-        m.win_rate * 100.0, fmt_money(m.exp * ACCOUNT_SIZE), fmt_money(m.max_drawdown * ACCOUNT_SIZE), rrr_note);
+    if DISPLAY_FOREX.load(Ordering::Relaxed) {
+        // Forex: R-unit display, no dollar scaling. Matches Python's
+        // FOREX_MODE branch in prettyprint.
+        println!("{:>8} {}| Trades:{:4}  ROI:{:7.2}R  PF:{:6.2}  Shp:{:6.2}  Win:{:6.2}%  Exp:{:7.2}R  MaxDD:{:7.2}R{}",
+            tag, lb_note, m.trades, m.roi, m.pf, m.sharpe,
+            m.win_rate * 100.0, m.exp, m.max_drawdown, rrr_note);
+    } else {
+        println!("{:>8} {}| Trades:{:4}  ROI:${}  PF:{:6.2}  Shp:{:6.2}  Win:{:6.2}%  Exp:${}  MaxDD:${}{}",
+            tag, lb_note, m.trades, fmt_money(m.roi * ACCOUNT_SIZE), m.pf, m.sharpe,
+            m.win_rate * 100.0, fmt_money(m.exp * ACCOUNT_SIZE), fmt_money(m.max_drawdown * ACCOUNT_SIZE), rrr_note);
+    }
 }
 
 // ============================================================================
@@ -870,12 +982,12 @@ fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, sig_fn
 
     // RAW baseline
     let raw_is = sig_fn(is_bars, DEFAULT_LB);
-    let sig_is = parse_signals(&raw_is);
+    let sig_is = parse_signals_for(&raw_is, is_bars, cfg);
     let (_, met_is_raw, eq_is_raw, rets_is_raw) = run_backtest(is_bars, &sig_is, cfg);
     prettyprint("IS-raw", &met_is_raw, None);
 
     let raw_oos = sig_fn(oos_bars, DEFAULT_LB);
-    let sig_oos = parse_signals(&raw_oos);
+    let sig_oos = parse_signals_for(&raw_oos, oos_bars, cfg);
     let (_, met_oos_raw, _, _) = run_backtest(oos_bars, &sig_oos, cfg);
     prettyprint("OOS-raw", &met_oos_raw, None);
 
@@ -900,11 +1012,11 @@ fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, sig_fn
         if let Some(r) = best_rrr { cfg.tp_percentage = r as f64 * SL_PERCENTAGE; cfg.use_tp = true; }
 
         let raw_is_opt = sig_fn(is_bars, lb);
-        let sig_is_opt = parse_signals(&raw_is_opt);
+        let sig_is_opt = parse_signals_for(&raw_is_opt, is_bars, cfg);
         let (tr_is_opt, met_is_opt2, _, rets_is_opt) = run_backtest(is_bars, &sig_is_opt, cfg);
 
         let raw_oos_opt = sig_fn(oos_bars, lb);
-        let sig_oos_opt = parse_signals(&raw_oos_opt);
+        let sig_oos_opt = parse_signals_for(&raw_oos_opt, oos_bars, cfg);
         let (tr_oos_opt, mut met_oos_opt, _, _) = run_backtest(oos_bars, &sig_oos_opt, cfg);
         if let Some(r) = best_rrr { met_oos_opt.rrr = Some(r); }
 
@@ -945,11 +1057,11 @@ fn run_wfo_window(is_bars: &[Bar], oos_bars: &[Bar], lb: usize, window_tag: &str
     let export_path = "trade_list.csv";
 
     let raw_is = sig_fn(is_bars, lb);
-    let sig_is = parse_signals(&raw_is);
+    let sig_is = parse_signals_for(&raw_is, is_bars, cfg);
     let (tr_is, met_is, eq_is, _) = run_backtest(is_bars, &sig_is, cfg);
 
     let raw_oos = sig_fn(oos_bars, lb);
-    let sig_oos = parse_signals(&raw_oos);
+    let sig_oos = parse_signals_for(&raw_oos, oos_bars, cfg);
     let (tr_oos, met_oos, _, rets_oos) = run_backtest(oos_bars, &sig_oos, cfg);
 
     prettyprint(&format!("{} IS", window_tag), &met_is, Some(lb));
@@ -986,12 +1098,12 @@ fn run_wfo_window(is_bars: &[Bar], oos_bars: &[Bar], lb: usize, window_tag: &str
         } else { oos_bars };
 
         let raw_is_rb = sig_fn(is_work, lb_rb);
-        let mut sig_is_rb = parse_signals(&raw_is_rb);
+        let mut sig_is_rb = parse_signals_for(&raw_is_rb, is_work, &cfg_rb);
         if opts.drift_on { sig_is_rb = drift_entries(&sig_is_rb); }
         let (_, met_is_rb, _, _) = run_backtest(is_work, &sig_is_rb, &cfg_rb);
 
         let raw_oos_rb = sig_fn(oos_work, lb_rb);
-        let mut sig_oos_rb = parse_signals(&raw_oos_rb);
+        let mut sig_oos_rb = parse_signals_for(&raw_oos_rb, oos_work, &cfg_rb);
         if opts.drift_on { sig_oos_rb = drift_entries(&sig_oos_rb); }
         let (_, met_oos_rb, _, _) = run_backtest(oos_work, &sig_oos_rb, &cfg_rb);
 
@@ -1035,7 +1147,7 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
             let lb = lb_roll.unwrap();
             let oos_remaining = &all_bars[cs_idx..n];
             let raw_tmp = sig_fn(oos_remaining, lb);
-            let sig_tmp = parse_signals(&raw_tmp);
+            let sig_tmp = parse_signals_for(&raw_tmp, oos_remaining, cfg);
             let (tr_tmp, _, _, _) = run_backtest(oos_remaining, &sig_tmp, cfg);
             if tr_tmp.is_empty() { ni }
             else { (cur_start + tr_tmp[WFO_TRIGGER_VAL.min(tr_tmp.len()) - 1].exit_idx as i64 + 1).min(ni) }
@@ -1111,12 +1223,12 @@ fn run_robustness_tests(all_bars: &[Bar], best_lb: Option<usize>, best_rrr: Opti
         } else { oos_bars_view };
 
         let raw_is = sig_fn(is_bars, lb_use);
-        let mut sig_is = parse_signals(&raw_is);
+        let mut sig_is = parse_signals_for(&raw_is, is_bars, &cfg_rb);
         if opts.drift_on { sig_is = drift_entries(&sig_is); }
         let (_, met_is, _, _) = run_backtest(is_bars, &sig_is, &cfg_rb);
 
         let raw_oos = sig_fn(oos_bars, lb_use);
-        let mut sig_oos = parse_signals(&raw_oos);
+        let mut sig_oos = parse_signals_for(&raw_oos, oos_bars, &cfg_rb);
         if opts.drift_on { sig_oos = drift_entries(&sig_oos); }
         let (_, met_oos, _, _) = run_backtest(oos_bars, &sig_oos, &cfg_rb);
 
@@ -1137,6 +1249,7 @@ pub fn run(bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn) {
     let total_start = Instant::now();
     let bars = age_dataset(bars.to_vec(), AGE_DATASET);
     let mut cfg = Config::new();
+    DISPLAY_FOREX.store(cfg.use_forex, Ordering::Relaxed);
     let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
 
     println!(" Baseline Optimized Metrics ");
@@ -1264,7 +1377,7 @@ fn optimize_regimes_sequential_rs(
     let evaluate = |best_lbs: &[Option<usize>], r: usize, lb: usize, cfg: &Config| -> Option<f64> {
         let mut cand = best_lbs.to_vec(); cand[r] = Some(lb);
         let raw = create_regime_signals_internal(&close, &ema20, &cand, regimes);
-        let sig = parse_signals(&raw);
+        let sig = parse_signals_for(&raw, bars, cfg);
         let (_, met, _, _) = run_backtest(bars, &sig, cfg);
         if met.trades < MIN_TRADES { return None; }
         if let Some(dd_c) = cfg.dd_constraint() {
@@ -1313,9 +1426,15 @@ fn fmt_lb_tag(best_lbs: &[Option<usize>], labels: &[String]) -> String {
 fn prettyprint_str(tag: &str, m: &Metrics, lb_tag: &str) {
     let lb_note = if lb_tag.is_empty() { String::new() } else { format!("(LB {}) ", lb_tag) };
     let rrr_note = if let Some(r) = m.rrr { format!("  RRR:{}", r) } else { String::new() };
-    println!("{:>8} {}| Trades:{:4}  ROI:${}  PF:{:6.2}  Shp:{:6.2}  Win:{:6.2}%  Exp:${}  MaxDD:${}{}",
-        tag, lb_note, m.trades, fmt_money(m.roi * ACCOUNT_SIZE), m.pf, m.sharpe,
-        m.win_rate * 100.0, fmt_money(m.exp * ACCOUNT_SIZE), fmt_money(m.max_drawdown * ACCOUNT_SIZE), rrr_note);
+    if DISPLAY_FOREX.load(Ordering::Relaxed) {
+        println!("{:>8} {}| Trades:{:4}  ROI:{:7.2}R  PF:{:6.2}  Shp:{:6.2}  Win:{:6.2}%  Exp:{:7.2}R  MaxDD:{:7.2}R{}",
+            tag, lb_note, m.trades, m.roi, m.pf, m.sharpe,
+            m.win_rate * 100.0, m.exp, m.max_drawdown, rrr_note);
+    } else {
+        println!("{:>8} {}| Trades:{:4}  ROI:${}  PF:{:6.2}  Shp:{:6.2}  Win:{:6.2}%  Exp:${}  MaxDD:${}{}",
+            tag, lb_note, m.trades, fmt_money(m.roi * ACCOUNT_SIZE), m.pf, m.sharpe,
+            m.win_rate * 100.0, fmt_money(m.exp * ACCOUNT_SIZE), fmt_money(m.max_drawdown * ACCOUNT_SIZE), rrr_note);
+    }
 }
 
 /// Walk-forward path with regime segmentation. Mirrors the v0.2.0 Python
@@ -1371,14 +1490,14 @@ fn walk_forward_regime(
         let is_close: Vec<f64> = is_bars.iter().map(|b| b.close).collect();
         let is_ema20 = compute_ema(&is_close, 20);
         let raw_is = create_regime_signals_internal(&is_close, &is_ema20, &best_lbs, regimes_is);
-        let sig_is = parse_signals(&raw_is);
+        let sig_is = parse_signals_for(&raw_is, is_bars, cfg);
         let (_, met_is, eq_is, _) = run_backtest(is_bars, &sig_is, cfg);
 
         // OOS run
         let oos_close: Vec<f64> = oos_bars.iter().map(|b| b.close).collect();
         let oos_ema20 = compute_ema(&oos_close, 20);
         let raw_oos = create_regime_signals_internal(&oos_close, &oos_ema20, &best_lbs, regimes_oos);
-        let sig_oos = parse_signals(&raw_oos);
+        let sig_oos = parse_signals_for(&raw_oos, oos_bars, cfg);
         let (_, met_oos, _, rets_oos) = run_backtest(oos_bars, &sig_oos, cfg);
 
         prettyprint_str(&format!("W{:02} IS",  window_no), &met_is,  &lb_tag);
@@ -1410,14 +1529,14 @@ fn walk_forward_regime(
             let is_close_rb: Vec<f64> = is_w.iter().map(|b| b.close).collect();
             let is_ema20_rb = compute_ema(&is_close_rb, 20);
             let mut raw_is_rb = create_regime_signals_internal(&is_close_rb, &is_ema20_rb, &lbs_rb, regimes_is);
-            let mut sig_is_rb = parse_signals(&raw_is_rb);
+            let mut sig_is_rb = parse_signals_for(&raw_is_rb, is_w, &cfg_rb);
             if opts.drift_on { sig_is_rb = drift_entries(&sig_is_rb); }
             let (_, met_is_rb, _, _) = run_backtest(is_w, &sig_is_rb, &cfg_rb);
 
             let oos_close_rb: Vec<f64> = oos_w.iter().map(|b| b.close).collect();
             let oos_ema20_rb = compute_ema(&oos_close_rb, 20);
             raw_is_rb = create_regime_signals_internal(&oos_close_rb, &oos_ema20_rb, &lbs_rb, regimes_oos);
-            let mut sig_oos_rb = parse_signals(&raw_is_rb);
+            let mut sig_oos_rb = parse_signals_for(&raw_is_rb, oos_w, &cfg_rb);
             if opts.drift_on { sig_oos_rb = drift_entries(&sig_oos_rb); }
             let (_, met_oos_rb, _, _) = run_backtest(oos_w, &sig_oos_rb, &cfg_rb);
 
@@ -1451,6 +1570,7 @@ pub fn run_with_regime(
     let total_start = Instant::now();
     let bars = age_dataset(bars.to_vec(), AGE_DATASET);
     let mut cfg = Config::new();
+    DISPLAY_FOREX.store(cfg.use_forex, Ordering::Relaxed);
     let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
 
     println!(" Baseline Optimized Metrics ");
@@ -1461,5 +1581,25 @@ pub fn run_with_regime(
     println!("\n Running Walk-Forward Windows (regime-rotated LB) ");
     walk_forward_regime(&bars, &mut cfg, &regime_cfg, &base.eq_is_raw);
 
+    println!("\nTotal runtime: {:.2}s", total_start.elapsed().as_secs_f64());
+}
+
+
+/// Like `run_with_regime` but takes a pre-built `Config` so callers can
+/// flip use_forex / use_sessions / use_oos2 / etc. before the engine runs.
+pub fn run_with_regime_cfg(
+    bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn,
+    regime_cfg: RegimeConfig, mut cfg: Config,
+) {
+    let total_start = std::time::Instant::now();
+    let bars = age_dataset(bars.to_vec(), AGE_DATASET);
+    DISPLAY_FOREX.store(cfg.use_forex, Ordering::Relaxed);
+    let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
+    println!(" Baseline Optimized Metrics ");
+    if let Some(ref met) = base.met_is_opt { prettyprint("Baseline IS", met, base.best_lb); }
+    if let Some(ref met) = base.met_oos_opt { prettyprint("Baseline OOS", met, base.best_lb); }
+    run_robustness_tests(&bars, base.best_lb, base.best_rrr, &cfg, sig_fn);
+    println!("\n Running Walk-Forward Windows (regime-rotated LB) ");
+    walk_forward_regime(&bars, &mut cfg, &regime_cfg, &base.eq_is_raw);
     println!("\nTotal runtime: {:.2}s", total_start.elapsed().as_secs_f64());
 }

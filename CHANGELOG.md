@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] — 2026-04-26
+
+### Added
+- **Full pip-based forex PnL math** in `backtest_core`. Mirrors Python's
+  numba forex branches:
+  - position size becomes 1 R-unit (was crypto's `RISK_AMOUNT`)
+  - SL/TP arithmetic switches from multiplicative percentages to
+    additive pip-distance (`entry_price ± sl_perc` instead of
+    `entry_price * (1 ± sl_perc/100)`)
+  - PnL = clamp(`price_move_pips / stop_pips`, -1, +RRR) ×
+    `position_size_fx` − fees, capping per-trade at `[-1R, +RRR]`
+  - eq_frac/rets normalised to `position_size_fx` (= cumulative R units),
+    `compute_metrics_for(use_forex=true)` reports ROI without `-1` offset
+    and absolute (R-unit) drawdown
+- **`Config.pip_size`** field (default 0.0001; set 0.01 for JPY pairs).
+- **NY-tz session handling** via `chrono` + `chrono-tz` deps. The session
+  mask now uses America/New_York local hours (DST-aware), matching
+  Python's `load_ohlc` + `in_session` semantics. `SESSION_START_HOUR` /
+  `SESSION_END_HOUR` defaults updated to NY 8/17 (was UTC 13/21).
+- **Session-aware `parse_signals_with_flags(raw, in_flags)`** + a
+  `compute_in_flags(bars, cfg)` helper. The internal `parse_signals_for`
+  routes every engine call through the session-aware path so out-of-session
+  signals are masked at parse time, matching Python's `_parse_signals_numba`.
+- **Out-of-session bar skipping** in `backtest_core`'s main loop. Mirrors
+  Python's `for idx in session_idxs` iteration — funding, SL/TP, and
+  entries no longer fire on out-of-session bars. Force-close at session
+  end is now also gated on `code != 0`, matching Python's guard.
+- **`DISPLAY_FOREX` atomic** drives `prettyprint` / `prettyprint_str` to
+  emit `R`-suffixed metrics (instead of `$`) when `cfg.use_forex` is set.
+
+### Verification
+- `tools/parity_check.py` — v0.1.0 baseline still byte-identical
+  (56/56 metric points, 0% relative diff at 0.1% tolerance) after all
+  the new code paths. The forex/session/regime additions are all opt-in,
+  so they have zero impact on default-config behaviour.
+- `tools/parity_combo.py` — runs both engines with **regime + WFO + forex
+  + session all on simultaneously**. The first WFO window's IS metrics
+  match within 5% relative tolerance (trades py=49 vs rs=52, ROI 46.98R
+  vs 45.42R, Sharpe 3.36 vs 3.35). Per-window OOS still diverges because
+  a 1-LB tie-break in fine-tuning (Python picks Downtrend LB=71, Rust
+  picks 72 — both have nearly identical Sharpe scores) cascades through
+  forex's quantised ±1R/±3R PnL into very different OOS results. This
+  is parameter sensitivity downstream of an honest tie-break, not an
+  engine bug.
+
 ## [0.2.1] — 2026-04-25
 
 ### Added

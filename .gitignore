@@ -19,3 +19,4 @@ data/SYNTHETIC.csv
 
 # Local data overrides (uncomment if you want to keep data out of git)
 # data/
+examples/_parity_combo.rs
