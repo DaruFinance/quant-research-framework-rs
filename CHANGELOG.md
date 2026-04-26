@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] — 2026-04-26
+
+### Added
+- **Property-check suite** (`tests/invariants.rs`, 10 tests). Verifies
+  the engine respects the contracts it claims rather than just "does
+  the flag change anything":
+  - parse_signals emits no flip codes on out-of-session bars (when
+    in_flags supplied)
+  - compute_in_flags uses NY local hours (DST-aware) and matches what
+    backtest_core consumes; returns all-true when sessions off
+  - Forex `Config` builder switches to pip semantics + JPY override
+    round-trips
+  - Default regime detector emits only labels in [0, 2] for every bar
+  - Default detector is look-ahead-clean (mutating bars[cut..] doesn't
+    change labels[..cut])
+  - RegimeConfig accepts each label count 2..=5
+  - parse_signals length-preserves and emits only valid {0,1,2,3,4} codes
+  - parse_signals is look-ahead-clean
+  - compute_ema matches recursive `alpha = 2/(span+1)` form
+
+### Verified
+- v0.1.0 parity still 56/56 byte-identical at 0.1% tol.
+- 21 Rust tests total (8 behavioural + 3 contract + 10 invariants).
+
 ## [0.2.2] — 2026-04-26
 
 ### Added
