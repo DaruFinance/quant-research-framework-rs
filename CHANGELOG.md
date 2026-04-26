@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] — 2026-04-26
+
+### Fixed
+- **Session-end force-close fires unconditionally** when an open
+  position exists and the bar is the last in-session bar of the day.
+  v0.2.2/0.2.3 mirrored Python's `code != 0` guard for parity, which
+  caused positions to carry across out-of-session gaps when no signal
+  landed on the closing bar. Python v0.2.3 also dropped the guard, so
+  both engines now agree on the corrected behaviour.
+
+### Added
+- `tests/invariants.rs::session_end_marks_last_in_session_bar_per_day`
+  — verifies the session_end mask marks exactly one bar per NY day
+  (the last in-session bar before the day rolls out of session). 22
+  Rust tests total now passing.
+
+### Notes
+- These changes only affect `cfg.use_sessions = true` runs. Default-config
+  parity preserved: `tools/parity_check.py --tol 0.001` still reports
+  56/56 byte-identical metric points against the Python reference.
+
 ## [0.2.3] — 2026-04-26
 
 ### Added

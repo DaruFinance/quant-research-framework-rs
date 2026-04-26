@@ -403,9 +403,11 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         let mut code = sig[idx];
         if USE_REGIME_SEG && idx < 200 { continue; }
 
-        // Match Python: force-close at session_end requires code != 0
-        // (Python guards the force-close path on `if open_pos != 0 and code != 0`).
-        if cfg.use_sessions && session_end_bar[idx] && open_pos != 0 && code != 0 {
+        // v0.2.4 fix (matches Python v0.2.3): force-close fires whenever an
+        // open position exists at a session-end bar. Prior versions guarded
+        // on `code != 0`, silently carrying positions across out-of-session
+        // windows when no signal happened to land on the closing bar.
+        if cfg.use_sessions && session_end_bar[idx] && open_pos != 0 {
             if open_pos == 1 && code != 3 { code = 2; }
             else if open_pos == -1 && code != 1 { code = 4; }
         }

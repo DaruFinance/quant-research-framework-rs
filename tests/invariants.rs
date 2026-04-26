@@ -196,6 +196,53 @@ fn parse_signals_no_lookahead() {
 // EMA: matches the recursive form alpha = 2 / (span+1), warmed at the
 // first finite input. Length preserved.
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// Session-end force-close: end_bar_flag computation must mark the LAST
+// in-session bar of every NY-tz day. Fed a synthetic 4-day stream of
+// hourly bars, that's exactly one True per day. Catches a regression of
+// the v0.2.4 fix where the guard was reintroduced.
+// ----------------------------------------------------------------------------
+#[test]
+fn session_end_marks_last_in_session_bar_per_day() {
+    // 4 days × 24 bars at HH:00 UTC starting 2024-01-15 00:00 UTC (so we
+    // hit a deterministic stretch of EST, no DST transition).
+    let day = 86400i64;
+    let start: i64 = 1_705_276_800;          // 2024-01-15 00:00 UTC
+    let bars: Vec<Bar> = (0..96).map(|i| {
+        let t = start + (i as i64) * 3600;
+        Bar { time_unix: t, open: 100.0, high: 100.1, low: 99.9, close: 100.0 }
+    }).collect();
+
+    let cfg = Config::new().with_sessions(true, 8, 17);
+    let in_flags = compute_in_flags(&bars, &cfg);
+
+    // session_end[i] = in_flags[i] && !in_flags[i+1]
+    let mut session_end = vec![false; bars.len()];
+    for i in 0..bars.len() {
+        let next_in = if i + 1 < bars.len() { in_flags[i + 1] } else { false };
+        if in_flags[i] && !next_in { session_end[i] = true; }
+    }
+
+    // Group by NY day. The last in-session bar per day (the one whose next
+    // bar is OUT of session) is the only True for that day.
+    use chrono::{TimeZone, Utc, Datelike};
+    use chrono_tz::America::New_York;
+    let mut per_day: std::collections::BTreeMap<i32, Vec<usize>> = Default::default();
+    for i in 0..bars.len() {
+        if session_end[i] {
+            let ny = Utc.timestamp_opt(bars[i].time_unix, 0).single().unwrap()
+                .with_timezone(&New_York);
+            per_day.entry(ny.ordinal() as i32).or_default().push(i);
+        }
+    }
+    for (_day, idxs) in &per_day {
+        assert_eq!(idxs.len(), 1,
+            "expected exactly one session_end bar per NY day, got {} on this one: {:?}",
+            idxs.len(), idxs);
+    }
+    let _ = day;
+}
+
 #[test]
 fn compute_ema_matches_recursive_form() {
     let close: Vec<f64> = (1..=200).map(|x| x as f64).collect();
