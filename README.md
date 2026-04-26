@@ -115,16 +115,30 @@ The crate follows [Semantic Versioning](https://semver.org/). See
 
 ## Parity with the Python reference
 
-This repo is a line-by-line port of [`backtester.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/backtester.py). For the **`v0.1.0` feature set** — IS/OOS baseline, smart-optimised look-back search with auto-RRR, candle/trade WFO, and the four `v0.1.0` robustness scenarios (ENTRY_DRIFT, FEE_SHOCK, SLIPPAGE_SHOCK, INDICATOR_VARIANCE) — running both on the same CSV with matching config (`USE_MONTE_CARLO=False`) produces identical deterministic output: every `IS-raw`, `OOS-raw`, `IS-opt`, `OOS-opt`, `Baseline`, `ENT`, `FEE`, `SLI`, and `W01..W18 IS/OOS` line matches byte-for-byte in the trade count, ROI, PF, Sharpe, win rate, expectancy and max drawdown.
+This repo is a line-by-line port of [`backtester.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/backtester.py). Two automated harnesses verify the port reproduces the reference's output byte-for-byte on shared input.
 
-The **`v0.2.0` additions** — `USE_FOREX`, session mode, `NEWS_CANDLES_INJECTION`, the regime-detector contract, the WFO+regime fix in Python — are present in both implementations but have not yet been jointly validated by an automated parity harness; that harness is being staged for a follow-up release. See [CHANGELOG.md](CHANGELOG.md) for the precise scope of each.
+### Default-config surface (`tools/parity_check.py`)
+**56/56 metric points byte-identical at 0.001 relative tolerance.** Covers the v0.1.0 feature set — IS/OOS baseline, smart-optimised look-back search with auto-RRR, candle/trade WFO, and the four v0.1.0 robustness scenarios (ENTRY_DRIFT, FEE_SHOCK, SLIPPAGE_SHOCK, INDICATOR_VARIANCE). Every `IS-raw`, `OOS-raw`, `IS-opt`, `OOS-opt`, `Baseline`, `ENT`, `FEE`, `SLI`, and `W01..W18 IS/OOS` line matches in trade count, ROI, PF, Sharpe, win rate, expectancy and max drawdown:
 
-Two non-deterministic sections intentionally diverge, by design of the reference:
+```bash
+python tools/parity_check.py --tol 0.001    # exit 0 = parity
+```
 
+### Regime + WFO surface (`tools/parity_regime.py`, v0.3.0)
+**14/14 metric tags byte-identical at 0.001 relative tolerance.** Covers `USE_REGIME_SEG=True` + `USE_WFO=True` at otherwise-default settings: per-regime LB optimisation with RRR probe, OOS LB rotation, the 200-bar warmup, and four WFO windows on the bundled SOL CSV. See [CHANGELOG v0.3.0](CHANGELOG.md) for the three regime-path bugs that closed the gap:
+
+```bash
+python tools/parity_regime.py --tol 0.001   # exit 0 = parity
+```
+
+### What is *not* yet jointly validated
+`tools/parity_combo.py` runs both engines with **all four v0.2.x features layered at once** (regime + WFO + forex + session) plus `OPTIMIZE_RRR=False` and `MIN_TRADES=1`. This combo still reports diffs — the remaining gap is in the forex/session interaction (it shows up even on the classic `Baseline IS/OOS` line), not in the regime engine. Single-feature parity (default, regime+WFO) is verified; the four-way combo is not part of v0.3.0's parity guarantee.
+
+### Two non-deterministic sections intentionally diverge, by design of the reference
 1. **Monte Carlo percentiles** — Python uses NumPy's global RNG, Rust uses `StdRng` seeded to 42. Different algorithms, so percentiles differ; the distribution shape is the same.
 2. **`INDICATOR_VARIANCE` overlay** — picks a ±1 lookback shift via an unseeded RNG in both implementations, so `W*_IS+ENT+IND` / `W*_OOS+ENT+IND` lines jitter run-to-run in both.
 
-If you disable those two sources of randomness, the outputs are identical down to the last printed decimal.
+If you disable those two sources of randomness, the outputs are identical down to the last printed decimal on the validated surfaces above.
 
 ## Performance
 
@@ -192,9 +206,10 @@ Tunables are plain `const`s at the top of `src/main.rs` — edit and `cargo buil
 | `OPT_METRIC` | `"Sharpe"` | one of ROI, PF, Sharpe, WinRate, Exp, MaxDrawdown |
 | `USE_SL` / `SL_PERCENTAGE` | true / 1.0 | stop-loss in % |
 | `USE_TP_DEFAULT` / `TP_PERCENTAGE_DEFAULT` | true / 3.0 | take-profit in % |
-| `OPTIMIZE_RRR` | true | auto-pick best R:R in {1,2,3} |
+| `OPTIMIZE_RRR` | true | auto-pick best R:R; classic optimiser searches {1,2,3}, regime-path optimiser searches {1..5} (mirrors the Python reference's split) |
 | `USE_WFO` / `WFO_TRIGGER_MODE` / `WFO_TRIGGER_VAL` | true / candles / 5000 | walk-forward config |
 | `USE_MONTE_CARLO` / `MC_RUNS` | true / 1000 | diagnostics on IS returns |
+| `Config::use_regime_seg` | false (flipped to true by `run_with_regime_cfg`) | enables the 200-bar warmup in the backtest core; matches Python's `USE_REGIME_SEG` global |
 
 ## Citation
 

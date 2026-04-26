@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """Combination parity check: regime + WFO + forex + session, both engines.
 
-The default `parity_check.py` exercises the v0.1.0 surface. This script
-flips on the four v0.2.x features the user explicitly asked about and
-runs both engines under the same flag set on the same dataset, then
-reports the metric diff.
+This script layers all four v0.2.x features at once (USE_REGIME_SEG +
+USE_WFO + FOREX_MODE + TRADE_SESSIONS) plus OPTIMIZE_RRR=False and
+MIN_TRADES=1, then reports the metric diff. It is a *diagnostic*, not a
+pass/fail check.
 
-Engines that go through different code paths for the same flag set are
-expected to differ slightly. The purpose of this script is to surface
-the actual gap, not to assert byte-equality (which the regime engine
-won't currently provide because the Rust port doesn't replicate
-Python's RRR-per-regime optimisation step).
+Single-feature parity is verified by separate harnesses that DO assert:
+  * tools/parity_check.py   — default config (56/56 byte-identical)
+  * tools/parity_regime.py  — USE_REGIME_SEG + USE_WFO at otherwise-default
+                              settings (14/14 byte-identical, v0.3.0)
+
+This combo still reports diffs at the time of writing; the remaining gap
+shows up even on the classic Baseline IS/OOS line, which is independent
+of regime — i.e. the issue is in the forex/session interaction, not in
+the regime engine itself. The four-way combo is not part of v0.3.0's
+parity guarantee.
 
 Usage:
     python tools/parity_combo.py
