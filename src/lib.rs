@@ -167,6 +167,23 @@ pub struct Config {
     /// pip size for forex mode. Default 0.0001 (4-decimal pairs); set to
     /// 0.01 for JPY pairs. Ignored unless `use_forex` is true.
     pub pip_size: f64,
+    /// Forex-mode account/risk normaliser. In forex mode Python sets
+    /// RISK = ACCOUNT = POSITION = 1.0 so all metrics are reported in
+    /// R-units; we surface the same as a single field. Default 100_000
+    /// preserves crypto-mode dollar semantics when use_forex is false.
+    pub account_size: f64,
+    /// Confluence-filter exit-side option, mirroring Python's MASK_EXITS
+    /// flag. Default false: confluence rule applies only to entries (1, 3);
+    /// exits (2, 4) pass unconditionally. The Rust port does not currently
+    /// implement the confluence machinery (Python's `CONFLUENCES`); this
+    /// field is reserved so the Config surface stays symmetric and
+    /// strategies can be ported without API churn when confluence lands.
+    pub mask_exits: bool,
+    /// Legacy RRR-side bug toggle. Default false (corrected code path).
+    /// Set true to reproduce numerical results of versions <= v0.2.4
+    /// where the optimiser's side comparison always took the short
+    /// branch. See CHANGELOG v0.3.1 / Python v0.2.5.
+    pub legacy_side_bug: bool,
 }
 impl Config {
     pub fn new() -> Self {
@@ -177,9 +194,20 @@ impl Config {
                  use_forex: USE_FOREX, use_sessions: USE_SESSIONS,
                  session_start_hour: SESSION_START_HOUR,
                  session_end_hour: SESSION_END_HOUR,
-                 use_oos2: USE_OOS2, use_regime_seg: false, pip_size: 0.0001 }
+                 use_oos2: USE_OOS2, use_regime_seg: false, pip_size: 0.0001,
+                 account_size: ACCOUNT_SIZE, mask_exits: false,
+                 legacy_side_bug: false }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
+    /// Forex defaults: position_size = account_size = 1.0 (R-unit
+    /// reporting), use_forex = true. Mirrors Python's module-level
+    /// FOREX_MODE setup at import time.
+    pub fn with_forex_defaults(mut self) -> Self {
+        self.use_forex = true;
+        self.position_size = 1.0;
+        self.account_size = 1.0;
+        self
+    }
     pub fn with_sessions(mut self, on: bool, start_h: u32, end_h: u32) -> Self {
         self.use_sessions = on; self.session_start_hour = start_h; self.session_end_hour = end_h; self
     }
@@ -188,6 +216,8 @@ impl Config {
         self.oos_candles = if on { OOS_CANDLES_BASE * 2 } else { OOS_CANDLES_BASE };
         self
     }
+    pub fn with_mask_exits(mut self, on: bool) -> Self { self.mask_exits = on; self }
+    pub fn with_legacy_side_bug(mut self, on: bool) -> Self { self.legacy_side_bug = on; self }
     fn fee_rate(&self) -> f64 { self.fee_pct / 100.0 }
     fn slip(&self) -> f64 { self.slippage_pct * 0.01 }
     fn funding_rate(&self) -> f64 { FUNDING_FEE / 100.0 }
@@ -386,7 +416,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     };
 
     let mut trades: Vec<Trade> = Vec::new();
-    let mut equity_list: Vec<f64> = vec![ACCOUNT_SIZE];
+    let mut equity_list: Vec<f64> = vec![cfg.account_size];
     let mut funding_acc = 0.0f64;
     let mut open_pos: i8 = 0;
     let mut ent_bar: i32 = -1;
@@ -447,7 +477,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let exit_price = if open_pos == 1 { raw_exit * (1.0 - slip) }
                                  else { raw_exit * (1.0 + slip) };
                 let fee_exit = qty * exit_price * fee_rate;
-                let pnl = pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+                // For intrabar SL/TP hits in forex mode Python hard-codes
+                // pnl to -1 (SL) or +RRR (TP) in R-units rather than running
+                // the trade_res formula on the slippage-adjusted exit price.
+                // Match that exactly — otherwise Rust's formula-based exit
+                // accumulates a small slippage-floor bias across many trades.
+                let pnl = if cfg.use_forex {
+                    let r_unit = if sl_hit { -1.0 } else { rrr_fx };
+                    r_unit * position_size - (fee_entry + fee_exit)
+                } else {
+                    pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc)
+                };
                 funding_acc = 0.0;
                 trades.push(Trade { side: open_pos, entry_idx: ent_bar, exit_idx: idx as i32,
                     entry_price, exit_price, qty, pnl });
@@ -540,8 +580,8 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         for &r in &pnls { cum += r; eq.push(cum); }
         (eq, pnls)
     } else {
-        let eq: Vec<f64> = equity_list.iter().map(|e| e / ACCOUNT_SIZE).collect();
-        let r: Vec<f64> = trades.iter().map(|t| t.pnl / ACCOUNT_SIZE).collect();
+        let eq: Vec<f64> = equity_list.iter().map(|e| e / cfg.account_size).collect();
+        let r: Vec<f64> = trades.iter().map(|t| t.pnl / cfg.account_size).collect();
         (eq, r)
     };
     let metrics = compute_metrics_for(&rets, &eq_frac, cfg.use_forex);
@@ -669,18 +709,34 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
             let (probe_trades, _, _, _) = run_backtest(bars, &sig, cfg);
             let mut peak_rs: Vec<f64> = Vec::new();
             let mut close_rs_vec: Vec<f64> = Vec::new();
+            // Forex-mode mirror: Python's SL_PERCENTAGE global has been
+            // multiplied by PIP_SIZE at module-load time, so its forex value
+            // is sl_perc_const * pip_size. Apply the same scaling here so the
+            // RRR-probe `risk` denominator matches across engines.
+            let sl_for_risk = if cfg.use_forex { SL_PERCENTAGE * cfg.pip_size } else { SL_PERCENTAGE };
             for t in &probe_trades {
                 let e = t.entry_idx as usize;
                 let x = t.exit_idx as usize;
                 if e >= close.len() || x >= close.len() { continue; }
                 let ep = close[e];
-                let risk = ep * SL_PERCENTAGE / 100.0;
+                let risk = ep * sl_for_risk / 100.0;
                 if risk == 0.0 { continue; }
-                // Python bug: side is int8 (1/-1) but compared to 'long' (string),
-                // so ALL trades go to the else/short branch.
-                let trough = bars[e..=x].iter().map(|b| b.low).fold(f64::INFINITY, f64::min);
-                peak_rs.push(((ep - trough) / risk).min(3.0));
-                close_rs_vec.push((ep - close[x]) / risk);
+                // RRR-probe side branching. Pre-v0.2.5 the engine used
+                // `side == 'long'` (str compared to int8 — always false), so
+                // ALL trades took the short branch. Default now is the
+                // corrected `side == 1` test; cfg.legacy_side_bug = true
+                // reverts to the buggy code path for bit-equality with prior
+                // research.
+                let is_long = if cfg.legacy_side_bug { false } else { t.side == 1 };
+                let (peak_r, close_r) = if is_long {
+                    let peak = bars[e..=x].iter().map(|b| b.high).fold(f64::NEG_INFINITY, f64::max);
+                    (((peak - ep) / risk).min(3.0), (close[x] - ep) / risk)
+                } else {
+                    let trough = bars[e..=x].iter().map(|b| b.low).fold(f64::INFINITY, f64::min);
+                    (((ep - trough) / risk).min(3.0), (ep - close[x]) / risk)
+                };
+                peak_rs.push(peak_r);
+                close_rs_vec.push(close_r);
             }
             let mut best_rrr = 1usize;
             let mut best_sum = f64::NEG_INFINITY;
@@ -1448,6 +1504,9 @@ fn optimize_regimes_sequential_rs(
 
             let mut peak_rs: Vec<f64> = Vec::new();
             let mut close_rs_vec: Vec<f64> = Vec::new();
+            // Forex pip-scaling for the SL_PERCENTAGE constant — Python's
+            // module-level scaling pre-multiplies it by PIP_SIZE in forex mode.
+            let sl_for_risk = if cfg.use_forex { SL_PERCENTAGE * cfg.pip_size } else { SL_PERCENTAGE };
             for t in &probe_trades {
                 let e = t.entry_idx as usize;
                 let x = t.exit_idx as usize;
@@ -1459,13 +1518,18 @@ fn optimize_regimes_sequential_rs(
                 // engines — that's a separate code path.
                 let ep = t.entry_price;
                 let xp = t.exit_price;
-                let risk = ep * SL_PERCENTAGE / 100.0;
+                let risk = ep * sl_for_risk / 100.0;
                 if risk == 0.0 { continue; }
-                // Mirrors Python's int-vs-string side-comparison quirk: all
-                // trades fall through to the short branch.
-                let trough = bars[e..=x].iter().map(|b| b.low).fold(f64::INFINITY, f64::min);
-                peak_rs.push(((ep - trough) / risk).min(5.0));
-                close_rs_vec.push((ep - xp) / risk);
+                let is_long = if cfg.legacy_side_bug { false } else { t.side == 1 };
+                let (peak_r, close_r) = if is_long {
+                    let peak = bars[e..=x].iter().map(|b| b.high).fold(f64::NEG_INFINITY, f64::max);
+                    (((peak - ep) / risk).min(5.0), (xp - ep) / risk)
+                } else {
+                    let trough = bars[e..=x].iter().map(|b| b.low).fold(f64::INFINITY, f64::min);
+                    (((ep - trough) / risk).min(5.0), (ep - xp) / risk)
+                };
+                peak_rs.push(peak_r);
+                close_rs_vec.push(close_r);
             }
 
             let chosen_rrr = if peak_rs.is_empty() {

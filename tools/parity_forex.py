@@ -88,9 +88,7 @@ fn main() {
     let csv = std::env::args().nth(1).unwrap_or_else(|| "data/EURUSD_1h.csv".into());
     let bars = load_ohlc(&csv);
     println!("Loaded {} bars from {}", bars.len(), csv);
-    let mut cfg = Config::new().with_forex(true);
-    // Match Python-side parity overrides: position size = 1.0 unit for FX.
-    cfg.position_size = 1.0;
+    let cfg = Config::new().with_forex_defaults();
     run_cfg(&bars, "EMA-crossover", ema_strategy, cfg);
 }
 """)

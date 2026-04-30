@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] — 2026-04-30
+
+### Added
+- **Forex-mode parity (third passing surface).** The new
+  `tools/parity_forex.py` harness runs both engines with
+  `FOREX_MODE=true` on a bundled EURUSD 1h CSV (`data/EURUSD_1h.csv`,
+  53,160 bars). At v0.3.0 it reported 52 / 56 mismatches; the three
+  closures below land it at 0 / 56 mismatches with max relative
+  deviation below the metric ledger's printed precision floor.
+- **`Config::with_forex_defaults()`** builder method:
+  `use_forex=true`, `position_size=1.0`, `account_size=1.0`. Mirrors
+  Python's module-level `RISK_AMOUNT=ACCOUNT_SIZE=POSITION_SIZE=1.0`
+  setup at `FOREX_MODE=True`.
+- **`Config::account_size`** field (default 100,000), replacing
+  hard-coded use of the crate constant inside the equity-list seed
+  and metric normalisation. Lifts the sole remaining pip-mode
+  scaling constant out of the engine and into the configuration
+  surface.
+- **`Config::mask_exits`** field (default `false`) for API symmetry
+  with Python's new `MASK_EXITS` flag. The Rust crate does not yet
+  implement the confluence machinery; the field is reserved.
+- **`Config::legacy_side_bug`** field (default `false`) gating the
+  pre-v0.3.1 RRR-side bug. When `true`, both the classic and
+  regime-rotated optimiser code paths replicate the int-vs-str
+  comparison that always took the short branch. Default is the
+  corrected `t.side == 1` test.
+
+### Fixed
+- **RRR-probe pip scaling.** The optimiser's `risk = ep * SL_PERCENTAGE
+  / 100.0` denominator used the un-scaled `SL_PERCENTAGE` constant
+  (1.0). Python's same formula uses the global, which in `FOREX_MODE`
+  has been pre-multiplied by `PIP_SIZE` (10⁻⁴). This 10,000×
+  difference made every per-trade `peak_R` cap differently across
+  engines, which made the probe pick different optimal RRRs (Python
+  often 3, Rust often 1) and produce different SL/TP levels for every
+  subsequent backtest. Now scales by `cfg.pip_size` when `use_forex`
+  in both the classic and regime-rotated optimisers.
+- **Intrabar SL/TP forex pnl.** For SL/TP-hit trades in forex mode,
+  Python hard-codes the result to `-1.0` R (SL) or `tp_perc/sl_perc`
+  R (TP) regardless of slippage; Rust ran the slippage-adjusted exit
+  price through the general `trade_res` formula. The two are
+  numerically identical to within a few ULPs per trade, but
+  accumulated across hundreds of trades produced a ~4% ROI drift.
+  Rust now mirrors Python's hard-coded R-unit branch.
+
 ## [0.3.0] — 2026-04-26
 
 ### Added
