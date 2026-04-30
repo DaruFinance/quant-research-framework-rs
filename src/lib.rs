@@ -1281,6 +1281,33 @@ pub fn run(bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn) {
     println!("\nTotal runtime: {:.2}s", total_start.elapsed().as_secs_f64());
 }
 
+/// Same as [`run`] but accepts a pre-built [`Config`]. Use this to enable
+/// forex / session / oos2 modes from a single binary without forking
+/// `main.rs`. Mirrors `run_with_regime_cfg` but skips regime segmentation.
+pub fn run_cfg(bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn, mut cfg: Config) {
+    let total_start = Instant::now();
+    let bars = age_dataset(bars.to_vec(), AGE_DATASET);
+    DISPLAY_FOREX.store(cfg.use_forex, Ordering::Relaxed);
+    let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
+
+    println!(" Baseline Optimized Metrics ");
+    if let Some(ref met) = base.met_is_opt {
+        prettyprint("Baseline IS", met, base.best_lb);
+        if let Some(ref met_oos) = base.met_oos_opt {
+            prettyprint("Baseline OOS", met_oos, base.best_lb);
+        }
+    }
+
+    run_robustness_tests(&bars, base.best_lb, base.best_rrr, &cfg, sig_fn);
+
+    if USE_WFO {
+        println!("\n Running Walk-Forward Windows ");
+        walk_forward(&bars, &base.eq_is_raw, &mut cfg, strategy, sig_fn);
+    }
+
+    println!("\nTotal runtime: {:.2}s", total_start.elapsed().as_secs_f64());
+}
+
 /// Convenience: resolve the CSV path from the first CLI arg (or a default),
 /// load it, and call [`run`]. Panics with a helpful message if the CSV is missing.
 pub fn run_with_csv(default_csv: &str, strategy: &str, sig_fn: RawSignalsFn) {
