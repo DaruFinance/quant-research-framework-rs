@@ -44,7 +44,7 @@ def parse(s):
     return out
 
 def run_py(csv):
-    env = os.environ.copy(); env["BT_CSV"] = str(csv); env["MPLBACKEND"] = "Agg"
+    env = os.environ.copy(); env["BT_CSV"] = str(Path(csv).resolve()); env["MPLBACKEND"] = "Agg"
     drv = """
 import sys; sys.path.insert(0, %r)
 import backtester as bt

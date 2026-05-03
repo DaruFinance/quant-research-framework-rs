@@ -96,7 +96,7 @@ def generate_synth(out_path: Path, bars: int, seed: int) -> None:
 
 def run_python(csv: Path) -> str:
     env = os.environ.copy()
-    env["BT_CSV"] = str(csv)
+    env["BT_CSV"] = str(Path(csv).resolve())
     env["MPLBACKEND"] = "Agg"
     # Don't override the engine constants — the parity claim is "same
     # defaults produce the same numbers", so we only suppress the parts

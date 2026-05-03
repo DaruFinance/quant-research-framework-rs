@@ -52,7 +52,7 @@ def parse_metrics(stdout: str) -> dict[str, dict]:
 
 def run_python(csv: Path) -> str:
     env = os.environ.copy()
-    env["BT_CSV"] = str(csv); env["MPLBACKEND"] = "Agg"
+    env["BT_CSV"] = str(Path(csv).resolve()); env["MPLBACKEND"] = "Agg"
     driver = """
 import sys
 sys.path.insert(0, %r)
