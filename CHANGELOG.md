@@ -57,6 +57,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   — see `RELEASING.md` for the one-time `cargo login` step.
 - **Pre-commit config** — `cargo fmt --check` + `cargo clippy -- -D warnings`
   hooks; `examples/` carve-out preserved via `#[rustfmt::skip]` blocks.
+- **CI status badges** — README top now shows a five-badge row
+  (parity, docs, crates.io, DOI, License) mirroring the Python
+  sibling so reviewers see green before clicking through.
+
+### Fixed
+- **`parity.yml` clippy step actually enforces `-D warnings`.** The
+  v0.3.3 entry above already claimed clippy was enforced, but the
+  workflow step still read `cargo clippy --release --no-deps || true`,
+  which swallowed any warning. The `|| true` is gone; the step is now
+  `cargo clippy --release --no-deps -- -D warnings` and a clippy
+  warning will fail the build, matching CONTRIBUTING.md's claim.
+- **`rand` pinned to `=0.9` to stop the dependabot rev train.** The
+  open dependabot PR for `rand 0.10` failed the build because
+  `random_range` / `random` became trait methods on `RngExt` in 0.10
+  (call sites in `src/lib.rs` Monte Carlo / news-injection /
+  indicator-variance overlays would need `use rand::Rng;` imports).
+  Pinning to `=0.9` keeps the engine green; folding the trait-method
+  migration into a behavioural-change release window is the path to
+  unpin.
 
 ## [0.3.2] — 2026-05-03  (paper-v2 retag)
 

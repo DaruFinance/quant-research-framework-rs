@@ -50,9 +50,9 @@ jobs:
       # and rustfmt would mangle that style. Run `cargo fmt -- --check` locally
       # if you want to see diffs.
 
-      - name: cargo clippy (informational, does not fail the build)
+      - name: cargo clippy
         working-directory: quant-research-framework-rs
-        run: cargo clippy --release --no-deps || true
+        run: cargo clippy --release --no-deps -- -D warnings
 
       - name: cargo test --release
         working-directory: quant-research-framework-rs

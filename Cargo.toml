@@ -7,7 +7,13 @@ license = "MIT"
 repository = "https://github.com/DaruFinance/quant-research-framework-rs"
 
 [dependencies]
-rand = "0.9"
+# Pinned to "=0.9" because rand 0.10 makes `random_range` / `random` trait
+# methods on `RngExt`, breaking call sites in src/lib.rs (Monte Carlo,
+# news-candle injection, indicator-variance overlay) until they are
+# rewritten with explicit `use rand::Rng;` imports. See dependabot PR
+# closing notes; bump once the trait-method migration is folded into a
+# behavioural-change release window.
+rand = "=0.9"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 chrono-tz = { version = "0.8", default-features = false }
 
