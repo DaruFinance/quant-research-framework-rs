@@ -118,24 +118,38 @@ The crate follows [Semantic Versioning](https://semver.org/). See
 
 ## Parity with the Python reference
 
-This repo is a line-by-line port of [`backtester.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/backtester.py). Two automated harnesses verify the port reproduces the reference's output byte-for-byte on shared input.
+This repo is a clean-room port of the Python reference at
+[`backtester/__init__.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/backtester/__init__.py).
+Three automated harnesses verify the port produces metrics that agree
+with the reference within `1e-3` relative tolerance on shared input.
+We avoid the term *byte-identical*: parity is tolerance-bounded by
+construction (the maximum observed relative deviation across all
+surfaces is below `5e-5`, the ledger's `%.4f` print precision floor),
+not bit-equality.
 
 ### Default-config surface (`tools/parity_check.py`)
-**56/56 metric points byte-identical at 0.001 relative tolerance.** Covers the v0.1.0 feature set — IS/OOS baseline, smart-optimised look-back search with auto-RRR, candle/trade WFO, and the four v0.1.0 robustness scenarios (ENTRY_DRIFT, FEE_SHOCK, SLIPPAGE_SHOCK, INDICATOR_VARIANCE). Every `IS-raw`, `OOS-raw`, `IS-opt`, `OOS-opt`, `Baseline`, `ENT`, `FEE`, `SLI`, and `W01..W18 IS/OOS` line matches in trade count, ROI, PF, Sharpe, win rate, expectancy and max drawdown:
+**56/56 metric points agree at 0.001 relative tolerance.** Covers the v0.1.0 feature set — IS/OOS baseline, smart-optimised look-back search with auto-RRR, candle/trade WFO, and the four v0.1.0 robustness scenarios (ENTRY_DRIFT, FEE_SHOCK, SLIPPAGE_SHOCK, INDICATOR_VARIANCE). Every `IS-raw`, `OOS-raw`, `IS-opt`, `OOS-opt`, `Baseline`, `ENT`, `FEE`, `SLI`, and `W01..W18 IS/OOS` line matches in trade count, ROI, PF, Sharpe, win rate, expectancy and max drawdown:
 
 ```bash
 python tools/parity_check.py --tol 0.001    # exit 0 = parity
 ```
 
-### Regime + WFO surface (`tools/parity_regime.py`, v0.3.0)
-**14/14 metric tags byte-identical at 0.001 relative tolerance.** Covers `USE_REGIME_SEG=True` + `USE_WFO=True` at otherwise-default settings: per-regime LB optimisation with RRR probe, OOS LB rotation, the 200-bar warmup, and four WFO windows on the bundled SOL CSV. See [CHANGELOG v0.3.0](CHANGELOG.md) for the three regime-path bugs that closed the gap:
+### Regime + WFO surface (`tools/parity_regime.py`)
+**98/98 metric points agree at 0.001 relative tolerance.** Covers `USE_REGIME_SEG=True` + `USE_WFO=True` at otherwise-default settings: per-regime LB optimisation with RRR probe, OOS LB rotation, the 200-bar warmup, and four WFO windows on the bundled SOL CSV. See the CHANGELOG for the three regime-path bugs that closed the gap:
 
 ```bash
 python tools/parity_regime.py --tol 0.001   # exit 0 = parity
 ```
 
+### Forex-mode surface (`tools/parity_forex.py`, v0.3.1+)
+**56/56 metric points agree at 0.001 relative tolerance** on the bundled EURUSD 1h CSV with `FOREX_MODE=True` on both engines:
+
+```bash
+python tools/parity_forex.py --tol 0.001    # exit 0 = parity
+```
+
 ### What is *not* yet jointly validated
-`tools/parity_combo.py` runs both engines with **all four v0.2.x features layered at once** (regime + WFO + forex + session) plus `OPTIMIZE_RRR=False` and `MIN_TRADES=1`. This combo still reports diffs — the remaining gap is in the forex/session interaction (it shows up even on the classic `Baseline IS/OOS` line), not in the regime engine. Single-feature parity (default, regime+WFO) is verified; the four-way combo is not part of v0.3.0's parity guarantee.
+`tools/parity_combo.py` runs both engines with **all four v0.2.x features layered at once** (regime + WFO + forex + session). This combo still reports diffs — the remaining gap is in the forex/session interaction (it shows up even on the classic `Baseline IS/OOS` line), not in the regime engine. Single-feature parity (default, regime+WFO, forex) is verified; the four-way combo is the natural `paper-v3` milestone.
 
 ### Two non-deterministic sections intentionally diverge, by design of the reference
 1. **Monte Carlo percentiles** — Python uses NumPy's global RNG, Rust uses `StdRng` seeded to 42. Different algorithms, so percentiles differ; the distribution shape is the same.
@@ -184,10 +198,11 @@ not (verified against primary docs as of 2026-04):
 | [bt][btp]              | MIT                      | ✗            | ✗                          | ✗                         | n/a                              |
 
 The **combination** is the contribution: WFO + per-regime LB + strict
-no-look-ahead enforced by property tests + a Python reference and Rust
-port whose outputs agree byte-for-byte on the deterministic pipeline.
-Each cell individually exists somewhere; no other framework ships the
-whole bundle.
+no-look-ahead enforced by ledger-level invariant tests + a Python
+reference and Rust port whose metric outputs agree within $10^{-3}$
+relative tolerance on three deterministic surfaces (210 / 210 metric
+points across 30 stages). Each cell individually exists somewhere; no
+other framework ships the whole bundle.
 
 [vbt]: https://github.com/polakowo/vectorbt
 [bt]:  https://github.com/mementum/backtrader

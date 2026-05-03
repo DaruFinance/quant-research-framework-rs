@@ -6,10 +6,11 @@ USE_WFO + FOREX_MODE + TRADE_SESSIONS) plus OPTIMIZE_RRR=False and
 MIN_TRADES=1, then reports the metric diff. It is a *diagnostic*, not a
 pass/fail check.
 
-Single-feature parity is verified by separate harnesses that DO assert:
-  * tools/parity_check.py   — default config (56/56 byte-identical)
-  * tools/parity_regime.py  — USE_REGIME_SEG + USE_WFO at otherwise-default
-                              settings (14/14 byte-identical, v0.3.0)
+Single-feature parity is verified by separate harnesses that DO assert
+within 1e-3 relative tolerance:
+  * tools/parity_check.py   — default config (56/56 metric points)
+  * tools/parity_regime.py  — USE_REGIME_SEG + USE_WFO (98/98 points)
+  * tools/parity_forex.py   — FOREX_MODE on EURUSD 1h (56/56 points)
 
 This combo still reports diffs at the time of writing; the remaining gap
 shows up even on the classic Baseline IS/OOS line, which is independent

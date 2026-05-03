@@ -23,7 +23,9 @@ open('src/lib.rs', 'w').write(src.replace(old, new))
 "
 
 cargo build --release >/dev/null 2>&1
+set +e
 out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
+set -e
 
 git checkout -- src/lib.rs
 cargo build --release >/dev/null 2>&1
