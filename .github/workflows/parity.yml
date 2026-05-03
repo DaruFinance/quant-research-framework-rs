@@ -1,0 +1,85 @@
+# Parity CI: builds this Rust port and runs the cross-language metric
+# diff against the matching commit of quant-research-framework on
+# every PR and on push to main.
+#
+# A green check here means: (a) cargo test passes (behavioural and
+# invariant tests in tests/), (b) cargo clippy is clean, and (c) the
+# Python reference at the same coordinated tag produces identical
+# metrics on the three published surfaces (default-config, regime+WFO,
+# forex).
+
+name: parity
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+        with:
+          path: quant-research-framework-rs
+
+      - name: Checkout the Python reference (coordinated tag/branch)
+        uses: actions/checkout@v4
+        with:
+          repository: DaruFinance/quant-research-framework
+          ref: main
+          path: quant-research-framework
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: quant-research-framework-rs
+
+      - name: cargo fmt --check
+        working-directory: quant-research-framework-rs
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy --no-deps -D warnings
+        working-directory: quant-research-framework-rs
+        run: cargo clippy --release --no-deps -- -D warnings
+
+      - name: cargo test --release
+        working-directory: quant-research-framework-rs
+        run: cargo test --release
+
+      - name: Build the release binary
+        working-directory: quant-research-framework-rs
+        run: cargo build --release
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python framework deps
+        working-directory: quant-research-framework
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Parity — default config (56 metric points, SOLUSDT 1h)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001
+
+      - name: Parity — regime + WFO (98 metric points, SOLUSDT 1h)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_regime.py --csv data/SOLUSDT_1h.csv --tol 0.001
+
+      - name: Parity — forex mode (56 metric points, EURUSD 1h)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_forex.py --csv data/EURUSD_1h.csv --tol 0.001

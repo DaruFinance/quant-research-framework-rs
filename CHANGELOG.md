@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] — 2026-05-03  (paper-v2 retag)
+
+### Added
+- **`tools/ablations/`** — bug-injection harness that reproduces the
+  paper's §6.3 tolerance-sensitivity table. Three scripts
+  (`fee_bias.sh`, `fill_off_by_one.sh`, `funding_skip.sh`) edit
+  `src/lib.rs` on a clean working tree, run `cargo build --release`
+  and the default-config parity check, capture the mismatch count and
+  maximum relative deviation, then restore the source. Refuses to run
+  if `src/lib.rs` is dirty so it cannot destroy in-progress work.
+- **`CONTRIBUTING.md`** codifying the parity invariant (any change
+  altering engine semantics must keep the metric-output diff against
+  the Python reference within $10^{-3}$ relative tolerance) and the
+  four-command verification checklist (`cargo test`, three parity
+  scripts).
+- **`.github/workflows/parity.yml`** — GitHub Actions parity CI that
+  runs `cargo fmt --check`, `cargo clippy -D warnings`,
+  `cargo test --release`, and the three parity scripts against the
+  matching commit of the Python framework on every push and pull
+  request.
+
+### Verified
+- **Sole-authored Phase 1/2 paper edits do not affect parity.**
+  After the deliberate-bug ablations were captured (off-by-one fill:
+  54/56 mismatches, max rel-dev 179.6%; missed funding accrual:
+  34/56 mismatches, max rel-dev 8.86%) and the source restored, the
+  three parity surfaces remain at 56/56, 98/98, 56/56 — sum 210/210.
+
+### Author
+- Sole author of record canonicalised to **Daniel Vieira Gatto**
+  in `CITATION.cff` (alias: `DaruFinance`); previous variants
+  deprecated for citation-tracking consistency.
+
 ## [0.3.1] — 2026-04-30
 
 ### Added
