@@ -1,3 +1,33 @@
+// Crate-wide clippy carve-outs. Each is intentional and reviewed; collected
+// here so CI can run `clippy -- -D warnings` without spurious failures.
+//
+// * `needless_range_loop` — the WFO/regime/news-injection inner loops use
+//   index arithmetic deliberately (parity with the Python numba kernels,
+//   which are also index-based). Iterator rewrites change locality and
+//   make the parity diff harder to read.
+// * `too_many_arguments` — `run_wfo_window` mirrors the Python
+//   `_run_wfo_window` signature 1:1; refactoring to a struct would diverge
+//   from the reference.
+// * `manual_rem_euclid` / `manual_is_multiple_of` — the manual forms are
+//   identical to what the Python source does and the lints flag stylistic
+//   modernisation that would only obscure parity.
+// * `field_reassign_with_default` — the `Metrics { pf: INFINITY, .. }`
+//   builder used in `compute_metrics_for` is post-hoc on the empty branch
+//   and not worth a struct-update rewrite.
+// * `neg_cmp_op_on_partial_ord` — the regime detector explicitly uses
+//   `!(a > b)` semantics; NaN guards are inserted ahead of the comparison
+//   so the negation is intentional. See comment at the call site.
+// * `new_without_default` — `Config::new()` is the public constructor that
+//   reads the engine's compile-time constants; a `Default::default()` would
+//   look like it could be reassigned to "all zeros" and is confusing here.
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::manual_rem_euclid)]
+#![allow(clippy::manual_is_multiple_of)]
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
+#![allow(clippy::new_without_default)]
+
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write as IoWrite};
@@ -17,7 +47,8 @@ use chrono_tz::America::New_York;
 // ============================================================================
 // CONFIGURATION — mirrors backtester.py constants
 // ============================================================================
-const CSV_FILE: &str = "data/SOLUSDT_1h.csv";
+// CSV path is taken from $BT_CSV at runtime (see src/main.rs); there is
+// no compile-time constant for it.
 const ACCOUNT_SIZE: f64 = 100_000.0;
 const RISK_AMOUNT: f64 = 2_500.0;
 const SLIPPAGE_PCT_DEFAULT: f64 = 0.03;
@@ -592,10 +623,6 @@ fn run_backtest(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics,
     backtest_core(bars, sig, cfg)
 }
 
-fn compute_metrics(rets: &[f64], eq_frac: &[f64]) -> Metrics {
-    compute_metrics_for(rets, eq_frac, false)
-}
-
 fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Metrics {
     let tc = rets.len();
     if tc == 0 {
@@ -633,40 +660,6 @@ fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Metric
     Metrics { trades: tc, roi, pf, win_rate: wr, exp, sharpe: shp, max_drawdown: dd, consistency, rrr: None }
 }
 
-fn metrics_from_trades(trades: &[Trade]) -> Metrics {
-    let rets: Vec<f64> = trades.iter().map(|t| t.pnl / ACCOUNT_SIZE).collect();
-    if rets.is_empty() { return Metrics::default(); }
-    let tc = rets.len();
-    let wr = rets.iter().filter(|&&r| r > 0.0).count() as f64 / tc as f64;
-    let roi: f64 = rets.iter().sum();
-    let wins_sum: f64 = rets.iter().filter(|&&r| r > 0.0).sum();
-    let losses_sum: f64 = rets.iter().filter(|&&r| r <= 0.0).map(|r| -r).sum();
-    let pf = if losses_sum > 0.0 { wins_sum / losses_sum } else { f64::INFINITY };
-    let wins_count = rets.iter().filter(|&&r| r > 0.0).count();
-    let losses_count = rets.iter().filter(|&&r| r <= 0.0).count();
-    let mw = if wins_count > 0 { wins_sum / wins_count as f64 } else { 0.0 };
-    let ml = if losses_count > 0 { losses_sum / losses_count as f64 } else { 0.0 };
-    let exp = mw * wr - ml * (1.0 - wr);
-    let mean: f64 = rets.iter().sum::<f64>() / tc as f64;
-    let variance: f64 = rets.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / tc as f64;
-    let std = variance.sqrt();
-    let shp = if tc > 1 && std > 0.0 { mean / std * (tc as f64).sqrt() } else { 0.0 };
-    let eq: Vec<f64> = {
-        let mut e = vec![1.0f64]; let mut cum = 0.0;
-        for &r in &rets { cum += r; e.push(1.0 + cum); } e
-    };
-    let mut hw = vec![0.0f64; eq.len()];
-    hw[0] = eq[0];
-    for i in 1..eq.len() { hw[i] = hw[i-1].max(eq[i]); }
-    let dd = (0..eq.len()).map(|i| if hw[i] > 0.0 { (hw[i]-eq[i])/hw[i] } else { 0.0 }).fold(0.0f64, f64::max);
-    let w = [0.0117, 0.0317, 0.0861, 0.2341, 0.6364];
-    let segments = split_into_5(&rets);
-    let seg_sums: Vec<f64> = segments.iter().map(|s| s.iter().sum::<f64>()).collect();
-    let weighted: f64 = w.iter().zip(seg_sums.iter()).map(|(wi, si)| wi * si).sum();
-    let consistency = 0.6 * weighted + 0.4 * roi;
-    Metrics { trades: tc, roi, pf, win_rate: wr, exp, sharpe: shp, max_drawdown: dd, consistency, rrr: None }
-}
-
 fn split_into_5(arr: &[f64]) -> Vec<Vec<f64>> {
     let n = arr.len();
     let mut result = Vec::with_capacity(5);
@@ -693,7 +686,7 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
     let mut eval_cache: HashMap<usize, Option<(f64, usize, Metrics)>> = HashMap::new();
 
-    let mut evaluate = |lb: usize, cfg: &mut Config, cache: &mut HashMap<usize, Option<(f64, usize, Metrics)>>| -> Option<(f64, usize, Metrics)> {
+    let evaluate = |lb: usize, cfg: &mut Config, cache: &mut HashMap<usize, Option<(f64, usize, Metrics)>>| -> Option<(f64, usize, Metrics)> {
         if let Some(cached) = cache.get(&lb) { return cached.clone(); }
         let raw = sig_fn(bars, lb);
         let sig = parse_signals_for(&raw, bars, cfg);
@@ -833,10 +826,10 @@ fn monte_carlo(arr: &[f64], actual: &Metrics, runs: usize) {
     for sim_type in 0..2 {
         for _ in 0..runs {
             let sim: Vec<f64> = if sim_type == 0 {
-                (0..n).map(|_| arr[rng.gen_range(0..n)]).collect()
+                (0..n).map(|_| arr[rng.random_range(0..n)]).collect()
             } else {
                 let mut s = arr.to_vec();
-                for i in (1..s.len()).rev() { let j = rng.gen_range(0..=i); s.swap(i, j); }
+                for i in (1..s.len()).rev() { let j = rng.random_range(0..=i); s.swap(i, j); }
                 s
             };
             let roi: f64 = sim.iter().sum();
@@ -992,9 +985,9 @@ fn inject_news_candles(bars: &[Bar], seed: u64) -> Vec<Bar> {
     let n = out.len();
     let mut i: usize = 0;
     loop {
-        i += rng.gen_range(500..=1000);
+        i += rng.random_range(500..=1000);
         if i >= n { break; }
-        let burst = rng.gen_range(1..=2);
+        let burst = rng.random_range(1..=2);
         for j in 0..burst {
             let idx = i + j;
             if idx >= n { break; }
@@ -1010,8 +1003,8 @@ fn inject_news_candles(bars: &[Bar], seed: u64) -> Vec<Bar> {
                 if c2 > 0 { t2 / c2 as f64 } else { 0.0 }
             };
             if avg_range == 0.0 || !avg_range.is_finite() { continue; }
-            let extent = avg_range * (2.0 + rng.gen::<f64>() * 3.0);
-            let direction = rng.gen_range(0..3);     // 0=up, 1=down, 2=both
+            let extent = avg_range * (2.0 + rng.random::<f64>() * 3.0);
+            let direction = rng.random_range(0..3);     // 0=up, 1=down, 2=both
             let op = out[idx].open; let cp = out[idx].close;
             let hi = out[idx].high; let lo = out[idx].low;
             let top = op.max(cp).max(hi); let bot = op.min(cp).min(lo);
@@ -1406,8 +1399,20 @@ pub fn default_regime_detector(bars: &[Bar]) -> Vec<u8> {
         let mut all_up = true; let mut all_dn = true;
         for k in 0..LEN {
             let idx = i - k - 1;               // shift(1): yesterday and back
-            if !(close[idx] > ema200[idx]) { all_up = false; }
-            if !(close[idx] < ema200[idx]) { all_dn = false; }
+            // Explicit NaN handling: if either side is NaN (e.g. EMA200 not
+            // warmed up), the bar can be neither strictly > nor strictly <
+            // EMA200, so it falls through to the default Ranging label. This
+            // mirrors Python's NaN comparison semantics (NaN > x and NaN < x
+            // are both False) and is now intentional rather than implicit.
+            let c = close[idx];
+            let e = ema200[idx];
+            if c.is_nan() || e.is_nan() {
+                all_up = false;
+                all_dn = false;
+            } else {
+                if !(c > e) { all_up = false; }
+                if !(c < e) { all_dn = false; }
+            }
             if !all_up && !all_dn { break; }
         }
         if all_up      { out[i] = 0; }
@@ -1722,15 +1727,17 @@ fn walk_forward_regime(
 
             let is_close_rb: Vec<f64> = is_w.iter().map(|b| b.close).collect();
             let is_ema20_rb = compute_ema(&is_close_rb, 20);
-            let mut raw_is_rb = create_regime_signals_internal(&is_close_rb, &is_ema20_rb, &lbs_rb, regimes_is);
+            let raw_is_rb = create_regime_signals_internal(&is_close_rb, &is_ema20_rb, &lbs_rb, regimes_is);
             let mut sig_is_rb = parse_signals_for(&raw_is_rb, is_w, &cfg_rb);
             if opts.drift_on { sig_is_rb = drift_entries(&sig_is_rb); }
             let (_, met_is_rb, _, _) = run_backtest(is_w, &sig_is_rb, &cfg_rb);
 
             let oos_close_rb: Vec<f64> = oos_w.iter().map(|b| b.close).collect();
             let oos_ema20_rb = compute_ema(&oos_close_rb, 20);
-            raw_is_rb = create_regime_signals_internal(&oos_close_rb, &oos_ema20_rb, &lbs_rb, regimes_oos);
-            let mut sig_oos_rb = parse_signals_for(&raw_is_rb, oos_w, &cfg_rb);
+            // Renamed from raw_is_rb (was reusing the IS-named variable for the
+            // OOS phase — confusing, behaviour unchanged).
+            let raw_oos_rb = create_regime_signals_internal(&oos_close_rb, &oos_ema20_rb, &lbs_rb, regimes_oos);
+            let mut sig_oos_rb = parse_signals_for(&raw_oos_rb, oos_w, &cfg_rb);
             if opts.drift_on { sig_oos_rb = drift_entries(&sig_oos_rb); }
             let (_, met_oos_rb, _, _) = run_backtest(oos_w, &sig_oos_rb, &cfg_rb);
 

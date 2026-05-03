@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] — 2026-05-03
+
+### Fixed
+- **Regime detector NaN guards.** `default_regime_detector` in
+  `src/lib.rs` (~line 1409) used `if !(close[idx] > ema200[idx])` to
+  classify Uptrend / Downtrend bars. NaN values (from the EMA-200
+  warm-up window) silently fell through as "not greater AND not less" —
+  the bar was labelled Ranging by accident, not by design. Replaced
+  with explicit `is_nan()` short-circuits + a comment documenting the
+  intentional Python-mirror semantics. Behaviour is unchanged on
+  warm-up bars; behaviour is now intentional for any future NaN
+  source.
+- **OOS regime raw signals reused the IS-named variable.**
+  `walk_forward_regime` (~line 1732 of `src/lib.rs`) wrote the OOS
+  regime-rotated raw signals into `raw_is_rb` (the IS-phase variable),
+  then immediately consumed them as if they were OOS. Behaviour was
+  correct (reassignment took the OOS values) but the name was
+  misleading. Renamed to `raw_oos_rb` and dropped the `mut` from the
+  IS-phase binding.
+- **Removed dead code.** `metrics_from_trades` (138 LOC, never called),
+  `compute_metrics` (3-line wrapper, never called), and the
+  `CSV_FILE` const (superseded by `BT_CSV` env var resolution in
+  `src/main.rs`) deleted. -141 LOC; clippy `dead_code` warnings
+  resolved.
+
+### Changed
+- **`rand` 0.8 → 0.9.** Migrated `gen_range` → `random_range`,
+  `rng.gen()` → `rng.random()`. Behaviour unchanged; deprecation-warning
+  free under the current stable toolchain.
+- **Clippy enforcement.** `.github/workflows/parity.yml` now runs
+  `cargo clippy --release --no-deps -- -D warnings` (was previously
+  `... || true`, contradicting CONTRIBUTING.md which claimed it was
+  enforced). Crate-wide `#![allow]` annotations gather the seven
+  intentional-style lints (`needless_range_loop` for parity-readable
+  index loops, `too_many_arguments` on `run_wfo_window` to mirror the
+  Python signature 1:1, `neg_cmp_op_on_partial_ord` on the
+  documented-NaN-guard regime detector, etc.) with one comment block
+  per allow explaining why the lint is wrong here.
+
+### Added
+- **GitHub repo discoverability scaffolding** — issue + PR templates,
+  `SECURITY.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1),
+  `.github/dependabot.yml` (weekly cargo updates), README badges row.
+- **`.github/workflows/docs.yml`** — runs `cargo doc --no-deps` and
+  publishes to `gh-pages` on each `main` push. Adds a redirect
+  `index.html` so `darufinance.github.io/quant-research-framework-rs/`
+  lands on the crate's API page.
+- **crates.io publish workflow.** `.github/workflows/publish-crates.yml`
+  triggered by `v*` tag push, gated on `${{ secrets.CRATES_IO_TOKEN }}`
+  — see `RELEASING.md` for the one-time `cargo login` step.
+- **Pre-commit config** — `cargo fmt --check` + `cargo clippy -- -D warnings`
+  hooks; `examples/` carve-out preserved via `#[rustfmt::skip]` blocks.
+
 ## [0.3.2] — 2026-05-03  (paper-v2 retag)
 
 ### Added

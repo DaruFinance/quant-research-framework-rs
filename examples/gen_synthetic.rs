@@ -43,13 +43,13 @@ fn interval_seconds(label: &str) -> Option<i64> {
 fn normal(rng: &mut StdRng, mu: f64, sigma: f64) -> f64 {
     // Guard against the (vanishing) chance of u1 == 0.
     let u1: f64 = {
-        let mut v: f64 = rng.gen();
+        let mut v: f64 = rng.random();
         while v <= f64::EPSILON {
-            v = rng.gen();
+            v = rng.random();
         }
         v
     };
-    let u2: f64 = rng.gen();
+    let u2: f64 = rng.random();
     let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
     mu + sigma * z
 }
