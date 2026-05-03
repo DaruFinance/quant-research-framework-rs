@@ -11,9 +11,19 @@ rand = "0.8"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 chrono-tz = { version = "0.8", default-features = false }
 
+[dev-dependencies]
+# Rayon is used only by the parallel batch_runner example; it is NOT a
+# runtime dependency of the engine and does not appear in the published
+# parity claim of three direct deps in §5.1 of the paper.
+rayon = "1.10"
+
 [[bin]]
 name = "backtester"
 path = "src/main.rs"
+
+[[example]]
+name = "batch_runner"
+path = "examples/batch_runner.rs"
 
 [profile.release]
 opt-level = 3

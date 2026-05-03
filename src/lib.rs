@@ -1028,13 +1028,20 @@ fn inject_news_candles(bars: &[Bar], seed: u64) -> Vec<Bar> {
 // ============================================================================
 // 10. CLASSIC SINGLE RUN
 // ============================================================================
-struct ClassicResult {
-    met_is_raw: Metrics, eq_is_raw: Vec<f64>,
-    met_is_opt: Option<Metrics>, met_oos_opt: Option<Metrics>,
-    best_lb: Option<usize>, best_rrr: Option<usize>,
+/// Result struct returned by [`classic_single_run`]. Public so external
+/// drivers (e.g. parallel batch runners) can read the optimised IS / OOS
+/// metrics without parsing stdout.
+pub struct ClassicResult {
+    pub met_is_raw: Metrics, pub eq_is_raw: Vec<f64>,
+    pub met_is_opt: Option<Metrics>, pub met_oos_opt: Option<Metrics>,
+    pub best_lb: Option<usize>, pub best_rrr: Option<usize>,
 }
 
-fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, sig_fn: RawSignalsFn) -> ClassicResult {
+/// Run one IS / OOS / smart-optimised pass on a pre-loaded bar slice and
+/// return its metrics. This is the building block of [`run_cfg`] (which
+/// adds robustness + WFO + printing on top); external parallel drivers
+/// can call this directly to avoid stdout interleaving across workers.
+pub fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, sig_fn: RawSignalsFn) -> ClassicResult {
     let export_path = "trade_list.csv";
     let _ = std::fs::remove_file(export_path);
     let n = all_bars.len();
