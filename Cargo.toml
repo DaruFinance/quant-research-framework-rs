@@ -15,7 +15,7 @@ repository = "https://github.com/DaruFinance/quant-research-framework-rs"
 # behavioural-change release window.
 rand = "=0.9"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
-chrono-tz = { version = "0.8", default-features = false }
+chrono-tz = { version = "0.10", default-features = false }
 
 [dev-dependencies]
 # Rayon is used only by the parallel batch_runner example; it is NOT a
