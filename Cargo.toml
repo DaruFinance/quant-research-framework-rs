@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/DaruFinance/quant-research-framework-rs"
 
 [dependencies]
-rand = "0.9"
+rand = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 chrono-tz = { version = "0.8", default-features = false }
 
