@@ -94,6 +94,11 @@ const SESSION_END_HOUR: u32 = 17;     // NY local hour (exclusive); covers the
 // When the scenario list contains "NEWS_CANDLES_INJECTION", inject_news_candles
 // produces a perturbed copy of the bar series before backtest.
 const NEWS_INJECTION_SEED: u64 = 42;
+// INDICATOR_VARIANCE seed: previously unseeded (paper-time review noted that
+// the +/- 1 LB perturbation propagated to a different optimised parameter
+// across host architectures). Seeded to 42 here so the perturbation is
+// deterministic and the cross-architecture parity claim covers IND too.
+const IND_VARIANCE_SEED: u64 = 42;
 
 fn robustness_scenarios() -> Vec<(&'static str, Vec<&'static str>)> {
     vec![
@@ -1149,7 +1154,7 @@ fn run_wfo_window(is_bars: &[Bar], oos_bars: &[Bar], lb: usize, window_tag: &str
         cfg_rb.fee_pct *= opts.fee_mult;
         cfg_rb.slippage_pct *= opts.slip_mult;
         let lb_rb = if opts.var_on {
-            let offset: i32 = if rand::random::<bool>() { 1 } else { -1 };
+            let offset: i32 = { let mut r = StdRng::seed_from_u64(IND_VARIANCE_SEED); if r.random::<bool>() { 1 } else { -1 } };
             (lb as i32 + offset).max(1) as usize
         } else { lb };
 
@@ -1266,7 +1271,7 @@ fn run_robustness_tests(all_bars: &[Bar], best_lb: Option<usize>, best_rrr: Opti
         cfg_rb.slippage_pct *= opts.slip_mult;
         let lb = best_lb.unwrap_or(DEFAULT_LB);
         let lb_use = if opts.var_on {
-            let offset: i32 = if rand::random::<bool>() { 1 } else { -1 };
+            let offset: i32 = { let mut r = StdRng::seed_from_u64(IND_VARIANCE_SEED); if r.random::<bool>() { 1 } else { -1 } };
             (lb as i32 + offset).max(1) as usize
         } else { lb };
         if let Some(r) = best_rrr { cfg_rb.tp_percentage = r as f64 * SL_PERCENTAGE; cfg_rb.use_tp = true; }
@@ -1709,7 +1714,7 @@ fn walk_forward_regime(
             cfg_rb.slippage_pct *= opts.slip_mult;
             let lbs_rb: Vec<Option<usize>> = if opts.var_on {
                 best_lbs.iter().map(|lb| lb.map(|v| {
-                    let off: i32 = if rand::random::<bool>() { 1 } else { -1 };
+                    let off: i32 = { let mut r = StdRng::seed_from_u64(IND_VARIANCE_SEED); if r.random::<bool>() { 1 } else { -1 } };
                     (v as i32 + off).max(1) as usize
                 })).collect()
             } else { best_lbs.clone() };
