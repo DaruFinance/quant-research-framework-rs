@@ -18,6 +18,16 @@ of regime — i.e. the issue is in the forex/session interaction, not in
 the regime engine itself. The four-way combo is not part of v0.3.0's
 parity guarantee.
 
+TODO(item #44): the multi-term IS objective (Sortino + corr(s, BTC) +
+turnover penalty) lands in Phase 2 and is expected to **resolve** this
+combo diff. See `docs/verification/item44.md` once that item ships;
+until then this script remains diagnostic-only and not used by CI.
+
+Item #15 note: this file is intentionally NOT refactored onto
+``parity_common.py`` / ``parity_registry.json`` because it represents
+a known-failing surface. It will join the registry under the
+``sortino`` family when #44 lands and the four-way combo goes green.
+
 Usage:
     python tools/parity_combo.py
 """
