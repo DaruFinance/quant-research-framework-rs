@@ -159,6 +159,15 @@ pub struct Trade {
     /// schema stays at 15 columns (these fields are internal); parity
     /// vs Python is preserved.
     pub trade_group_id: u64,
+    /// Item #3: cost decomposition. fee + slippage + funding +
+    /// net_pnl == gross_pnl by construction, satisfying the leg-level
+    /// identity to floating-point tolerance. net_pnl == pnl. In forex
+    /// mode slippage and funding are 0 (R-unit math folds them in).
+    pub fee: f64,
+    pub slippage: f64,
+    pub funding: f64,
+    pub gross_pnl: f64,
+    pub net_pnl: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -534,10 +543,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 } else {
                     pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc)
                 };
+                // Item #3: cost decomposition (capture funding before reset).
+                let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+                    open_pos, entry_price, exit_price, qty,
+                    fee_entry, fee_exit, funding_acc, slip,
+                    cfg.use_forex, pnl);
                 funding_acc = 0.0;
                 let tgid = trades.len() as u64;
                 trades.push(Trade { side: open_pos, entry_idx: ent_bar, exit_idx: idx as i32,
-                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
+                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+                    fee: fee_v, slippage: slip_v, funding: fund_v,
+                    gross_pnl: gross_v, net_pnl: pnl });
                 let last_eq = *equity_list.last().unwrap();
                 equity_list.push(last_eq + pnl);
                 open_pos = 0;
@@ -550,10 +566,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let exit_price = price_open * (1.0 + slip);
                 let fee_exit = qty * exit_price * fee_rate;
                 let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+                // Item #3: cost decomposition.
+                let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+                    -1, entry_price, exit_price, qty,
+                    fee_entry, fee_exit, funding_acc, slip,
+                    cfg.use_forex, pnl);
                 funding_acc = 0.0;
                 let tgid = trades.len() as u64;
                 trades.push(Trade { side: -1, entry_idx: ent_bar, exit_idx: idx as i32,
-                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
+                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+                    fee: fee_v, slippage: slip_v, funding: fund_v,
+                    gross_pnl: gross_v, net_pnl: pnl });
                 let last_eq = *equity_list.last().unwrap();
                 equity_list.push(last_eq + pnl);
                 open_pos = 0;
@@ -569,10 +592,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let exit_price = price_open * (1.0 - slip);
                 let fee_exit = qty * exit_price * fee_rate;
                 let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+                // Item #3: cost decomposition.
+                let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+                    1, entry_price, exit_price, qty,
+                    fee_entry, fee_exit, funding_acc, slip,
+                    cfg.use_forex, pnl);
                 funding_acc = 0.0;
                 let tgid = trades.len() as u64;
                 trades.push(Trade { side: 1, entry_idx: ent_bar, exit_idx: idx as i32,
-                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
+                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+                    fee: fee_v, slippage: slip_v, funding: fund_v,
+                    gross_pnl: gross_v, net_pnl: pnl });
                 let last_eq = *equity_list.last().unwrap();
                 equity_list.push(last_eq + pnl);
                 open_pos = 0;
@@ -587,10 +617,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let exit_price = price_open * (1.0 - slip);
             let fee_exit = qty * exit_price * fee_rate;
             let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+            // Item #3: cost decomposition.
+            let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+                1, entry_price, exit_price, qty,
+                fee_entry, fee_exit, funding_acc, slip,
+                cfg.use_forex, pnl);
             funding_acc = 0.0;
             let tgid = trades.len() as u64;
             trades.push(Trade { side: 1, entry_idx: ent_bar, exit_idx: idx as i32,
-                entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
+                entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+                fee: fee_v, slippage: slip_v, funding: fund_v,
+                gross_pnl: gross_v, net_pnl: pnl });
             let last_eq = *equity_list.last().unwrap();
             equity_list.push(last_eq + pnl);
             open_pos = 0;
@@ -598,10 +635,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let exit_price = price_open * (1.0 + slip);
             let fee_exit = qty * exit_price * fee_rate;
             let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+            // Item #3: cost decomposition.
+            let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+                -1, entry_price, exit_price, qty,
+                fee_entry, fee_exit, funding_acc, slip,
+                cfg.use_forex, pnl);
             funding_acc = 0.0;
             let tgid = trades.len() as u64;
             trades.push(Trade { side: -1, entry_idx: ent_bar, exit_idx: idx as i32,
-                entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
+                entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+                fee: fee_v, slippage: slip_v, funding: fund_v,
+                gross_pnl: gross_v, net_pnl: pnl });
             let last_eq = *equity_list.last().unwrap();
             equity_list.push(last_eq + pnl);
             open_pos = 0;
@@ -615,9 +659,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                          else { price_last * (1.0 + slip) };
         let fee_exit = qty * exit_price * fee_rate;
         let pnl = pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+        // Item #3: cost decomposition (force-close on last bar; no
+        // funding_acc reset needed — kernel returns shortly after).
+        let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+            open_pos, entry_price, exit_price, qty,
+            fee_entry, fee_exit, funding_acc, slip,
+            cfg.use_forex, pnl);
         let tgid = trades.len() as u64;
         trades.push(Trade { side: open_pos, entry_idx: ent_bar, exit_idx: (n-1) as i32,
-            entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
+            entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+            fee: fee_v, slippage: slip_v, funding: fund_v,
+            gross_pnl: gross_v, net_pnl: pnl });
         let last_eq = *equity_list.last().unwrap();
         equity_list.push(last_eq + pnl);
     }
@@ -642,6 +694,42 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
 
 fn run_backtest(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics, Vec<f64>, Vec<f64>) {
     backtest_core(bars, sig, cfg)
+}
+
+/// Item #3 cost decomposition for a single trade leg. Returns
+/// `(fee, slippage, funding, gross_pnl)` satisfying
+/// `gross_pnl - fee - slippage - funding == pnl` to fp tolerance.
+/// Crypto recovers raw prices via the inverse slippage adjust:
+///   `raw_entry = entry_price / (1 + slip)`  for long entry
+///   `raw_exit  = exit_price  / (1 - slip)`  for long exit
+///   (mirror for short)
+/// Forex returns `slippage = funding = 0` and `gross_pnl = pnl + fee`
+/// since R-unit pnl already folds slippage and funding into trade_res.
+fn decompose_costs(
+    side_val: i8,
+    entry_price: f64,
+    exit_price: f64,
+    qty: f64,
+    fee_entry: f64,
+    fee_exit: f64,
+    funding_acc: f64,
+    slip: f64,
+    use_forex: bool,
+    pnl: f64,
+) -> (f64, f64, f64, f64) {
+    let fee_total = fee_entry + fee_exit;
+    if use_forex {
+        return (fee_total, 0.0, 0.0, pnl + fee_total);
+    }
+    let (raw_entry, raw_exit) = if side_val == 1 {
+        (entry_price / (1.0 + slip), exit_price / (1.0 - slip))
+    } else {
+        (entry_price / (1.0 - slip), exit_price / (1.0 + slip))
+    };
+    let slippage = qty * slip * (raw_entry + raw_exit);
+    let funding = funding_acc;
+    let gross_pnl = pnl + fee_total + slippage + funding;
+    (fee_total, slippage, funding, gross_pnl)
 }
 
 fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Metrics {
