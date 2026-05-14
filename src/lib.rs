@@ -149,6 +149,16 @@ pub struct Trade {
     pub exit_price: f64,
     pub qty: f64,
     pub pnl: f64,
+    /// Item #2: leg index within a multi-leg trade group. Always 0 in
+    /// single-leg single-asset mode. Set by the backtest core at every
+    /// `trades.push(...)` site; aggregation lives downstream.
+    pub leg_id: u32,
+    /// Item #2: shared group id across legs of the same logical trade.
+    /// Single-leg mode emits `trade_group_id == trades.len()` at push
+    /// time so every leg row is its own group. The trade ledger CSV
+    /// schema stays at 15 columns (these fields are internal); parity
+    /// vs Python is preserved.
+    pub trade_group_id: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -525,8 +535,9 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                     pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc)
                 };
                 funding_acc = 0.0;
+                let tgid = trades.len() as u64;
                 trades.push(Trade { side: open_pos, entry_idx: ent_bar, exit_idx: idx as i32,
-                    entry_price, exit_price, qty, pnl });
+                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
                 let last_eq = *equity_list.last().unwrap();
                 equity_list.push(last_eq + pnl);
                 open_pos = 0;
@@ -540,8 +551,9 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let fee_exit = qty * exit_price * fee_rate;
                 let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
                 funding_acc = 0.0;
+                let tgid = trades.len() as u64;
                 trades.push(Trade { side: -1, entry_idx: ent_bar, exit_idx: idx as i32,
-                    entry_price, exit_price, qty, pnl });
+                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
                 let last_eq = *equity_list.last().unwrap();
                 equity_list.push(last_eq + pnl);
                 open_pos = 0;
@@ -558,8 +570,9 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let fee_exit = qty * exit_price * fee_rate;
                 let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
                 funding_acc = 0.0;
+                let tgid = trades.len() as u64;
                 trades.push(Trade { side: 1, entry_idx: ent_bar, exit_idx: idx as i32,
-                    entry_price, exit_price, qty, pnl });
+                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
                 let last_eq = *equity_list.last().unwrap();
                 equity_list.push(last_eq + pnl);
                 open_pos = 0;
@@ -575,8 +588,9 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let fee_exit = qty * exit_price * fee_rate;
             let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
             funding_acc = 0.0;
+            let tgid = trades.len() as u64;
             trades.push(Trade { side: 1, entry_idx: ent_bar, exit_idx: idx as i32,
-                entry_price, exit_price, qty, pnl });
+                entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
             let last_eq = *equity_list.last().unwrap();
             equity_list.push(last_eq + pnl);
             open_pos = 0;
@@ -585,8 +599,9 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let fee_exit = qty * exit_price * fee_rate;
             let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
             funding_acc = 0.0;
+            let tgid = trades.len() as u64;
             trades.push(Trade { side: -1, entry_idx: ent_bar, exit_idx: idx as i32,
-                entry_price, exit_price, qty, pnl });
+                entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
             let last_eq = *equity_list.last().unwrap();
             equity_list.push(last_eq + pnl);
             open_pos = 0;
@@ -600,8 +615,9 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                          else { price_last * (1.0 + slip) };
         let fee_exit = qty * exit_price * fee_rate;
         let pnl = pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+        let tgid = trades.len() as u64;
         trades.push(Trade { side: open_pos, entry_idx: ent_bar, exit_idx: (n-1) as i32,
-            entry_price, exit_price, qty, pnl });
+            entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid });
         let last_eq = *equity_list.last().unwrap();
         equity_list.push(last_eq + pnl);
     }
