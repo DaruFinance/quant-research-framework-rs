@@ -8,8 +8,10 @@
 #![cfg(feature = "panel")]
 
 pub mod loader;
+pub mod orchestrator;
 pub mod regime;
 pub use loader::{PanelData, PanelError, load_panel};
+pub use orchestrator::bars_for_asset;
 pub use regime::{
     PanelRegimeDetector, PerAssetRegime, MarketRegime,
     LABEL_RANGING, LABEL_UPTREND, LABEL_DOWNTREND, LABEL_NAMES,
