@@ -242,6 +242,12 @@ pub struct Config {
     /// where the optimiser's side comparison always took the short
     /// branch. See CHANGELOG v0.3.1 / Python v0.2.5.
     pub legacy_side_bug: bool,
+    /// Item #46: maximum hold period in bars. 0 = no force-close
+    /// (engine behaves as pre-#46). When > 0, the kernel emits a code-2
+    /// / code-4 close at bar i for any open position with
+    /// `(i - ent_bar) >= max_hold_bars`. Priority: news/session >
+    /// hold-period > SL/TP intrabar > signal-driven.
+    pub max_hold_bars: usize,
 }
 impl Config {
     pub fn new() -> Self {
@@ -254,7 +260,8 @@ impl Config {
                  session_end_hour: SESSION_END_HOUR,
                  use_oos2: USE_OOS2, use_regime_seg: false, pip_size: 0.0001,
                  account_size: ACCOUNT_SIZE, mask_exits: false,
-                 legacy_side_bug: false }
+                 legacy_side_bug: false,
+                 max_hold_bars: 0 }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
     /// Forex defaults: position_size = account_size = 1.0 (R-unit
@@ -276,6 +283,14 @@ impl Config {
     }
     pub fn with_mask_exits(mut self, on: bool) -> Self { self.mask_exits = on; self }
     pub fn with_legacy_side_bug(mut self, on: bool) -> Self { self.legacy_side_bug = on; self }
+    /// Item #46: cap the number of bars a position can be held.
+    /// 0 (default) disables; >0 makes the kernel force-close at bar i
+    /// when `(i - ent_bar) >= max_hold_bars`. Mirrors Python's
+    /// `MAX_HOLD_BARS` module constant.
+    pub fn with_max_hold_bars(mut self, n: usize) -> Self {
+        self.max_hold_bars = n;
+        self
+    }
     fn fee_rate(&self) -> f64 { self.fee_pct / 100.0 }
     fn slip(&self) -> f64 { self.slippage_pct * 0.01 }
     fn funding_rate(&self) -> f64 { FUNDING_FEE / 100.0 }
@@ -507,6 +522,16 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         if cfg.use_sessions && session_end_bar[idx] && open_pos != 0 {
             if open_pos == 1 && code != 3 { code = 2; }
             else if open_pos == -1 && code != 1 { code = 4; }
+        }
+        // Item #46: hold-period force-close. Pure integer arithmetic
+        // (idx and ent_bar both at-or-before this bar). Only fires if
+        // session-end didn't already set the code, preserving the
+        // documented precedence.
+        if cfg.max_hold_bars > 0 && open_pos != 0 && code != 2 && code != 4 {
+            let held = (idx as i64) - (ent_bar as i64);
+            if held >= cfg.max_hold_bars as i64 {
+                code = if open_pos == 1 { 2 } else { 4 };
+            }
         }
         let price_open = bars[idx].open;
 
