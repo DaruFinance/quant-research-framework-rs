@@ -132,6 +132,7 @@ fn python_iloc_slice(start_raw: i64, end_raw: i64, length: usize) -> (usize, usi
 }
 
 pub mod invariants;
+pub mod orchestrator;
 
 #[derive(Clone)]
 pub struct Bar {
