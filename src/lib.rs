@@ -131,6 +131,8 @@ fn python_iloc_slice(start_raw: i64, end_raw: i64, length: usize) -> (usize, usi
     if s >= e { (s, s) } else { (s, e) }
 }
 
+pub mod invariants;
+
 #[derive(Clone)]
 pub struct Bar {
     pub time_unix: i64,
