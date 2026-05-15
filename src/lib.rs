@@ -139,6 +139,9 @@ pub mod orchestrator;
 #[cfg(feature = "panel")]
 pub mod panel;
 
+#[cfg(feature = "pairs")]
+pub mod pairs;
+
 #[derive(Clone)]
 pub struct Bar {
     pub time_unix: i64,
