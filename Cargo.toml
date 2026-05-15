@@ -31,6 +31,11 @@ panel = ["dep:ndarray", "dep:csv"]
 # Python's `pip install quant-research-framework[pairs]`.  Depends on
 # the panel substrate for the (time × asset × field) N-D array shape.
 pairs = ["panel"]
+# Phase 3 T6 carry plugin (items #38, #39, #39s, #40, #41, #42, #43).
+# Mirrors Python's `pip install quant-research-framework[carry]`.
+# Loaders read CSV; parquet would add a heavyweight cross-language
+# dep we don't need (the parity scripts always shake out CSV first).
+carry = ["panel"]
 
 [dev-dependencies]
 # Rayon is used only by the parallel batch_runner example; it is NOT a

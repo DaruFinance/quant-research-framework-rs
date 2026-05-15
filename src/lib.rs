@@ -142,6 +142,9 @@ pub mod panel;
 #[cfg(feature = "pairs")]
 pub mod pairs;
 
+#[cfg(feature = "carry")]
+pub mod carry;
+
 #[derive(Clone)]
 pub struct Bar {
     pub time_unix: i64,
