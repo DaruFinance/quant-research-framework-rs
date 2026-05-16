@@ -691,27 +691,13 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         }
     }
 
-    // Force-close open trade
-    if open_pos != 0 {
-        let price_last = bars[n - 1].open;
-        let exit_price = if open_pos == 1 { price_last * (1.0 - slip) }
-                         else { price_last * (1.0 + slip) };
-        let fee_exit = qty * exit_price * fee_rate;
-        let pnl = pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
-        // Item #3: cost decomposition (force-close on last bar; no
-        // funding_acc reset needed — kernel returns shortly after).
-        let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
-            open_pos, entry_price, exit_price, qty,
-            fee_entry, fee_exit, funding_acc, slip,
-            cfg.use_forex, pnl);
-        let tgid = trades.len() as u64;
-        trades.push(Trade { side: open_pos, entry_idx: ent_bar, exit_idx: (n-1) as i32,
-            entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
-            fee: fee_v, slippage: slip_v, funding: fund_v,
-            gross_pnl: gross_v, net_pnl: pnl });
-        let last_eq = *equity_list.last().unwrap();
-        equity_list.push(last_eq + pnl);
-    }
+    // Open positions at end-of-data are NOT emitted as trades. In live trading
+    // an open position simply stays open — there is no synthetic close. The
+    // backtester must behave the same way for live/batch parity. Realized PnL
+    // and the trade ledger reflect only completed exits (SL/TP/signal-flip/
+    // max_hold/session-end). Unrealized PnL on the open position is not
+    // recorded.
+    let _ = open_pos; let _ = ent_bar; let _ = entry_price; let _ = qty; let _ = fee_entry; let _ = funding_acc;
 
     // Equity / returns scaling: forex normalises to position_size_fx (=1.0)
     // → eq_frac becomes cumulative R-units starting at 0; crypto normalises
