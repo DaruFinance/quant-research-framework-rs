@@ -42,6 +42,9 @@ carry = ["panel"]
 # runtime dependency of the engine and does not appear in the published
 # parity claim of three direct deps in §5.1 of the paper.
 rayon = "1.10"
+# Used only by ad-hoc enumeration examples (enumerate_t1.rs etc.) for
+# silencing stdout via dup2 during 5000-strategy sweeps.
+libc = "0.2"
 
 [[bin]]
 name = "backtester"
