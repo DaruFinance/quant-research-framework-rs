@@ -88,7 +88,12 @@ fn main() {
     let csv = std::env::args().nth(1).unwrap_or_else(|| "data/EURUSD_1h.csv".into());
     let bars = load_ohlc(&csv);
     println!("Loaded {} bars from {}", bars.len(), csv);
-    let cfg = Config::new().with_forex_defaults();
+    let mut cfg = Config::new().with_forex_defaults();
+    // JPY pairs use pip_size=0.01; everything else stays at the 0.0001 default.
+    // Mirrors `bt.PIP_SIZE = 0.01 if "JPY" in bt.CSV_FILE else 0.0001` on the
+    // Python side. Without this, JPY datasets parity-fail by ~50% on roi/sharpe
+    // because the Rust side runs with EUR-scale stops on a JPY-scale series.
+    if csv.to_uppercase().contains("JPY") { cfg.pip_size = 0.01; }
     run_cfg(&bars, "EMA-crossover", ema_strategy, cfg);
 }
 """)
