@@ -220,6 +220,14 @@ pub struct Config {
     /// where the optimiser's side comparison always took the short
     /// branch. See CHANGELOG v0.3.1 / Python v0.2.5.
     pub legacy_side_bug: bool,
+    /// Crypto-path gap-handling clamp. Default false (existing behaviour).
+    /// When true, every realized trade's pnl-before-costs in the crypto
+    /// path is clipped to [-1R, +RRR*R] where R = entry_price *
+    /// sl_percentage / 100. Mirrors the R-unit clamping that forex mode
+    /// applies unconditionally, so a bar that gaps through SL/TP cannot
+    /// record a loss larger than 1R or a gain larger than the configured
+    /// RRR. No effect when use_forex is true.
+    pub clamp_results: bool,
 }
 impl Config {
     pub fn new() -> Self {
@@ -232,7 +240,7 @@ impl Config {
                  session_end_hour: SESSION_END_HOUR,
                  use_oos2: USE_OOS2, use_regime_seg: false, pip_size: 0.0001,
                  account_size: ACCOUNT_SIZE, mask_exits: false,
-                 legacy_side_bug: false }
+                 legacy_side_bug: false, clamp_results: false }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
     /// Forex defaults: position_size = account_size = 1.0 (R-unit
@@ -254,6 +262,9 @@ impl Config {
     }
     pub fn with_mask_exits(mut self, on: bool) -> Self { self.mask_exits = on; self }
     pub fn with_legacy_side_bug(mut self, on: bool) -> Self { self.legacy_side_bug = on; self }
+    /// Enable crypto-path R-clamp for gap-prone instruments. No-op in forex
+    /// mode (forex already clamps). See `Config::clamp_results` docs.
+    pub fn with_clamp_results(mut self, on: bool) -> Self { self.clamp_results = on; self }
     fn fee_rate(&self) -> f64 { self.fee_pct / 100.0 }
     fn slip(&self) -> f64 { self.slippage_pct * 0.01 }
     fn funding_rate(&self) -> f64 { FUNDING_FEE / 100.0 }
@@ -422,7 +433,19 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             trade_res * position_size - (fee_e + fee_x)
         } else {
             let direction = if side == 1 { exit_p - entry_p } else { entry_p - exit_p };
-            qty_v * direction - (fee_e + fee_x + funding_v)
+            if cfg.clamp_results && sl_perc > 0.0 {
+                // Crypto-path R-clamp. 1R per-trade = qty * entry_p * sl_perc/100.
+                // Mirrors the forex closure's trade_res clip so gap-prone
+                // instruments cannot exceed [-1R, +RRR*R] regardless of how
+                // far past SL/TP the bar opens.
+                let rrr_crypto = tp_perc / sl_perc;
+                let r_size_per_unit = entry_p * (sl_perc / 100.0);
+                let r_value = direction / r_size_per_unit;
+                let clipped = r_value.max(-1.0).min(rrr_crypto);
+                clipped * qty_v * r_size_per_unit - (fee_e + fee_x + funding_v)
+            } else {
+                qty_v * direction - (fee_e + fee_x + funding_v)
+            }
         }
     };
 
