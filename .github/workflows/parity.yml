@@ -100,3 +100,20 @@ jobs:
       - name: Parity — default config on 100k synthetic GBM
         working-directory: quant-research-framework-rs
         run: python tools/parity_check.py --csv data/SYNTH_100k.csv --tol 0.001
+
+      # ---- v0.5.0 multi-asset core surfaces (item 07) ----
+      - name: Parity — four-way combo (regime + WFO + forex + session, EURUSD 1h)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_combo.py --csv data/EURUSD_1h.csv --tol 0.001
+
+      - name: Parity — panel substrate (regime / baskets / ERC / neutralisations)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_panel.py --tol 0.001
+
+      - name: Parity — pairs primitives (spread / screener / cadence / stops)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_pairs.py --tol 0.001
+
+      - name: Parity — carry primitives (funding / basis / OI / triggers / models)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_carry.py --tol 0.001
