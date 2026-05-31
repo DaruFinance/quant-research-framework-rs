@@ -88,8 +88,13 @@ bt.FOREX_MODE        = True
 bt.TRADE_SESSIONS    = True
 bt.SESSION_START     = "8:00"
 bt.SESSION_END       = "16:50"
-bt.MIN_TRADES        = 1
-bt.OPTIMIZE_RRR      = False
+# MIN_TRADES and OPTIMIZE_RRR are compile-time constants on the Rust side
+# (MIN_TRADES=10, OPTIMIZE_RRR=true); the parity comparison must use the
+# SAME values on both engines, so we keep the shared defaults here rather
+# than overriding them. The earlier 1 / False overrides were the sole cause
+# of the combo divergence: they changed which LB the IS phase selected.
+bt.MIN_TRADES        = 10
+bt.OPTIMIZE_RRR      = True
 # Pip-mode side-effects that backtester.py applies at import time when
 # FOREX_MODE was already True. We re-apply them here because we flipped
 # the flag at runtime instead.
@@ -211,7 +216,13 @@ def report(py: dict, rs: dict, tags: list[str]) -> None:
 
 
 def main() -> int:
-    csv = REPO_RUST / "data" / "SOLUSDT_1h.csv"
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--csv", type=Path, default=REPO_RUST / "data" / "SOLUSDT_1h.csv",
+                    help="OHLC CSV (default SOLUSDT_1h; use EURUSD_1h for "
+                         "economically-meaningful forex pip sizing)")
+    args = ap.parse_args()
+    csv = args.csv
     if not csv.exists():
         print(f"need {csv}"); return 2
     print(f"CSV: {csv}\nFlags: regime + WFO + forex + session (all ON)\n")
