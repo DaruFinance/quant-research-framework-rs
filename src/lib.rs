@@ -145,6 +145,12 @@ pub mod pairs;
 #[cfg(feature = "carry")]
 pub mod carry;
 
+// Deflated Sharpe Ratio post-processing (roadmap item 09 — Rust mirror of
+// `backtester/dsr.py`). Standalone scalar utility gated behind its own
+// lightweight `dsr` feature so it does not drag in the panel/pairs stack.
+#[cfg(feature = "dsr")]
+pub mod dsr;
+
 #[derive(Clone)]
 pub struct Bar {
     pub time_unix: i64,
