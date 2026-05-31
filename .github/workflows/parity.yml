@@ -108,7 +108,10 @@ jobs:
 
       - name: Parity — panel substrate (regime / baskets / ERC / neutralisations)
         working-directory: quant-research-framework-rs
-        run: python tools/parity_panel.py --tol 0.001
+        # Default per-key tolerances (all far inside the 1e-3 published standard;
+        # the ERC iterative solver agrees to ~3e-5). --strict tightens ERC to
+        # 1e-6 and is solver-sensitive by design, so it is not the CI gate.
+        run: python tools/parity_panel.py
 
       - name: Parity — pairs primitives (spread / screener / cadence / stops)
         working-directory: quant-research-framework-rs
