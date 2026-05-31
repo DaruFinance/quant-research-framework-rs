@@ -1,0 +1,83 @@
+# Cross-architecture parity CI (roadmap item 06).
+#
+# Proves the reference `backtester` binary is DETERMINISTIC across CPU
+# families: the same Rust source compiled for aarch64 must reproduce every
+# printed metric digit BYTE-FOR-BYTE versus the committed x86_64 goldens
+# in data/golden/. This is a stronger assertion than the cross-language
+# parity.yml (Python vs Rust at 1e-3) — here it is exact string equality of
+# the metric block across architectures.
+#
+# Two jobs:
+#   - emit-golden  : regenerates the x86_64 goldens on the ubuntu-latest
+#                    (x86_64) runner and fails if they drift from what is
+#                    committed (so a code change that perturbs the metrics
+#                    must update the goldens deliberately).
+#   - qemu-aarch64 : cross-compiles to aarch64-unknown-linux-gnu and runs
+#                    the binary under qemu-user-static, asserting
+#                    byte-identity vs the committed x86_64 goldens.
+#   - native-aarch64: same assertion on a native ARM runner (no QEMU),
+#                    making ARM64 a first-class CI surface.
+
+name: parity-arm64
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  emit-golden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build x86_64 release binary
+        run: cargo build --release
+      - name: Regenerate goldens and assert no drift from committed
+        run: |
+          python tools/parity_arch.py --emit-golden --bin target/release/backtester
+          git diff --exit-code data/golden/ \
+            || (echo "::error::x86_64 goldens drifted — a metric-affecting change must update data/golden/ deliberately" && exit 1)
+
+  qemu-aarch64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cross toolchain + qemu-user-static
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user-static
+      - name: Cross-compile to aarch64
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --release --target aarch64-unknown-linux-gnu
+      - name: Byte-identical metric block vs x86_64 goldens (under QEMU)
+        env:
+          QEMU_LD_PREFIX: /usr/aarch64-linux-gnu
+        run: |
+          python tools/parity_arch.py \
+            --bin target/aarch64-unknown-linux-gnu/release/backtester \
+            --runner qemu-aarch64-static
+
+  native-aarch64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build native aarch64 release binary
+        run: cargo build --release
+      - name: cargo test --release (native ARM)
+        run: cargo test --release
+      - name: Byte-identical metric block vs x86_64 goldens (native ARM)
+        run: python tools/parity_arch.py --bin target/release/backtester

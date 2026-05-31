@@ -1,0 +1,196 @@
+  IS-raw | Trades: 183  ROI:$-341.43  PF:  0.91  Shp: -0.52  Win: 22.95%  Exp:$-1.50  MaxDD:$530.09
+ OOS-raw | Trades:1804  ROI:$-3,631.09  PF:  0.90  Shp: -1.84  Win: 24.61%  Exp:$-1.67  MaxDD:$4,333.02
+  IS-opt (LB 55) | Trades: 173  ROI:$176.03  PF:  1.09  Shp:  0.52  Win: 34.10%  Exp:$1.31  MaxDD:$319.64  RRR:2
+ OOS-opt (LB 55) | Trades:1688  ROI:$-3,042.12  PF:  0.90  Shp: -1.96  Win: 29.80%  Exp:$-1.54  MaxDD:$3,682.01  RRR:2
+Baseline IS (LB 55) | Trades: 173  ROI:$176.03  PF:  1.09  Shp:  0.52  Win: 34.10%  Exp:$1.31  MaxDD:$319.64
+Baseline OOS (LB 55) | Trades:1688  ROI:$-3,042.12  PF:  0.90  Shp: -1.96  Win: 29.80%  Exp:$-1.54  MaxDD:$3,682.01  RRR:2
+  ENT IS (LB 55) | Trades: 173  ROI:$-161.84  PF:  0.96  Shp: -0.27  Win: 33.53%  Exp:$-0.66  MaxDD:$404.09
+ENT OOS1 (LB 55) | Trades:1688  ROI:$-3,108.59  PF:  0.90  Shp: -2.03  Win: 30.81%  Exp:$-1.57  MaxDD:$4,174.97
+  FEE IS (LB 55) | Trades: 173  ROI:$2.99  PF:  1.02  Shp:  0.12  Win: 34.10%  Exp:$0.31  MaxDD:$396.06
+FEE OOS1 (LB 55) | Trades:1688  ROI:$-4,730.26  PF:  0.84  Shp: -3.23  Win: 29.56%  Exp:$-2.54  MaxDD:$5,144.74
+  SLI IS (LB 55) | Trades: 173  ROI:$-267.11  PF:  0.92  Shp: -0.50  Win: 33.53%  Exp:$-1.26  MaxDD:$551.55
+SLI OOS1 (LB 55) | Trades:1688  ROI:$-7,690.62  PF:  0.75  Shp: -5.49  Win: 28.44%  Exp:$-4.29  MaxDD:$7,813.37
+ENT+IND IS (LB 54) | Trades: 175  ROI:$-20.28  PF:  1.01  Shp:  0.07  Win: 35.43%  Exp:$0.17  MaxDD:$359.65
+ENT+IND OOS1 (LB 54) | Trades:1706  ROI:$-3,723.83  PF:  0.87  Shp: -2.49  Win: 30.01%  Exp:$-1.92  MaxDD:$4,546.73
+ NEWS IS (LB 55) | Trades: 173  ROI:$-119.86  PF:  0.97  Shp: -0.17  Win: 31.79%  Exp:$-0.41  MaxDD:$439.13
+NEWS OOS1 (LB 55) | Trades:1688  ROI:$-3,134.16  PF:  0.90  Shp: -2.03  Win: 29.68%  Exp:$-1.59  MaxDD:$3,875.12
+  W01 IS (LB 55) | Trades: 173  ROI:$-0.72  PF:  1.02  Shp:  0.12  Win: 25.43%  Exp:$0.37  MaxDD:$489.88
+ W01 OOS (LB 55) | Trades: 110  ROI:$240.24  PF:  1.13  Shp:  0.56  Win: 28.18%  Exp:$2.32  MaxDD:$310.90
+W01 IS+ENT (LB 55) | Trades: 173  ROI:$-278.38  PF:  0.92  Shp: -0.43  Win: 26.59%  Exp:$-1.26  MaxDD:$716.11
+W01 OOS+ENT (LB 55) | Trades: 110  ROI:$542.27  PF:  1.32  Shp:  1.22  Win: 34.55%  Exp:$5.07  MaxDD:$253.32
+W01 IS+FEE (LB 55) | Trades: 173  ROI:$-173.76  PF:  0.96  Shp: -0.21  Win: 25.43%  Exp:$-0.63  MaxDD:$585.24
+W01 OOS+FEE (LB 55) | Trades: 110  ROI:$130.10  PF:  1.07  Shp:  0.32  Win: 28.18%  Exp:$1.32  MaxDD:$342.05
+W01 IS+SLI (LB 55) | Trades: 173  ROI:$-381.96  PF:  0.90  Shp: -0.61  Win: 24.86%  Exp:$-1.84  MaxDD:$780.46
+W01 OOS+SLI (LB 55) | Trades: 110  ROI:$-58.29  PF:  0.98  Shp: -0.10  Win: 27.27%  Exp:$-0.40  MaxDD:$435.38
+W01 IS+ENT+IND (LB 54) | Trades: 175  ROI:$-87.02  PF:  0.99  Shp: -0.05  Win: 28.57%  Exp:$-0.14  MaxDD:$594.22
+W01 OOS+ENT+IND (LB 54) | Trades: 112  ROI:$341.70  PF:  1.19  Shp:  0.78  Win: 30.36%  Exp:$3.19  MaxDD:$271.97
+  W02 IS (LB 69) | Trades: 151  ROI:$627.09  PF:  1.24  Shp:  1.16  Win: 31.13%  Exp:$4.33  MaxDD:$213.35
+ W02 OOS (LB 69) | Trades:  73  ROI:$732.54  PF:  1.60  Shp:  1.80  Win: 38.36%  Exp:$10.18  MaxDD:$153.88
+W02 IS+ENT (LB 69) | Trades: 151  ROI:$658.56  PF:  1.27  Shp:  1.26  Win: 32.45%  Exp:$4.56  MaxDD:$280.31
+W02 OOS+ENT (LB 69) | Trades:  73  ROI:$405.88  PF:  1.32  Shp:  1.06  Win: 32.88%  Exp:$5.72  MaxDD:$214.40
+W02 IS+FEE (LB 69) | Trades: 151  ROI:$475.98  PF:  1.18  Shp:  0.89  Win: 31.13%  Exp:$3.33  MaxDD:$221.51
+W02 OOS+FEE (LB 69) | Trades:  73  ROI:$659.60  PF:  1.52  Shp:  1.62  Win: 38.36%  Exp:$9.18  MaxDD:$166.81
+W02 IS+SLI (LB 69) | Trades: 151  ROI:$194.08  PF:  1.08  Shp:  0.40  Win: 29.80%  Exp:$1.46  MaxDD:$328.73
+W02 OOS+SLI (LB 69) | Trades:  73  ROI:$413.75  PF:  1.31  Shp:  1.05  Win: 34.25%  Exp:$5.83  MaxDD:$199.62
+W02 IS+ENT+IND (LB 68) | Trades: 157  ROI:$300.40  PF:  1.12  Shp:  0.61  Win: 30.57%  Exp:$2.10  MaxDD:$378.61
+W02 OOS+ENT+IND (LB 68) | Trades:  73  ROI:$354.32  PF:  1.28  Shp:  0.92  Win: 31.51%  Exp:$5.01  MaxDD:$214.29
+  W03 IS (LB 67) | Trades: 155  ROI:$1,214.40  PF:  1.47  Shp:  2.11  Win: 35.48%  Exp:$7.98  MaxDD:$184.67
+ W03 OOS (LB 67) | Trades:  82  ROI:$-56.58  PF:  0.98  Shp: -0.09  Win: 28.05%  Exp:$-0.40  MaxDD:$426.37
+W03 IS+ENT (LB 67) | Trades: 155  ROI:$553.54  PF:  1.21  Shp:  1.02  Win: 31.61%  Exp:$3.72  MaxDD:$213.87
+W03 OOS+ENT (LB 67) | Trades:  82  ROI:$-109.32  PF:  0.94  Shp: -0.24  Win: 25.61%  Exp:$-1.08  MaxDD:$302.03
+W03 IS+FEE (LB 67) | Trades: 155  ROI:$1,059.33  PF:  1.39  Shp:  1.85  Win: 35.48%  Exp:$6.98  MaxDD:$194.78
+W03 OOS+FEE (LB 67) | Trades:  82  ROI:$-138.61  PF:  0.93  Shp: -0.30  Win: 28.05%  Exp:$-1.40  MaxDD:$457.54
+W03 IS+SLI (LB 67) | Trades: 155  ROI:$735.81  PF:  1.26  Shp:  1.30  Win: 32.90%  Exp:$4.89  MaxDD:$206.09
+W03 OOS+SLI (LB 67) | Trades:  82  ROI:$-507.08  PF:  0.72  Shp: -1.34  Win: 24.39%  Exp:$-5.92  MaxDD:$663.16
+W03 IS+ENT+IND (LB 66) | Trades: 157  ROI:$673.11  PF:  1.25  Shp:  1.22  Win: 31.21%  Exp:$4.45  MaxDD:$213.55
+W03 OOS+ENT+IND (LB 66) | Trades:  86  ROI:$-92.04  PF:  0.95  Shp: -0.18  Win: 26.74%  Exp:$-0.82  MaxDD:$301.21
+  W04 IS (LB 58) | Trades: 173  ROI:$1,172.16  PF:  1.41  Shp:  1.99  Win: 34.10%  Exp:$7.02  MaxDD:$321.40
+ W04 OOS (LB 58) | Trades: 108  ROI:$-450.80  PF:  0.80  Shp: -1.03  Win: 21.30%  Exp:$-3.98  MaxDD:$682.18
+W04 IS+ENT (LB 58) | Trades: 173  ROI:$673.14  PF:  1.23  Shp:  1.20  Win: 30.64%  Exp:$4.10  MaxDD:$489.38
+W04 OOS+ENT (LB 58) | Trades: 108  ROI:$-699.01  PF:  0.68  Shp: -1.74  Win: 22.22%  Exp:$-6.31  MaxDD:$867.76
+W04 IS+FEE (LB 58) | Trades: 173  ROI:$999.15  PF:  1.34  Shp:  1.71  Win: 33.53%  Exp:$6.02  MaxDD:$343.64
+W04 OOS+FEE (LB 58) | Trades: 108  ROI:$-558.77  PF:  0.75  Shp: -1.28  Win: 21.30%  Exp:$-4.98  MaxDD:$765.84
+W04 IS+SLI (LB 58) | Trades: 173  ROI:$633.75  PF:  1.21  Shp:  1.12  Win: 31.79%  Exp:$3.91  MaxDD:$406.58
+W04 OOS+SLI (LB 58) | Trades: 108  ROI:$-845.24  PF:  0.65  Shp: -2.03  Win: 19.44%  Exp:$-7.64  MaxDD:$930.57
+W04 IS+ENT+IND (LB 57) | Trades: 179  ROI:$822.17  PF:  1.28  Shp:  1.42  Win: 31.28%  Exp:$4.80  MaxDD:$452.08
+W04 OOS+ENT+IND (LB 57) | Trades: 108  ROI:$-704.58  PF:  0.68  Shp: -1.75  Win: 22.22%  Exp:$-6.36  MaxDD:$869.87
+  W05 IS (LB 75) | Trades: 156  ROI:$90.31  PF:  1.04  Shp:  0.22  Win: 28.21%  Exp:$0.80  MaxDD:$465.46
+ W05 OOS (LB 75) | Trades:  74  ROI:$-74.02  PF:  0.96  Shp: -0.14  Win: 27.03%  Exp:$-0.68  MaxDD:$277.47
+W05 IS+ENT (LB 75) | Trades: 156  ROI:$-152.48  PF:  0.96  Shp: -0.22  Win: 26.28%  Exp:$-0.75  MaxDD:$539.29
+W05 OOS+ENT (LB 75) | Trades:  74  ROI:$-177.18  PF:  0.88  Shp: -0.45  Win: 27.03%  Exp:$-2.09  MaxDD:$262.09
+W05 IS+FEE (LB 75) | Trades: 156  ROI:$-65.60  PF:  0.99  Shp: -0.06  Win: 28.21%  Exp:$-0.20  MaxDD:$522.62
+W05 OOS+FEE (LB 75) | Trades:  74  ROI:$-147.94  PF:  0.91  Shp: -0.34  Win: 27.03%  Exp:$-1.68  MaxDD:$304.48
+W05 IS+SLI (LB 75) | Trades: 156  ROI:$-639.96  PF:  0.81  Shp: -1.14  Win: 25.64%  Exp:$-3.89  MaxDD:$684.05
+W05 OOS+SLI (LB 75) | Trades:  74  ROI:$-278.92  PF:  0.83  Shp: -0.72  Win: 25.68%  Exp:$-3.46  MaxDD:$354.75
+W05 IS+ENT+IND (LB 74) | Trades: 154  ROI:$-157.98  PF:  0.96  Shp: -0.24  Win: 26.62%  Exp:$-0.80  MaxDD:$475.91
+W05 OOS+ENT+IND (LB 74) | Trades:  74  ROI:$-61.39  PF:  0.97  Shp: -0.11  Win: 28.38%  Exp:$-0.51  MaxDD:$261.78
+  W06 IS (LB 69) | Trades: 157  ROI:$-200.82  PF:  0.95  Shp: -0.31  Win: 26.11%  Exp:$-1.04  MaxDD:$554.95
+ W06 OOS (LB 69) | Trades:  91  ROI:$-854.53  PF:  0.57  Shp: -2.37  Win: 17.58%  Exp:$-9.11  MaxDD:$951.30
+W06 IS+ENT (LB 69) | Trades: 157  ROI:$-223.84  PF:  0.94  Shp: -0.35  Win: 25.48%  Exp:$-1.18  MaxDD:$512.77
+W06 OOS+ENT (LB 69) | Trades:  91  ROI:$-795.10  PF:  0.59  Shp: -2.20  Win: 18.68%  Exp:$-8.46  MaxDD:$919.84
+W06 IS+FEE (LB 69) | Trades: 157  ROI:$-357.73  PF:  0.90  Shp: -0.60  Win: 26.11%  Exp:$-2.03  MaxDD:$692.57
+W06 OOS+FEE (LB 69) | Trades:  91  ROI:$-945.58  PF:  0.54  Shp: -2.63  Win: 17.58%  Exp:$-10.11  MaxDD:$1,038.33
+W06 IS+SLI (LB 69) | Trades: 157  ROI:$-662.12  PF:  0.80  Shp: -1.20  Win: 24.84%  Exp:$-3.99  MaxDD:$880.32
+W06 OOS+SLI (LB 69) | Trades:  91  ROI:$-1,089.93  PF:  0.48  Shp: -3.13  Win: 16.48%  Exp:$-11.71  MaxDD:$1,160.60
+W06 IS+ENT+IND (LB 68) | Trades: 167  ROI:$-356.88  PF:  0.90  Shp: -0.60  Win: 24.55%  Exp:$-1.90  MaxDD:$642.80
+W06 OOS+ENT+IND (LB 68) | Trades:  93  ROI:$-780.84  PF:  0.60  Shp: -2.15  Win: 19.35%  Exp:$-8.12  MaxDD:$885.56
+  W07 IS (LB 32) | Trades: 227  ROI:$-358.76  PF:  0.92  Shp: -0.50  Win: 24.67%  Exp:$-1.33  MaxDD:$770.09
+ W07 OOS (LB 32) | Trades: 128  ROI:$-437.22  PF:  0.74  Shp: -1.24  Win: 22.66%  Exp:$-2.95  MaxDD:$436.97
+W07 IS+ENT (LB 32) | Trades: 226  ROI:$-121.41  PF:  0.98  Shp: -0.12  Win: 28.32%  Exp:$-0.31  MaxDD:$617.88
+W07 OOS+ENT (LB 32) | Trades: 128  ROI:$-443.66  PF:  0.75  Shp: -1.23  Win: 21.88%  Exp:$-3.01  MaxDD:$526.14
+W07 IS+FEE (LB 32) | Trades: 227  ROI:$-585.68  PF:  0.87  Shp: -0.87  Win: 24.23%  Exp:$-2.33  MaxDD:$904.40
+W07 OOS+FEE (LB 32) | Trades: 128  ROI:$-565.25  PF:  0.68  Shp: -1.66  Win: 21.88%  Exp:$-3.95  MaxDD:$565.00
+W07 IS+SLI (LB 32) | Trades: 227  ROI:$-1,130.43  PF:  0.76  Shp: -1.80  Win: 22.91%  Exp:$-4.74  MaxDD:$1,250.60
+W07 OOS+SLI (LB 32) | Trades: 128  ROI:$-830.32  PF:  0.57  Shp: -2.52  Win: 21.09%  Exp:$-6.03  MaxDD:$830.08
+W07 IS+ENT+IND (LB 31) | Trades: 238  ROI:$-110.68  PF:  0.99  Shp: -0.10  Win: 29.41%  Exp:$-0.25  MaxDD:$636.95
+W07 OOS+ENT+IND (LB 31) | Trades: 132  ROI:$-486.98  PF:  0.72  Shp: -1.36  Win: 19.70%  Exp:$-3.25  MaxDD:$579.63
+  W08 IS (LB 32) | Trades: 240  ROI:$-1,006.49  PF:  0.74  Shp: -1.81  Win: 22.50%  Exp:$-3.82  MaxDD:$1,006.24
+ W08 OOS (LB 32) | Trades: 122  ROI:$-625.59  PF:  0.70  Shp: -1.60  Win: 22.95%  Exp:$-4.81  MaxDD:$728.13
+W08 IS+ENT (LB 32) | Trades: 240  ROI:$-842.10  PF:  0.78  Shp: -1.48  Win: 24.17%  Exp:$-3.17  MaxDD:$876.37
+W08 OOS+ENT (LB 32) | Trades: 122  ROI:$-308.31  PF:  0.85  Shp: -0.69  Win: 24.59%  Exp:$-2.21  MaxDD:$502.43
+W08 IS+FEE (LB 32) | Trades: 240  ROI:$-1,246.50  PF:  0.69  Shp: -2.29  Win: 21.67%  Exp:$-4.82  MaxDD:$1,246.25
+W08 OOS+FEE (LB 32) | Trades: 122  ROI:$-747.61  PF:  0.65  Shp: -1.93  Win: 22.13%  Exp:$-5.81  MaxDD:$844.08
+W08 IS+SLI (LB 32) | Trades: 240  ROI:$-1,738.70  PF:  0.60  Shp: -3.28  Win: 20.83%  Exp:$-6.89  MaxDD:$1,738.45
+W08 OOS+SLI (LB 32) | Trades: 122  ROI:$-914.28  PF:  0.60  Shp: -2.37  Win: 20.49%  Exp:$-7.17  MaxDD:$1,000.15
+W08 IS+ENT+IND (LB 31) | Trades: 248  ROI:$-910.89  PF:  0.77  Shp: -1.61  Win: 22.98%  Exp:$-3.34  MaxDD:$932.65
+W08 OOS+ENT+IND (LB 31) | Trades: 126  ROI:$-641.56  PF:  0.70  Shp: -1.60  Win: 20.63%  Exp:$-4.78  MaxDD:$795.31
+  W09 IS (LB 24) | Trades: 275  ROI:$-808.67  PF:  0.80  Shp: -1.41  Win: 23.27%  Exp:$-2.58  MaxDD:$918.03
+ W09 OOS (LB 24) | Trades: 159  ROI:$-543.28  PF:  0.74  Shp: -1.38  Win: 18.24%  Exp:$-3.04  MaxDD:$613.58
+W09 IS+ENT (LB 24) | Trades: 275  ROI:$-1,194.34  PF:  0.69  Shp: -2.28  Win: 22.91%  Exp:$-3.98  MaxDD:$1,341.74
+W09 OOS+ENT (LB 24) | Trades: 159  ROI:$-526.28  PF:  0.74  Shp: -1.37  Win: 21.38%  Exp:$-2.92  MaxDD:$638.10
+W09 IS+FEE (LB 24) | Trades: 275  ROI:$-1,083.73  PF:  0.74  Shp: -1.96  Win: 22.55%  Exp:$-3.58  MaxDD:$1,175.43
+W09 OOS+FEE (LB 24) | Trades: 159  ROI:$-702.22  PF:  0.67  Shp: -1.84  Win: 16.98%  Exp:$-4.04  MaxDD:$720.87
+W09 IS+SLI (LB 24) | Trades: 275  ROI:$-1,506.56  PF:  0.65  Shp: -2.78  Win: 21.09%  Exp:$-5.12  MaxDD:$1,595.77
+W09 OOS+SLI (LB 24) | Trades: 159  ROI:$-969.40  PF:  0.59  Shp: -2.58  Win: 16.35%  Exp:$-5.72  MaxDD:$969.15
+W09 IS+ENT+IND (LB 23) | Trades: 279  ROI:$-951.69  PF:  0.76  Shp: -1.71  Win: 22.94%  Exp:$-3.06  MaxDD:$1,231.89
+W09 OOS+ENT+IND (LB 23) | Trades: 165  ROI:$-527.42  PF:  0.75  Shp: -1.34  Win: 21.82%  Exp:$-2.82  MaxDD:$634.54
+  W10 IS (LB 31) | Trades: 247  ROI:$-894.55  PF:  0.77  Shp: -1.57  Win: 21.46%  Exp:$-3.22  MaxDD:$996.60
+ W10 OOS (LB 31) | Trades: 152  ROI:$-432.87  PF:  0.78  Shp: -1.10  Win: 19.08%  Exp:$-2.48  MaxDD:$606.29
+W10 IS+ENT (LB 31) | Trades: 246  ROI:$-956.48  PF:  0.76  Shp: -1.69  Win: 22.36%  Exp:$-3.48  MaxDD:$1,056.69
+W10 OOS+ENT (LB 31) | Trades: 152  ROI:$-218.34  PF:  0.90  Shp: -0.46  Win: 25.00%  Exp:$-1.06  MaxDD:$608.70
+W10 IS+FEE (LB 31) | Trades: 247  ROI:$-1,141.52  PF:  0.72  Shp: -2.05  Win: 21.46%  Exp:$-4.22  MaxDD:$1,231.43
+W10 OOS+FEE (LB 31) | Trades: 152  ROI:$-585.02  PF:  0.71  Shp: -1.54  Win: 19.08%  Exp:$-3.48  MaxDD:$731.47
+W10 IS+SLI (LB 31) | Trades: 247  ROI:$-1,489.12  PF:  0.65  Shp: -2.72  Win: 20.24%  Exp:$-5.64  MaxDD:$1,557.84
+W10 OOS+SLI (LB 31) | Trades: 152  ROI:$-826.74  PF:  0.62  Shp: -2.22  Win: 18.42%  Exp:$-5.07  MaxDD:$928.30
+W10 IS+ENT+IND (LB 30) | Trades: 249  ROI:$-903.10  PF:  0.77  Shp: -1.57  Win: 21.29%  Exp:$-3.22  MaxDD:$1,000.84
+W10 OOS+ENT+IND (LB 30) | Trades: 148  ROI:$-324.75  PF:  0.83  Shp: -0.78  Win: 23.65%  Exp:$-1.81  MaxDD:$635.70
+  W11 IS (LB 59) | Trades: 199  ROI:$-548.05  PF:  0.83  Shp: -0.99  Win: 21.61%  Exp:$-2.24  MaxDD:$945.81
+ W11 OOS (LB 59) | Trades:  89  ROI:$33.57  PF:  1.05  Shp:  0.18  Win: 26.97%  Exp:$0.78  MaxDD:$297.50
+W11 IS+ENT (LB 59) | Trades: 199  ROI:$-854.78  PF:  0.71  Shp: -1.80  Win: 21.61%  Exp:$-3.81  MaxDD:$1,216.89
+W11 OOS+ENT (LB 59) | Trades:  89  ROI:$-185.80  PF:  0.90  Shp: -0.41  Win: 24.72%  Exp:$-1.68  MaxDD:$485.97
+W11 IS+FEE (LB 59) | Trades: 199  ROI:$-747.10  PF:  0.77  Shp: -1.43  Win: 21.61%  Exp:$-3.24  MaxDD:$1,114.69
+W11 OOS+FEE (LB 59) | Trades:  89  ROI:$-55.50  PF:  0.99  Shp: -0.05  Win: 26.97%  Exp:$-0.22  MaxDD:$362.48
+W11 IS+SLI (LB 59) | Trades: 199  ROI:$-1,068.75  PF:  0.68  Shp: -2.12  Win: 19.60%  Exp:$-4.86  MaxDD:$1,404.01
+W11 OOS+SLI (LB 59) | Trades:  89  ROI:$-341.58  PF:  0.81  Shp: -0.85  Win: 24.72%  Exp:$-3.46  MaxDD:$620.65
+W11 IS+ENT+IND (LB 58) | Trades: 205  ROI:$-664.82  PF:  0.78  Shp: -1.29  Win: 21.95%  Exp:$-2.76  MaxDD:$1,064.99
+W11 OOS+ENT+IND (LB 58) | Trades:  95  ROI:$-202.11  PF:  0.89  Shp: -0.45  Win: 26.32%  Exp:$-1.73  MaxDD:$498.40
+  W12 IS (LB 58) | Trades: 189  ROI:$129.85  PF:  1.08  Shp:  0.43  Win: 27.51%  Exp:$1.14  MaxDD:$315.49
+ W12 OOS (LB 58) | Trades:  87  ROI:$-340.32  PF:  0.80  Shp: -0.86  Win: 22.99%  Exp:$-3.54  MaxDD:$515.32
+W12 IS+ENT (LB 58) | Trades: 189  ROI:$-179.10  PF:  0.96  Shp: -0.20  Win: 27.51%  Exp:$-0.49  MaxDD:$498.29
+W12 OOS+ENT (LB 58) | Trades:  87  ROI:$-253.73  PF:  0.86  Shp: -0.59  Win: 22.99%  Exp:$-2.57  MaxDD:$607.58
+W12 IS+FEE (LB 58) | Trades: 189  ROI:$-59.37  PF:  1.01  Shp:  0.05  Win: 27.51%  Exp:$0.14  MaxDD:$388.74
+W12 OOS+FEE (LB 58) | Trades:  87  ROI:$-427.17  PF:  0.76  Shp: -1.10  Win: 22.99%  Exp:$-4.54  MaxDD:$568.36
+W12 IS+SLI (LB 58) | Trades: 189  ROI:$-512.61  PF:  0.86  Shp: -0.86  Win: 24.34%  Exp:$-2.27  MaxDD:$660.81
+W12 OOS+SLI (LB 58) | Trades:  87  ROI:$-526.77  PF:  0.71  Shp: -1.37  Win: 21.84%  Exp:$-5.70  MaxDD:$642.20
+W12 IS+ENT+IND (LB 57) | Trades: 199  ROI:$-299.19  PF:  0.92  Shp: -0.45  Win: 27.64%  Exp:$-1.07  MaxDD:$509.69
+W12 OOS+ENT+IND (LB 57) | Trades:  89  ROI:$-276.55  PF:  0.85  Shp: -0.65  Win: 22.47%  Exp:$-2.77  MaxDD:$630.32
+  W13 IS (LB 49) | Trades: 205  ROI:$-64.30  PF:  1.00  Shp:  0.02  Win: 28.29%  Exp:$0.06  MaxDD:$461.68
+ W13 OOS (LB 49) | Trades: 101  ROI:$132.06  PF:  1.10  Shp:  0.40  Win: 27.72%  Exp:$1.62  MaxDD:$320.70
+W13 IS+ENT (LB 49) | Trades: 205  ROI:$-280.65  PF:  0.94  Shp: -0.37  Win: 24.88%  Exp:$-1.01  MaxDD:$623.07
+W13 OOS+ENT (LB 49) | Trades: 101  ROI:$331.86  PF:  1.23  Shp:  0.85  Win: 28.71%  Exp:$3.56  MaxDD:$245.22
+W13 IS+FEE (LB 49) | Trades: 205  ROI:$-269.38  PF:  0.94  Shp: -0.35  Win: 27.32%  Exp:$-0.94  MaxDD:$573.85
+W13 OOS+FEE (LB 49) | Trades: 101  ROI:$31.07  PF:  1.04  Shp:  0.15  Win: 27.72%  Exp:$0.62  MaxDD:$353.67
+W13 IS+SLI (LB 49) | Trades: 205  ROI:$-494.06  PF:  0.88  Shp: -0.75  Win: 25.37%  Exp:$-2.05  MaxDD:$741.97
+W13 OOS+SLI (LB 49) | Trades: 101  ROI:$-289.47  PF:  0.86  Shp: -0.65  Win: 23.76%  Exp:$-2.57  MaxDD:$476.30
+W13 IS+ENT+IND (LB 48) | Trades: 211  ROI:$-130.57  PF:  0.98  Shp: -0.10  Win: 25.12%  Exp:$-0.27  MaxDD:$529.46
+W13 OOS+ENT+IND (LB 48) | Trades: 103  ROI:$297.33  PF:  1.20  Shp:  0.77  Win: 28.16%  Exp:$3.15  MaxDD:$248.68
+  W14 IS (LB 73) | Trades: 152  ROI:$366.03  PF:  1.16  Shp:  0.79  Win: 28.29%  Exp:$2.77  MaxDD:$629.30
+ W14 OOS (LB 73) | Trades:  70  ROI:$235.82  PF:  1.24  Shp:  0.75  Win: 28.57%  Exp:$3.80  MaxDD:$377.71
+W14 IS+ENT (LB 73) | Trades: 152  ROI:$95.11  PF:  1.05  Shp:  0.28  Win: 26.97%  Exp:$0.97  MaxDD:$547.68
+W14 OOS+ENT (LB 73) | Trades:  70  ROI:$278.68  PF:  1.29  Shp:  0.87  Win: 27.14%  Exp:$4.40  MaxDD:$237.79
+W14 IS+FEE (LB 73) | Trades: 152  ROI:$214.08  PF:  1.10  Shp:  0.51  Win: 28.29%  Exp:$1.77  MaxDD:$701.32
+W14 OOS+FEE (LB 73) | Trades:  70  ROI:$165.70  PF:  1.17  Shp:  0.55  Win: 27.14%  Exp:$2.80  MaxDD:$406.77
+W14 IS+SLI (LB 73) | Trades: 152  ROI:$-77.38  PF:  0.99  Shp: -0.04  Win: 26.97%  Exp:$-0.15  MaxDD:$778.02
+W14 OOS+SLI (LB 73) | Trades:  70  ROI:$97.35  PF:  1.10  Shp:  0.36  Win: 27.14%  Exp:$1.83  MaxDD:$436.94
+W14 IS+ENT+IND (LB 72) | Trades: 152  ROI:$191.93  PF:  1.09  Shp:  0.46  Win: 27.63%  Exp:$1.61  MaxDD:$559.31
+W14 OOS+ENT+IND (LB 72) | Trades:  70  ROI:$303.24  PF:  1.32  Shp:  0.94  Win: 27.14%  Exp:$4.74  MaxDD:$238.32
+  W15 IS (LB 56) | Trades: 161  ROI:$1,023.20  PF:  1.45  Shp:  1.96  Win: 31.68%  Exp:$6.73  MaxDD:$346.39
+ W15 OOS (LB 56) | Trades:  96  ROI:$-471.73  PF:  0.75  Shp: -1.20  Win: 20.83%  Exp:$-4.55  MaxDD:$574.09
+W15 IS+ENT (LB 56) | Trades: 161  ROI:$664.29  PF:  1.29  Shp:  1.34  Win: 29.81%  Exp:$4.45  MaxDD:$225.55
+W15 OOS+ENT (LB 56) | Trades:  96  ROI:$-714.31  PF:  0.62  Shp: -1.96  Win: 19.79%  Exp:$-7.09  MaxDD:$805.07
+W15 IS+FEE (LB 56) | Trades: 161  ROI:$862.06  PF:  1.36  Shp:  1.67  Win: 31.68%  Exp:$5.72  MaxDD:$373.59
+W15 OOS+FEE (LB 56) | Trades:  96  ROI:$-567.77  PF:  0.70  Shp: -1.46  Win: 20.83%  Exp:$-5.55  MaxDD:$658.12
+W15 IS+SLI (LB 56) | Trades: 161  ROI:$517.47  PF:  1.21  Shp:  1.05  Win: 29.81%  Exp:$3.57  MaxDD:$400.21
+W15 OOS+SLI (LB 56) | Trades:  96  ROI:$-759.94  PF:  0.62  Shp: -2.03  Win: 19.79%  Exp:$-7.55  MaxDD:$844.22
+W15 IS+ENT+IND (LB 55) | Trades: 159  ROI:$655.58  PF:  1.29  Shp:  1.32  Win: 30.19%  Exp:$4.45  MaxDD:$221.97
+W15 OOS+ENT+IND (LB 55) | Trades:  98  ROI:$-735.43  PF:  0.61  Shp: -2.02  Win: 18.37%  Exp:$-7.16  MaxDD:$826.17
+  W16 IS (LB 49) | Trades: 175  ROI:$23.04  PF:  1.03  Shp:  0.16  Win: 26.86%  Exp:$0.49  MaxDD:$458.13
+ W16 OOS (LB 49) | Trades: 102  ROI:$-89.46  PF:  0.98  Shp: -0.09  Win: 28.43%  Exp:$-0.31  MaxDD:$371.50
+W16 IS+ENT (LB 49) | Trades: 175  ROI:$-484.01  PF:  0.86  Shp: -0.81  Win: 23.43%  Exp:$-2.38  MaxDD:$823.98
+W16 OOS+ENT (LB 49) | Trades: 102  ROI:$-242.48  PF:  0.86  Shp: -0.60  Win: 27.45%  Exp:$-1.83  MaxDD:$537.76
+W16 IS+FEE (LB 49) | Trades: 175  ROI:$-152.06  PF:  0.97  Shp: -0.17  Win: 26.86%  Exp:$-0.51  MaxDD:$503.80
+W16 OOS+FEE (LB 49) | Trades: 102  ROI:$-191.49  PF:  0.90  Shp: -0.40  Win: 25.49%  Exp:$-1.31  MaxDD:$440.37
+W16 IS+SLI (LB 49) | Trades: 175  ROI:$-386.25  PF:  0.90  Shp: -0.61  Win: 24.57%  Exp:$-1.86  MaxDD:$704.07
+W16 OOS+SLI (LB 49) | Trades: 102  ROI:$-367.06  PF:  0.79  Shp: -0.93  Win: 23.53%  Exp:$-3.03  MaxDD:$596.03
+W16 IS+ENT+IND (LB 48) | Trades: 181  ROI:$-404.90  PF:  0.89  Shp: -0.65  Win: 24.86%  Exp:$-1.86  MaxDD:$769.36
+W16 OOS+ENT+IND (LB 48) | Trades: 110  ROI:$-183.98  PF:  0.90  Shp: -0.39  Win: 30.91%  Exp:$-1.15  MaxDD:$455.82
+  W17 IS (LB 32) | Trades: 251  ROI:$-600.29  PF:  0.86  Shp: -0.95  Win: 23.11%  Exp:$-1.99  MaxDD:$767.95
+ W17 OOS (LB 32) | Trades: 128  ROI:$94.72  PF:  1.08  Shp:  0.35  Win: 27.34%  Exp:$1.09  MaxDD:$328.28
+W17 IS+ENT (LB 32) | Trades: 251  ROI:$-768.71  PF:  0.81  Shp: -1.30  Win: 25.10%  Exp:$-2.67  MaxDD:$950.72
+W17 OOS+ENT (LB 32) | Trades: 128  ROI:$90.19  PF:  1.08  Shp:  0.33  Win: 29.69%  Exp:$1.04  MaxDD:$369.76
+W17 IS+FEE (LB 32) | Trades: 251  ROI:$-851.31  PF:  0.79  Shp: -1.43  Win: 22.71%  Exp:$-2.99  MaxDD:$1,000.78
+W17 OOS+FEE (LB 32) | Trades: 128  ROI:$-33.22  PF:  1.01  Shp:  0.03  Win: 25.78%  Exp:$0.09  MaxDD:$360.34
+W17 IS+SLI (LB 32) | Trades: 251  ROI:$-1,240.72  PF:  0.71  Shp: -2.16  Win: 22.31%  Exp:$-4.55  MaxDD:$1,367.33
+W17 OOS+SLI (LB 32) | Trades: 128  ROI:$-374.62  PF:  0.83  Shp: -0.85  Win: 25.00%  Exp:$-2.59  MaxDD:$580.71
+W17 IS+ENT+IND (LB 31) | Trades: 263  ROI:$-776.36  PF:  0.81  Shp: -1.29  Win: 23.95%  Exp:$-2.57  MaxDD:$942.97
+W17 OOS+ENT+IND (LB 31) | Trades: 128  ROI:$276.97  PF:  1.20  Shp:  0.78  Win: 31.25%  Exp:$2.51  MaxDD:$333.62
+  W18 IS (LB 27) | Trades: 261  ROI:$298.81  PF:  1.13  Shp:  0.75  Win: 29.50%  Exp:$1.57  MaxDD:$252.05
+ W18 OOS (LB 27) | Trades: 134  ROI:$-552.20  PF:  0.76  Shp: -1.25  Win: 19.40%  Exp:$-3.81  MaxDD:$852.01
+W18 IS+ENT (LB 27) | Trades: 261  ROI:$207.29  PF:  1.10  Shp:  0.58  Win: 29.12%  Exp:$1.20  MaxDD:$334.76
+W18 OOS+ENT (LB 27) | Trades: 134  ROI:$-485.90  PF:  0.79  Shp: -1.09  Win: 22.39%  Exp:$-3.31  MaxDD:$897.15
+W18 IS+FEE (LB 27) | Trades: 261  ROI:$37.83  PF:  1.05  Shp:  0.27  Win: 28.35%  Exp:$0.57  MaxDD:$350.75
+W18 OOS+FEE (LB 27) | Trades: 134  ROI:$-686.19  PF:  0.71  Shp: -1.58  Win: 19.40%  Exp:$-4.81  MaxDD:$929.04
+W18 IS+SLI (LB 27) | Trades: 261  ROI:$-594.33  PF:  0.87  Shp: -0.90  Win: 26.05%  Exp:$-1.86  MaxDD:$778.46
+W18 OOS+SLI (LB 27) | Trades: 134  ROI:$-1,032.36  PF:  0.59  Shp: -2.51  Win: 17.16%  Exp:$-7.41  MaxDD:$1,164.87
+W18 IS+ENT+IND (LB 26) | Trades: 269  ROI:$346.53  PF:  1.15  Shp:  0.83  Win: 29.00%  Exp:$1.69  MaxDD:$290.74
+W18 OOS+ENT+IND (LB 26) | Trades: 134  ROI:$-521.05  PF:  0.77  Shp: -1.18  Win: 22.39%  Exp:$-3.58  MaxDD:$938.56
