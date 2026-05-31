@@ -27,7 +27,7 @@
 //!
 //! `Phi` and `Phi^{-1}` are taken from `statrs` (`Normal::cdf` /
 //! `Normal::inverse_cdf`, matching scipy `norm.cdf` / `norm.ppf` to
-//! ~1e-12). The coarse A&S 7.1.26 `erf` in `t5_statarb::screen` is
+//! ~1e-12). A coarse Abramowitz & Stegun 7.1.26 `erf` approximation is
 //! deliberately NOT reused here: it has no inverse and its 1.5e-7 forward
 //! error would be amplified into `SR_0` at the `1 - 1/N` tail.
 
