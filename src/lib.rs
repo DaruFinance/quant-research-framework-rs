@@ -532,19 +532,23 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         // use; otherwise this is a no-op. See `Config::use_regime_seg`.
         if cfg.use_regime_seg && idx < 200 { continue; }
 
-        // v0.2.4 fix (matches Python v0.2.3): force-close fires whenever an
-        // open position exists at a session-end bar. Prior versions guarded
-        // on `code != 0`, silently carrying positions across out-of-session
-        // windows when no signal happened to land on the closing bar.
-        if cfg.use_sessions && session_end_bar[idx] && open_pos != 0 {
-            if open_pos == 1 && code != 3 { code = 2; }
-            else if open_pos == -1 && code != 1 { code = 4; }
-        }
-        // Item #46: hold-period force-close. Pure integer arithmetic
-        // (idx and ent_bar both at-or-before this bar). Only fires if
-        // session-end didn't already set the code, preserving the
-        // documented precedence.
-        if cfg.max_hold_bars > 0 && open_pos != 0 && code != 2 && code != 4 {
+        // Session-end handling (roadmap item 08 — match Python
+        // `_backtest_numba_core` exactly). On the last in-session bar of the
+        // NY day: force-close any open position (exit at open) and NEVER
+        // open or flip. Python sets `code = 2/4` UNCONDITIONALLY when a
+        // position is open (overriding any flip signal on that bar) and
+        // `code = 0` when flat (its `if use_sessions and code in (1,3) and
+        // end_bar_flag: code = 0`, which blocks a new entry). The prior Rust
+        // guards (`code != 3` / `code != 1`) let an opposite-flip entry slip
+        // through, and there was no flat-entry block at all, so Rust opened
+        // positions on the closing bar that Python suppresses — inflating the
+        // trade count under the forex+session combo.
+        let end_bar_flag = cfg.use_sessions && session_end_bar[idx];
+        if end_bar_flag {
+            code = if open_pos == 1 { 2 } else if open_pos == -1 { 4 } else { 0 };
+        } else if cfg.max_hold_bars > 0 && open_pos != 0 && code != 2 && code != 4 {
+            // Item #46: hold-period force-close (only when not a session-end
+            // bar — session-end takes precedence, matching Python's elif).
             let held = (idx as i64) - (ent_bar as i64);
             if held >= cfg.max_hold_bars as i64 {
                 code = if open_pos == 1 { 2 } else { 4 };
@@ -554,7 +558,9 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
 
         // SL/TP check — additive in forex (sl_perc/tp_perc are pre-converted
         // to pip-distance fractions when use_forex), multiplicative in crypto.
-        if open_pos != 0 && code != 1 && code != 3 {
+        // Skipped on session-end bars (Python's `not end_bar_flag`): the
+        // force-close above already exits the position there.
+        if open_pos != 0 && code != 1 && code != 3 && !end_bar_flag {
             let (sl_pr, tp_pr) = if cfg.use_forex {
                 let sl = if open_pos == 1 { entry_price - sl_perc } else { entry_price + sl_perc };
                 let tp = if open_pos == 1 { entry_price + tp_perc } else { entry_price - tp_perc };
