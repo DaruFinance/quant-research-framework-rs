@@ -72,6 +72,10 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+          # Multi-asset substrate extras so the panel/pairs/carry parity
+          # harnesses can import backtester.{panel,pairs,carry}
+          # (statsmodels, xarray, pyarrow, scipy).
+          pip install -e ".[panel,pairs,carry]"
 
       - name: Parity — default config (56 metric points, SOLUSDT 1h)
         working-directory: quant-research-framework-rs
@@ -100,3 +104,23 @@ jobs:
       - name: Parity — default config on 100k synthetic GBM
         working-directory: quant-research-framework-rs
         run: python tools/parity_check.py --csv data/SYNTH_100k.csv --tol 0.001
+
+      # ---- v0.5.0 multi-asset core surfaces (item 07) ----
+      - name: Parity — four-way combo (regime + WFO + forex + session, EURUSD 1h)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_combo.py --csv data/EURUSD_1h.csv --tol 0.001
+
+      - name: Parity — panel substrate (regime / baskets / ERC / neutralisations)
+        working-directory: quant-research-framework-rs
+        # Default per-key tolerances (all far inside the 1e-3 published standard;
+        # the ERC iterative solver agrees to ~3e-5). --strict tightens ERC to
+        # 1e-6 and is solver-sensitive by design, so it is not the CI gate.
+        run: python tools/parity_panel.py
+
+      - name: Parity — pairs primitives (spread / screener / cadence / stops)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_pairs.py --tol 0.001
+
+      - name: Parity — carry primitives (funding / basis / OI / triggers / models)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_carry.py --tol 0.001
