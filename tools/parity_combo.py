@@ -1,25 +1,32 @@
 #!/usr/bin/env python3
-"""Combination parity check: regime + WFO + forex + session, both engines.
+"""Four-way parity GATE: regime + WFO + forex + session, both engines.
 
-This script layers all four v0.2.x features at once (USE_REGIME_SEG +
-USE_WFO + FOREX_MODE + TRADE_SESSIONS) plus OPTIMIZE_RRR=False and
-MIN_TRADES=1, then reports the metric diff. It is a *diagnostic*, not a
-pass/fail check.
-
-Single-feature parity is verified by separate harnesses that DO assert
-within 1e-3 relative tolerance:
+This script layers all four features at once (USE_REGIME_SEG + USE_WFO +
+FOREX_MODE + TRADE_SESSIONS) and asserts the two engines agree within 1e-3
+relative tolerance (trade counts exactly), exiting non-zero on any
+mismatch. It is the fourth parity surface, complementing:
   * tools/parity_check.py   — default config (56/56 metric points)
   * tools/parity_regime.py  — USE_REGIME_SEG + USE_WFO (98/98 points)
   * tools/parity_forex.py   — FOREX_MODE on EURUSD 1h (56/56 points)
 
-This combo still reports diffs at the time of writing; the remaining gap
-shows up even on the classic Baseline IS/OOS line, which is independent
-of regime — i.e. the issue is in the forex/session interaction, not in
-the regime engine itself. The four-way combo is not part of v0.3.0's
-parity guarantee.
+Both engines are driven with the SAME selection knobs (MIN_TRADES and
+OPTIMIZE_RRR are compile-time constants on the Rust side, so the Python
+driver keeps the shared defaults rather than overriding them — an earlier
+override was the dominant cause of the combo divergence).
+
+History (roadmap item 08): the combo was a known-failing diagnostic. Two
+causes were found and fixed — (1) the MIN_TRADES/OPTIMIZE_RRR driver
+mismatch above, and (2) three session-end-bar handling divergences in the
+Rust backtest core (it let opposite-flip entries through, never blocked a
+new entry when flat, and ran the SL/TP check on the closing bar, whereas
+Python force-closes unconditionally and skips SL/TP). With both fixed the
+combo is byte-exact on EURUSD 1h across all 14 stages x 7 fields. See
+docs/verification/combo_fourway_item08.md.
 
 Usage:
-    python tools/parity_combo.py
+    python tools/parity_combo.py                       # EURUSD 1h, tol 1e-3
+    python tools/parity_combo.py --csv data/SOLUSDT_1h.csv
+Exit 0 = parity OK, 1 = mismatch, 2 = setup failure.
 """
 from __future__ import annotations
 
@@ -65,7 +72,7 @@ def parse_metrics(stdout: str) -> dict[str, dict]:
 
 def run_python(csv: Path) -> str:
     env = os.environ.copy()
-    env["BT_CSV"] = str(csv); env["MPLBACKEND"] = "Agg"
+    env["BT_CSV"] = str(Path(csv).resolve()); env["MPLBACKEND"] = "Agg"
     driver = """
 import sys
 sys.path.insert(0, %r)
@@ -78,8 +85,13 @@ bt.FOREX_MODE        = True
 bt.TRADE_SESSIONS    = True
 bt.SESSION_START     = "8:00"
 bt.SESSION_END       = "16:50"
-bt.MIN_TRADES        = 1
-bt.OPTIMIZE_RRR      = False
+# MIN_TRADES and OPTIMIZE_RRR are compile-time constants on the Rust side
+# (MIN_TRADES=10, OPTIMIZE_RRR=true); the parity comparison must use the
+# SAME values on both engines, so we keep the shared defaults here rather
+# than overriding them. The earlier 1 / False overrides were the sole cause
+# of the combo divergence: they changed which LB the IS phase selected.
+bt.MIN_TRADES        = 10
+bt.OPTIMIZE_RRR      = True
 # Pip-mode side-effects that backtester.py applies at import time when
 # FOREX_MODE was already True. We re-apply them here because we flipped
 # the flag at runtime instead.
@@ -176,32 +188,43 @@ pub fn run_with_regime_cfg(
     return proc.stdout
 
 
-def report(py: dict, rs: dict, tags: list[str]) -> None:
-    print(f"\nMetric comparison ({len(tags)} tags):\n")
+def report(py: dict, rs: dict, tags: list[str], tol: float) -> int:
+    """Compare and return the number of failing (tag, field) points.
+    Trade counts must match exactly; floats within `tol` relative."""
+    print(f"\nMetric comparison ({len(tags)} tags, tol={tol:.0e}):\n")
+    failures = 0
     for tag in tags:
-        if tag not in py and tag not in rs:
-            continue
-        if tag not in py:
-            print(f"  [{tag}]  rust-only:  {rs[tag]}")
-            continue
-        if tag not in rs:
-            print(f"  [{tag}]  py-only:    {py[tag]}")
+        if tag not in py or tag not in rs:
+            print(f"  [{tag}]  MISSING (py={tag in py} rs={tag in rs})")
+            failures += 1
             continue
         print(f"  [{tag}]")
         for k in ("trades", "roi", "pf", "sharpe", "win_rate", "exp", "max_dd"):
             p = py[tag][k]; r = rs[tag][k]
             if k == "trades":
-                ok = "OK" if p == r else "DIFF"
-                print(f"    {k:>8}: py={p}  rs={r}  [{ok}]")
+                ok = p == r
+                print(f"    {k:>8}: py={p}  rs={r}  [{'OK' if ok else 'DIFF'}]")
+                if not ok: failures += 1
                 continue
             denom = max(abs(p), abs(r), 1e-9)
             rel = abs(p - r) / denom
-            ok = "OK" if (rel <= 0.05 or (abs(p) < 1e-6 and abs(r) < 1e-6)) else "DIFF"
-            print(f"    {k:>8}: py={p:>14.4f}  rs={r:>14.4f}  rel={rel:6.2%}  [{ok}]")
+            ok = rel <= tol or (abs(p) < 1e-6 and abs(r) < 1e-6)
+            print(f"    {k:>8}: py={p:>14.4f}  rs={r:>14.4f}  rel={rel:6.2%}  [{'OK' if ok else 'DIFF'}]")
+            if not ok: failures += 1
+    return failures
 
 
 def main() -> int:
-    csv = REPO_RUST / "data" / "SOLUSDT_1h.csv"
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--csv", type=Path, default=REPO_RUST / "data" / "EURUSD_1h.csv",
+                    help="OHLC CSV (default EURUSD_1h, where forex pip sizing is "
+                         "economically meaningful)")
+    ap.add_argument("--tol", type=float, default=1e-3,
+                    help="relative tolerance for float metrics (default 1e-3, "
+                         "matching the published parity surfaces)")
+    args = ap.parse_args()
+    csv = args.csv
     if not csv.exists():
         print(f"need {csv}"); return 2
     print(f"CSV: {csv}\nFlags: regime + WFO + forex + session (all ON)\n")
@@ -217,8 +240,12 @@ def main() -> int:
     tags = ["IS-raw", "OOS-raw", "IS-opt", "OOS-opt",
             "Baseline IS", "Baseline OOS",
             "W01 IS", "W01 OOS", "W02 IS", "W02 OOS"]
-    report(py, rs, tags)
-    return 0
+    failures = report(py, rs, tags, args.tol)
+    if failures == 0:
+        print(f"\n  COMBO PARITY OK ({len(tags)} stages x 7 fields within tol)")
+        return 0
+    print(f"\n  COMBO PARITY FAIL: {failures} points outside tol")
+    return 1
 
 
 if __name__ == "__main__":

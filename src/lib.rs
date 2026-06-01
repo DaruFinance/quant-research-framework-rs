@@ -131,6 +131,26 @@ fn python_iloc_slice(start_raw: i64, end_raw: i64, length: usize) -> (usize, usi
     if s >= e { (s, s) } else { (s, e) }
 }
 
+pub mod invariants;
+pub mod metrics;
+pub mod objectives;
+pub mod orchestrator;
+
+#[cfg(feature = "panel")]
+pub mod panel;
+
+#[cfg(feature = "pairs")]
+pub mod pairs;
+
+#[cfg(feature = "carry")]
+pub mod carry;
+
+// Deflated Sharpe Ratio post-processing (roadmap item 09 — Rust mirror of
+// `backtester/dsr.py`). Standalone scalar utility gated behind its own
+// lightweight `dsr` feature so it does not drag in the panel/pairs stack.
+#[cfg(feature = "dsr")]
+pub mod dsr;
+
 #[derive(Clone)]
 pub struct Bar {
     pub time_unix: i64,
@@ -149,6 +169,25 @@ pub struct Trade {
     pub exit_price: f64,
     pub qty: f64,
     pub pnl: f64,
+    /// Item #2: leg index within a multi-leg trade group. Always 0 in
+    /// single-leg single-asset mode. Set by the backtest core at every
+    /// `trades.push(...)` site; aggregation lives downstream.
+    pub leg_id: u32,
+    /// Item #2: shared group id across legs of the same logical trade.
+    /// Single-leg mode emits `trade_group_id == trades.len()` at push
+    /// time so every leg row is its own group. The trade ledger CSV
+    /// schema stays at 15 columns (these fields are internal); parity
+    /// vs Python is preserved.
+    pub trade_group_id: u64,
+    /// Item #3: cost decomposition. fee + slippage + funding +
+    /// net_pnl == gross_pnl by construction, satisfying the leg-level
+    /// identity to floating-point tolerance. net_pnl == pnl. In forex
+    /// mode slippage and funding are 0 (R-unit math folds them in).
+    pub fee: f64,
+    pub slippage: f64,
+    pub funding: f64,
+    pub gross_pnl: f64,
+    pub net_pnl: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -220,6 +259,12 @@ pub struct Config {
     /// where the optimiser's side comparison always took the short
     /// branch. See CHANGELOG v0.3.1 / Python v0.2.5.
     pub legacy_side_bug: bool,
+    /// Item #46: maximum hold period in bars. 0 = no force-close
+    /// (engine behaves as pre-#46). When > 0, the kernel emits a code-2
+    /// / code-4 close at bar i for any open position with
+    /// `(i - ent_bar) >= max_hold_bars`. Priority: news/session >
+    /// hold-period > SL/TP intrabar > signal-driven.
+    pub max_hold_bars: usize,
     /// Crypto-path gap-handling clamp. Default false (existing behaviour).
     /// When true, every realized trade's pnl-before-costs in the crypto
     /// path is clipped to [-1R, +RRR*R] where R = entry_price *
@@ -240,7 +285,8 @@ impl Config {
                  session_end_hour: SESSION_END_HOUR,
                  use_oos2: USE_OOS2, use_regime_seg: false, pip_size: 0.0001,
                  account_size: ACCOUNT_SIZE, mask_exits: false,
-                 legacy_side_bug: false, clamp_results: false }
+                 legacy_side_bug: false,
+                 max_hold_bars: 0, clamp_results: false }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
     /// Forex defaults: position_size = account_size = 1.0 (R-unit
@@ -262,6 +308,14 @@ impl Config {
     }
     pub fn with_mask_exits(mut self, on: bool) -> Self { self.mask_exits = on; self }
     pub fn with_legacy_side_bug(mut self, on: bool) -> Self { self.legacy_side_bug = on; self }
+    /// Item #46: cap the number of bars a position can be held.
+    /// 0 (default) disables; >0 makes the kernel force-close at bar i
+    /// when `(i - ent_bar) >= max_hold_bars`. Mirrors Python's
+    /// `MAX_HOLD_BARS` module constant.
+    pub fn with_max_hold_bars(mut self, n: usize) -> Self {
+        self.max_hold_bars = n;
+        self
+    }
     /// Enable crypto-path R-clamp for gap-prone instruments. No-op in forex
     /// mode (forex already clamps). See `Config::clamp_results` docs.
     pub fn with_clamp_results(mut self, on: bool) -> Self { self.clamp_results = on; self }
@@ -501,19 +555,35 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         // use; otherwise this is a no-op. See `Config::use_regime_seg`.
         if cfg.use_regime_seg && idx < 200 { continue; }
 
-        // v0.2.4 fix (matches Python v0.2.3): force-close fires whenever an
-        // open position exists at a session-end bar. Prior versions guarded
-        // on `code != 0`, silently carrying positions across out-of-session
-        // windows when no signal happened to land on the closing bar.
-        if cfg.use_sessions && session_end_bar[idx] && open_pos != 0 {
-            if open_pos == 1 && code != 3 { code = 2; }
-            else if open_pos == -1 && code != 1 { code = 4; }
+        // Session-end handling (roadmap item 08 — match Python
+        // `_backtest_numba_core` exactly). On the last in-session bar of the
+        // NY day: force-close any open position (exit at open) and NEVER
+        // open or flip. Python sets `code = 2/4` UNCONDITIONALLY when a
+        // position is open (overriding any flip signal on that bar) and
+        // `code = 0` when flat (its `if use_sessions and code in (1,3) and
+        // end_bar_flag: code = 0`, which blocks a new entry). The prior Rust
+        // guards (`code != 3` / `code != 1`) let an opposite-flip entry slip
+        // through, and there was no flat-entry block at all, so Rust opened
+        // positions on the closing bar that Python suppresses — inflating the
+        // trade count under the forex+session combo.
+        let end_bar_flag = cfg.use_sessions && session_end_bar[idx];
+        if end_bar_flag {
+            code = if open_pos == 1 { 2 } else if open_pos == -1 { 4 } else { 0 };
+        } else if cfg.max_hold_bars > 0 && open_pos != 0 && code != 2 && code != 4 {
+            // Item #46: hold-period force-close (only when not a session-end
+            // bar — session-end takes precedence, matching Python's elif).
+            let held = (idx as i64) - (ent_bar as i64);
+            if held >= cfg.max_hold_bars as i64 {
+                code = if open_pos == 1 { 2 } else { 4 };
+            }
         }
         let price_open = bars[idx].open;
 
         // SL/TP check — additive in forex (sl_perc/tp_perc are pre-converted
         // to pip-distance fractions when use_forex), multiplicative in crypto.
-        if open_pos != 0 && code != 1 && code != 3 {
+        // Skipped on session-end bars (Python's `not end_bar_flag`): the
+        // force-close above already exits the position there.
+        if open_pos != 0 && code != 1 && code != 3 && !end_bar_flag {
             let (sl_pr, tp_pr) = if cfg.use_forex {
                 let sl = if open_pos == 1 { entry_price - sl_perc } else { entry_price + sl_perc };
                 let tp = if open_pos == 1 { entry_price + tp_perc } else { entry_price - tp_perc };
@@ -547,9 +617,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 } else {
                     pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc)
                 };
+                // Item #3: cost decomposition (capture funding before reset).
+                let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+                    open_pos, entry_price, exit_price, qty,
+                    fee_entry, fee_exit, funding_acc, slip,
+                    cfg.use_forex, pnl);
                 funding_acc = 0.0;
+                let tgid = trades.len() as u64;
                 trades.push(Trade { side: open_pos, entry_idx: ent_bar, exit_idx: idx as i32,
-                    entry_price, exit_price, qty, pnl });
+                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+                    fee: fee_v, slippage: slip_v, funding: fund_v,
+                    gross_pnl: gross_v, net_pnl: pnl });
                 let last_eq = *equity_list.last().unwrap();
                 equity_list.push(last_eq + pnl);
                 open_pos = 0;
@@ -562,9 +640,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let exit_price = price_open * (1.0 + slip);
                 let fee_exit = qty * exit_price * fee_rate;
                 let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+                // Item #3: cost decomposition.
+                let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+                    -1, entry_price, exit_price, qty,
+                    fee_entry, fee_exit, funding_acc, slip,
+                    cfg.use_forex, pnl);
                 funding_acc = 0.0;
+                let tgid = trades.len() as u64;
                 trades.push(Trade { side: -1, entry_idx: ent_bar, exit_idx: idx as i32,
-                    entry_price, exit_price, qty, pnl });
+                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+                    fee: fee_v, slippage: slip_v, funding: fund_v,
+                    gross_pnl: gross_v, net_pnl: pnl });
                 let last_eq = *equity_list.last().unwrap();
                 equity_list.push(last_eq + pnl);
                 open_pos = 0;
@@ -580,9 +666,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let exit_price = price_open * (1.0 - slip);
                 let fee_exit = qty * exit_price * fee_rate;
                 let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+                // Item #3: cost decomposition.
+                let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+                    1, entry_price, exit_price, qty,
+                    fee_entry, fee_exit, funding_acc, slip,
+                    cfg.use_forex, pnl);
                 funding_acc = 0.0;
+                let tgid = trades.len() as u64;
                 trades.push(Trade { side: 1, entry_idx: ent_bar, exit_idx: idx as i32,
-                    entry_price, exit_price, qty, pnl });
+                    entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+                    fee: fee_v, slippage: slip_v, funding: fund_v,
+                    gross_pnl: gross_v, net_pnl: pnl });
                 let last_eq = *equity_list.last().unwrap();
                 equity_list.push(last_eq + pnl);
                 open_pos = 0;
@@ -597,9 +691,17 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let exit_price = price_open * (1.0 - slip);
             let fee_exit = qty * exit_price * fee_rate;
             let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+            // Item #3: cost decomposition.
+            let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+                1, entry_price, exit_price, qty,
+                fee_entry, fee_exit, funding_acc, slip,
+                cfg.use_forex, pnl);
             funding_acc = 0.0;
+            let tgid = trades.len() as u64;
             trades.push(Trade { side: 1, entry_idx: ent_bar, exit_idx: idx as i32,
-                entry_price, exit_price, qty, pnl });
+                entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+                fee: fee_v, slippage: slip_v, funding: fund_v,
+                gross_pnl: gross_v, net_pnl: pnl });
             let last_eq = *equity_list.last().unwrap();
             equity_list.push(last_eq + pnl);
             open_pos = 0;
@@ -607,24 +709,44 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let exit_price = price_open * (1.0 + slip);
             let fee_exit = qty * exit_price * fee_rate;
             let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+            // Item #3: cost decomposition.
+            let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+                -1, entry_price, exit_price, qty,
+                fee_entry, fee_exit, funding_acc, slip,
+                cfg.use_forex, pnl);
             funding_acc = 0.0;
+            let tgid = trades.len() as u64;
             trades.push(Trade { side: -1, entry_idx: ent_bar, exit_idx: idx as i32,
-                entry_price, exit_price, qty, pnl });
+                entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+                fee: fee_v, slippage: slip_v, funding: fund_v,
+                gross_pnl: gross_v, net_pnl: pnl });
             let last_eq = *equity_list.last().unwrap();
             equity_list.push(last_eq + pnl);
             open_pos = 0;
         }
     }
 
-    // Force-close open trade
+    // Force-close open trade at end of data — restored to match v1 framework
+    // and Python wrapper semantics (which both force-close on the last bar's
+    // open ± slip). The earlier no-force-close behavior gave better live/batch
+    // parity but broke 3-way parity with v1 Rust + Python framework on USDJPY
+    // (3 specs/15k) and BTC (1228 specs/15k). Restoring v1 semantics keeps the
+    // three frameworks fungible at the cost of the synthetic last-bar exit.
     if open_pos != 0 {
         let price_last = bars[n - 1].open;
         let exit_price = if open_pos == 1 { price_last * (1.0 - slip) }
                          else { price_last * (1.0 + slip) };
         let fee_exit = qty * exit_price * fee_rate;
         let pnl = pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
+        let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
+            open_pos, entry_price, exit_price, qty,
+            fee_entry, fee_exit, funding_acc, slip,
+            cfg.use_forex, pnl);
+        let tgid = trades.len() as u64;
         trades.push(Trade { side: open_pos, entry_idx: ent_bar, exit_idx: (n-1) as i32,
-            entry_price, exit_price, qty, pnl });
+            entry_price, exit_price, qty, pnl, leg_id: 0, trade_group_id: tgid,
+            fee: fee_v, slippage: slip_v, funding: fund_v,
+            gross_pnl: gross_v, net_pnl: pnl });
         let last_eq = *equity_list.last().unwrap();
         equity_list.push(last_eq + pnl);
     }
@@ -649,6 +771,42 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
 
 fn run_backtest(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics, Vec<f64>, Vec<f64>) {
     backtest_core(bars, sig, cfg)
+}
+
+/// Item #3 cost decomposition for a single trade leg. Returns
+/// `(fee, slippage, funding, gross_pnl)` satisfying
+/// `gross_pnl - fee - slippage - funding == pnl` to fp tolerance.
+/// Crypto recovers raw prices via the inverse slippage adjust:
+///   `raw_entry = entry_price / (1 + slip)`  for long entry
+///   `raw_exit  = exit_price  / (1 - slip)`  for long exit
+///   (mirror for short)
+/// Forex returns `slippage = funding = 0` and `gross_pnl = pnl + fee`
+/// since R-unit pnl already folds slippage and funding into trade_res.
+fn decompose_costs(
+    side_val: i8,
+    entry_price: f64,
+    exit_price: f64,
+    qty: f64,
+    fee_entry: f64,
+    fee_exit: f64,
+    funding_acc: f64,
+    slip: f64,
+    use_forex: bool,
+    pnl: f64,
+) -> (f64, f64, f64, f64) {
+    let fee_total = fee_entry + fee_exit;
+    if use_forex {
+        return (fee_total, 0.0, 0.0, pnl + fee_total);
+    }
+    let (raw_entry, raw_exit) = if side_val == 1 {
+        (entry_price / (1.0 + slip), exit_price / (1.0 - slip))
+    } else {
+        (entry_price / (1.0 - slip), exit_price / (1.0 + slip))
+    };
+    let slippage = qty * slip * (raw_entry + raw_exit);
+    let funding = funding_acc;
+    let gross_pnl = pnl + fee_total + slippage + funding;
+    (fee_total, slippage, funding, gross_pnl)
 }
 
 fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Metrics {

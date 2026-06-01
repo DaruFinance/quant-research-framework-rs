@@ -6,6 +6,7 @@ use quant_research_framework_rs::{
     Bar, Config, RegimeConfig, default_regime_detector, parse_signals_with_flags,
     compute_in_flags, compute_ema, parse_signals,
 };
+use quant_research_framework_rs::invariants::{assert_no_lookahead, pollute_bars_after};
 
 fn make_bars(n: usize, start_unix: i64, interval_s: i64, seed: u64) -> Vec<Bar> {
     use rand::{SeedableRng, Rng, rngs::StdRng};
@@ -23,6 +24,58 @@ fn ny_hour(unix_ts: i64) -> u32 {
     use chrono::{TimeZone, Utc, Timelike};
     use chrono_tz::America::New_York;
     Utc.timestamp_opt(unix_ts, 0).single().unwrap().with_timezone(&New_York).hour()
+}
+
+// ----------------------------------------------------------------------------
+// Item #14: lookahead-leak harness self-tests.
+// ----------------------------------------------------------------------------
+
+/// The default regime detector consumes only past close values (an
+/// EMA-200 and an 8-bar persistence check). Polluting bars >= cut must
+/// leave the labels at positions < cut unchanged.
+#[test]
+fn harness_passes_default_regime_detector() {
+    let bars = make_bars(800, 1_600_000_000, 3600, 17);
+    // Warmup must complete before cut, otherwise the detector returns
+    // all-zeros for the head and the test is trivially true.
+    let cut = 400;
+    assert_no_lookahead("default_regime_detector", &bars, cut, default_regime_detector);
+}
+
+/// A deliberately leaky detector that copies the NEXT bar's close into
+/// today's label must be caught by the harness.
+#[test]
+#[should_panic(expected = "leaky_sentinel")]
+fn harness_catches_known_leak() {
+    fn leaky(bars: &[Bar]) -> Vec<u8> {
+        // Bug: looks one bar into the future. Any pollution at i+1
+        // changes today's label.
+        let n = bars.len();
+        (0..n)
+            .map(|i| {
+                let next = if i + 1 < n { bars[i + 1].close } else { bars[i].close };
+                if next > bars[i].close { 1u8 } else { 0u8 }
+            })
+            .collect()
+    }
+    let bars = make_bars(600, 1_600_000_000, 3600, 19);
+    assert_no_lookahead("leaky_sentinel", &bars, 300, leaky);
+}
+
+/// `pollute_bars_after` must NaN-out close prices at the cut boundary
+/// while preserving everything before it bit-identically.
+#[test]
+fn pollute_bars_after_preserves_prefix() {
+    let bars = make_bars(100, 1_600_000_000, 3600, 23);
+    let polluted = pollute_bars_after(&bars, 50);
+    assert_eq!(polluted.len(), bars.len());
+    for i in 0..50 {
+        assert_eq!(polluted[i].close, bars[i].close);
+        assert_eq!(polluted[i].open, bars[i].open);
+    }
+    for i in 50..polluted.len() {
+        assert!(polluted[i].close.is_nan());
+    }
 }
 
 // ----------------------------------------------------------------------------
