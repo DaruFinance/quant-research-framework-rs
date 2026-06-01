@@ -77,6 +77,10 @@ const FAST_EMA_SPAN: usize = 20;
 // Forex mode: when true, funding fees are skipped (FX brokers don't charge
 // crypto-style perpetual funding). PnL semantics follow the Python reference.
 const USE_FOREX: bool = false;
+/// Sharpe convention. false = per-trade statistic (default, unchanged);
+/// true = standard bar-based calendar-time Sharpe on the mark-to-market equity
+/// curve. Mirrors Python `SHARPE_MODE` ("trade" | "bar").
+const SHARPE_BAR: bool = false;
 
 // Session mode: when true, only entries inside the NY tz
 // [SESSION_START_HOUR, SESSION_END_HOUR) window are taken; positions are
@@ -227,6 +231,8 @@ pub struct Config {
     pub oos_candles: usize,
     pub position_size: f64,
     pub use_forex: bool,
+    /// false = per-trade Sharpe (default); true = bar-based standard Sharpe.
+    pub sharpe_bar: bool,
     pub use_sessions: bool,
     pub session_start_hour: u32,
     pub session_end_hour: u32,
@@ -280,7 +286,9 @@ impl Config {
         Config { tp_percentage: TP_PERCENTAGE_DEFAULT, use_tp: USE_TP_DEFAULT,
                  fee_pct: FEE_PCT_DEFAULT, slippage_pct: SLIPPAGE_PCT_DEFAULT,
                  oos_candles: oos, position_size: RISK_AMOUNT,
-                 use_forex: USE_FOREX, use_sessions: USE_SESSIONS,
+                 use_forex: USE_FOREX,
+                 sharpe_bar: std::env::var("BT_SHARPE_MODE").map(|v| v == "bar").unwrap_or(SHARPE_BAR),
+                 use_sessions: USE_SESSIONS,
                  session_start_hour: SESSION_START_HOUR,
                  session_end_hour: SESSION_END_HOUR,
                  use_oos2: USE_OOS2, use_regime_seg: false, pip_size: 0.0001,
@@ -289,6 +297,9 @@ impl Config {
                  max_hold_bars: 0, clamp_results: false }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
+    /// Switch the reported Sharpe to the standard bar-based calendar-time
+    /// convention (default off = per-trade statistic).
+    pub fn with_sharpe_bar(mut self, on: bool) -> Self { self.sharpe_bar = on; self }
     /// Forex defaults: position_size = account_size = 1.0 (R-unit
     /// reporting), use_forex = true. Mirrors Python's module-level
     /// FOREX_MODE setup at import time.
@@ -765,7 +776,12 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         let r: Vec<f64> = trades.iter().map(|t| t.pnl / cfg.account_size).collect();
         (eq, r)
     };
-    let metrics = compute_metrics_for(&rets, &eq_frac, cfg.use_forex);
+    let mut metrics = compute_metrics_for(&rets, &eq_frac, cfg.use_forex);
+    // Standard (bar-based) Sharpe override. Default sharpe_bar=false leaves the
+    // per-trade statistic untouched (bit-identical to prior releases).
+    if cfg.sharpe_bar {
+        metrics.sharpe = bar_based_sharpe(bars, &trades, cfg);
+    }
     (trades, metrics, eq_frac, rets)
 }
 
@@ -844,6 +860,62 @@ fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Metric
     let weighted: f64 = w.iter().zip(seg_sums.iter()).map(|(wi, si)| wi * si).sum();
     let consistency = 0.6 * weighted + 0.4 * roi;
     Metrics { trades: tc, roi, pf, win_rate: wr, exp, sharpe: shp, max_drawdown: dd, consistency, rrr: None }
+}
+
+/// Standard calendar-time Sharpe on the per-bar mark-to-market equity curve.
+/// 1:1 with Python `_bar_based_sharpe` (parity): equity at every bar is
+/// account + realised PnL of closed trades + unrealised MtM of the open
+/// position; per-bar returns are compounding (crypto) or additive R (forex),
+/// annualised by periods-per-Julian-year from the median bar spacing.
+fn bar_based_sharpe(bars: &[Bar], trades: &[Trade], cfg: &Config) -> f64 {
+    let n = bars.len();
+    if n < 3 || trades.is_empty() { return 0.0; }
+    let mut realized = vec![0.0f64; n];
+    let mut unreal = vec![0.0f64; n];
+    let (sl_dist, rrr) = if cfg.use_forex {
+        let sd = SL_PERCENTAGE * cfg.pip_size;
+        let r = if SL_PERCENTAGE != 0.0 { cfg.tp_percentage / SL_PERCENTAGE } else { 1.0 };
+        (sd, r)
+    } else { (0.0, 1.0) };
+    for t in trades {
+        if t.exit_idx < t.entry_idx { continue; }
+        let e = t.entry_idx as usize;
+        let x = t.exit_idx as usize;
+        if x < n { for k in x..n { realized[k] += t.pnl; } }
+        let d = if t.side == 1 { 1.0 } else { -1.0 };
+        for i in e..x.min(n) {
+            unreal[i] = if cfg.use_forex {
+                let r = if sl_dist != 0.0 { d * (bars[i].close - t.entry_price) / sl_dist } else { 0.0 };
+                r.max(-1.0).min(rrr) * cfg.position_size
+            } else {
+                d * t.qty * (bars[i].close - t.entry_price)
+            };
+        }
+    }
+    let mut ret: Vec<f64> = Vec::with_capacity(n);
+    if cfg.use_forex {
+        for i in 1..n { ret.push((realized[i] + unreal[i]) - (realized[i-1] + unreal[i-1])); }
+    } else {
+        let a = cfg.account_size;
+        for i in 1..n {
+            let prev = a + realized[i-1] + unreal[i-1];
+            ret.push(((a + realized[i] + unreal[i]) - prev) / prev);
+        }
+    }
+    let ret: Vec<f64> = ret.into_iter().filter(|r| r.is_finite()).collect();
+    if ret.len() < 2 { return 0.0; }
+    let mean = ret.iter().sum::<f64>() / ret.len() as f64;
+    let var = ret.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / ret.len() as f64;
+    let std = var.sqrt();
+    if std <= 0.0 { return 0.0; }
+    let mut diffs: Vec<i64> = (1..n).map(|i| bars[i].time_unix - bars[i-1].time_unix).collect();
+    diffs.sort_unstable();
+    let m = diffs.len();
+    let sec = if m == 0 { 0.0 }
+        else if m % 2 == 1 { diffs[m/2] as f64 }
+        else { (diffs[m/2 - 1] + diffs[m/2]) as f64 / 2.0 };
+    let ppy = if sec > 0.0 { 31_557_600.0 / sec } else { 1.0 };
+    mean / std * ppy.sqrt()
 }
 
 fn split_into_5(arr: &[f64]) -> Vec<Vec<f64>> {
