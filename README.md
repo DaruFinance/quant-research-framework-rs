@@ -4,7 +4,7 @@
 [![docs](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml/badge.svg)](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml)
 [![crates.io](https://img.shields.io/crates/v/quant-research-framework-rs.svg)](https://crates.io/crates/quant-research-framework-rs)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19798592.svg)](https://doi.org/10.5281/zenodo.19798592)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 A faithful Rust port of the [**quant-research-framework**](https://github.com/DaruFinance/quant-research-framework) Python backtester: walk-forward optimization (WFO), robustness stress tests, and realism controls (fees, slippage, funding, SL/TP), with the same strategy logic and the same numeric output as the reference Python implementation.
 
@@ -192,7 +192,7 @@ not (verified against primary docs as of 2026-04):
 
 | Framework              | License                  | Built-in WFO | Per-regime LB optimisation | Strict-LAH property tests | Cross-language byte-parity tests |
 |------------------------|--------------------------|:------------:|:--------------------------:|:-------------------------:|:--------------------------------:|
-| **this** (Python + Rust) | MIT                    | ✓            | ✓                          | ✓                         | ✓                                |
+| **this** (Python + Rust) | Apache-2.0                    | ✓            | ✓                          | ✓                         | ✓                                |
 | [vectorbt][vbt]        | Apache-2.0 + Commons     | ✓ (Splitter) | ✗                          | ✗                         | n/a                              |
 | [backtrader][bt]       | GPL-3.0                  | ✗ (community) | ✗                         | ✗                         | n/a                              |
 | [NautilusTrader][nt]   | LGPL-3.0                 | ✗ (engine only) | ✗                       | ✗                         | ✗ (bilingual; no parity asserts) |
