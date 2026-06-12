@@ -4,11 +4,11 @@
 [![docs](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml/badge.svg)](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml)
 [![crates.io](https://img.shields.io/crates/v/quant-research-framework-rs.svg)](https://crates.io/crates/quant-research-framework-rs)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19798592.svg)](https://doi.org/10.5281/zenodo.19798592)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 A faithful Rust port of the [**quant-research-framework**](https://github.com/DaruFinance/quant-research-framework) Python backtester: walk-forward optimization (WFO), robustness stress tests, and realism controls (fees, slippage, funding, SL/TP), with the same strategy logic and the same numeric output as the reference Python implementation.
 
-> Does an apparent edge survive **out-of-sample** evaluation under realistic frictions — or is it just fitting the past? Same question, same method, running 25–60× faster and in ~37× less memory ([benchmarks](#performance)).
+> Does an apparent edge survive **out-of-sample** evaluation under realistic frictions — or is it just fitting the past? Same question, same method, running **32–76× faster** (Python reference vs Rust port) and in **29–68× less memory** ([benchmarks](#performance)).
 
 ## Quick Start
 
@@ -174,15 +174,15 @@ python tools/bench.py --sizes 15000,25000,35000,48000 --runs 3
 
 | Bars   | Python (s) | Rust (s) | Speed-up | Python RSS (MB) | Rust RSS (MB) |
 |-------:|-----------:|---------:|---------:|----------------:|--------------:|
-| 15,000 |       3.03 |     0.05 |   60.60× |             273 |             4 |
-| 25,000 |       3.75 |     0.10 |   37.50× |             277 |             6 |
-| 35,000 |       4.60 |     0.14 |   32.86× |             282 |             7 |
-| 48,000 |       5.78 |     0.23 |   25.13× |             294 |             8 |
+| 15,000 |       3.78 |     0.05 |   75.60× |             273 |             4 |
+| 25,000 |       4.53 |     0.11 |   41.18× |             279 |             6 |
+| 35,000 |       6.17 |     0.16 |   38.56× |             280 |             8 |
+| 48,000 |       7.92 |     0.25 |   31.68× |             291 |            10 |
 
 The Python wall time includes numba JIT compile cost, which is amortised
 the more bars you process — Rust's relative advantage shrinks but never
-disappears (~25× at full 48k bars). Memory-wise, Rust holds at ~37×
-lower peak RSS regardless of dataset size: no pandas, no NumPy,
+disappears (~32× at full 48k bars). Memory-wise, Rust holds at 29–68×
+lower peak RSS (29× at the largest dataset): no pandas, no NumPy,
 single-threaded with zero allocations in the hot loop.
 
 ## Comparison vs other open-source backtesters
@@ -192,7 +192,7 @@ not (verified against primary docs as of 2026-04):
 
 | Framework              | License                  | Built-in WFO | Per-regime LB optimisation | Strict-LAH property tests | Cross-language byte-parity tests |
 |------------------------|--------------------------|:------------:|:--------------------------:|:-------------------------:|:--------------------------------:|
-| **this** (Python + Rust) | MIT                    | ✓            | ✓                          | ✓                         | ✓                                |
+| **this** (Python + Rust) | Apache-2.0             | ✓            | ✓                          | ✓                         | ✓                                |
 | [vectorbt][vbt]        | Apache-2.0 + Commons     | ✓ (Splitter) | ✗                          | ✗                         | n/a                              |
 | [backtrader][bt]       | GPL-3.0                  | ✗ (community) | ✗                         | ✗                         | n/a                              |
 | [NautilusTrader][nt]   | LGPL-3.0                 | ✗ (engine only) | ✗                       | ✗                         | ✗ (bilingual; no parity asserts) |
@@ -203,8 +203,8 @@ not (verified against primary docs as of 2026-04):
 The **combination** is the contribution: WFO + per-regime LB + strict
 no-look-ahead enforced by ledger-level invariant tests + a Python
 reference and Rust port whose metric outputs agree within $10^{-3}$
-relative tolerance on three deterministic surfaces (210 / 210 metric
-points across 30 stages). Each cell individually exists somewhere; no
+relative tolerance on every validated surface, enforced continuously by the
+`parity_*.py` harness suite in CI. Each cell individually exists somewhere; no
 other framework ships the whole bundle.
 
 [vbt]: https://github.com/polakowo/vectorbt
@@ -241,4 +241,4 @@ and citing either implies the other (sibling cross-reference).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Apache-2.0 — see [LICENSE](LICENSE).
