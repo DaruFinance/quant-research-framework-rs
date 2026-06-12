@@ -1,0 +1,167 @@
+# ============================================================================
+# FROZEN ROBUSTNESS BENCHMARK MANIFEST — DaruFinance quant-research-framework
+# ----------------------------------------------------------------------------
+# Cite-able specification. FROZEN: changing any strategy, dataset, or pinned
+# knob below breaks byte-reproducibility and invalidates every published
+# number. Treat edits as a NEW benchmark version: bump `spec_version`, re-emit
+# a NEW versioned golden (benchmark_results.v<spec_version>.csv — old goldens
+# stay addressable), and record it in docs/benchmark.md "Maintenance commitment".
+#
+# HARVEST PATH (v2): each cell is ONE strategy x ONE dataset run through the
+# FULL ROLLING WALK-FORWARD (per-window in-sample optimise, out-of-sample
+# evaluate). Per-cell metrics aggregate the CONCATENATED OOS stream plus
+# across-window dispersion. Determinism on the WFO path is achieved by pinning
+# INDICATOR_VARIANCE off/seeded and Monte-Carlo off/seeded (see [pins] + docs).
+#
+# WFO GEOMETRY IS NOT UNIFORM ACROSS DATASETS. backtest_candles/oos_candles are
+# the INTENDED geometry; on datasets smaller than oos_candles the engine wraps
+# start_total = n - oos_candles via negative-index semantics (identical in both
+# engines), so the realized IS/OOS spans and window COUNT differ per dataset.
+# The golden records per-cell `windows`, `eff_is_bars`, `eff_oos_bars` so the
+# real geometry is auditable. Per-dataset overrides are allowed (see datasets).
+#
+# AGGREGATED MaxDrawdown is taken on the OOS-ONLY equity fraction (start 1.0
+# crypto / 0.0 forex), NOT the seed-prefixed eq_wfo, in BOTH engines, so net_mdd
+# /gross_mdd agree cross-engine at 1e-3.
+#
+# Knobs marked RUST-CONST are compile-time consts in src/lib.rs and are NOT
+# settable via the Rust Config. The Rust runner ASSERTS manifest == const at
+# startup and aborts loudly on mismatch (a manifest re-pin cannot silently
+# desync the engines). Changing a RUST-CONST knob requires an engine edit +
+# rebuild + a new versioned golden.
+# ============================================================================
+
+spec_version  = "1.0.0"
+engine_min    = "0.5.0"          # Rust crate / Python pkg minimum
+# The Python golden is emitted against this exact engine ref (it carries the
+# SHARPE_MODE toggle). CI checks out the same ref (see parity.yml).
+py_engine_ref = "feat/sharpe-mode-toggle"
+
+[pins]
+opt_metric        = "Sharpe"     # __init__.py:247 ; RUST-CONST src/lib.rs:61
+min_trades        = 10           # __init__.py:248 ; RUST-CONST src/lib.rs:62
+optimize_rrr      = true         # __init__.py:263 ; RUST-CONST src/lib.rs:71
+smart_optimization = true        # __init__.py:63  ; RUST-CONST src/lib.rs:63
+use_wfo           = true         # RUST-CONST
+use_regime_seg    = false        # plain rolling-WFO branch __init__.py:3007 ; Rust :1442 ; RUST-CONST
+use_monte_carlo   = false        # __init__.py:255 (Config field, OFF) ; Rust const(true) seeded 42, print-only
+indicator_variance = false       # module global OFF (no active scenario) ; Rust scenarios seeded-42 print-only, collector empty-set
+sharpe_mode       = "trade"      # SHARPE_MODE per-trade ; __init__.py:61,1665 ; Rust sharpe_bar=false :83,235,290
+print_equity_curve = false       # suppress plotting side effects
+mdd_equity_base   = "oos_only"   # aggregated MDD on OOS-only fraction (1.0 crypto / 0.0 fx), NOT seed-prefixed eq_wfo
+
+# Rolling-WFO geometry (look-ahead-free per-window split: __init__.py:3039-3045
+# ; src/lib.rs:1484-1491). The cell metric aggregates the concatenated OOS
+# windows (__init__.py:3058,3066 ; src/lib.rs:1498). These are the INTENDED
+# values; see the geometry note above for small-dataset wrap behavior.
+[wfo]
+backtest_candles = 10_000        # IS window per rolling step  __init__.py:242 ; RUST-CONST src/lib.rs:58
+oos_candles      = 90_000        # total OOS span (intended)   __init__.py:243 ; Config field both (oos_candles)
+use_oos2         = false         #                             __init__.py:244 ; Config field both
+default_lb       = 50            # raw seed                    __init__.py:240 ; RUST-CONST src/lib.rs:57
+lookback_range   = [12, 76]      # half-open IS opt grid       __init__.py:241 ; RUST-CONST src/lib.rs (lookback_range())
+wfo_trigger_val  = 5000          # window advance (candles)    RUST-CONST src/lib.rs:74
+wfo_trigger_mode = "candles"     #                             RUST-CONST src/lib.rs:73
+
+# ----------------------------------------------------------------------------
+# DUAL COST REGIMES (constraint #3 + Daniel decision C). Every cell is run
+# TWICE: NET (realistic-but-not-strict engine defaults) and GROSS (zero-cost,
+# frictionless). The GROSS block is an EXPLICITLY LABELED comparison column —
+# it is NEVER the realistic result. Both are reproducible / golden-guarded.
+#
+# NET crypto values are the engine-compiled defaults so NET is consistent with
+# the existing parity surface (src/lib.rs:54-56 ; __init__.py:230-232).
+# fee_pct/slippage_pct are Config fields on both engines. Python funding_fee is
+# a Config field (__init__.py:232); Rust funding is a RUST-CONST today and the
+# GROSS run requires the opt-in `Config.funding_fee` field (default=const,
+# assert-guarded). That field is NON-OPTIONAL for cross-engine-checking GROSS
+# crypto — see docs/benchmark.md risks.
+# ----------------------------------------------------------------------------
+[frictions.net.crypto]
+fee_pct      = 0.02              # FEE_PCT_DEFAULT       Config field ; src/lib.rs:55
+slippage_pct = 0.03              # SLIPPAGE_PCT_DEFAULT  Config field ; src/lib.rs:54
+funding_fee  = 0.01              # FUNDING_FEE           Py Config / Rust new Config field ; src/lib.rs:56
+
+[frictions.net.fx]
+# Forex mode: SL/TP scaled by pip_size, risk=account=position=1.0 (R-units),
+# funding folded into R (0 in forex mode, __init__.py:1651), slippage in pips.
+# with_forex __init__.py:398 ; with_forex_defaults src/lib.rs:306. pip_size
+# 0.01 iff path has "JPY".
+forex_mode  = true
+pip_default = 0.0001
+pip_jpy     = 0.01
+
+[frictions.gross.crypto]
+# ZERO-COST / FRICTIONLESS. Labeled GROSS everywhere. Context column only.
+fee_pct      = 0.0
+slippage_pct = 0.0
+funding_fee  = 0.0
+
+[frictions.gross.fx]
+forex_mode  = true               # same R-unit accounting, costs zeroed
+pip_default = 0.0001             # geometry unchanged; slippage_pct=0 zeroes pip cost
+pip_jpy     = 0.01
+
+# ----------------------------------------------------------------------------
+# Datasets. Canonical bundled set (parity_arch.py:45-52). `kind` selects the
+# friction block + forex flag. Optional per-dataset backtest_candles/oos_candles
+# override the [wfo] globals (omitted here -> globals apply; the wrap behavior
+# on small datasets is recorded via the golden's windows/eff_*_bars columns).
+# PRECONDITION: every path below must exist in BOTH the Rust repo and the Python
+# reference repo before --emit-golden/--check (the runner FAILS, not skips, on a
+# missing dataset).
+# ----------------------------------------------------------------------------
+[[datasets]]
+id = "SOLUSDT_1h"  ; path = "data/SOLUSDT_1h.csv"  ; kind = "crypto"
+[[datasets]]
+id = "BTCUSDT_30m" ; path = "data/BTCUSDT_30m.csv" ; kind = "crypto"
+[[datasets]]
+id = "DOGEUSDT_30m"; path = "data/DOGEUSDT_30m.csv"; kind = "crypto"
+[[datasets]]
+id = "EURUSD_1h"   ; path = "data/EURUSD_1h.csv"   ; kind = "fx"
+[[datasets]]
+id = "USDJPY_1h"   ; path = "data/USDJPY_1h.csv"   ; kind = "fx"
+[[datasets]]
+id = "SYNTH_100k"  ; path = "data/SYNTH_100k.csv"  ; kind = "crypto"
+
+# ----------------------------------------------------------------------------
+# Strategies.
+#   core=true    -> signal NUMERICALLY IDENTICAL on both engines; cross-engine
+#                   parity-checked at 1e-3. engine_ema / ema_cross / macd_zero.
+#   core=false   -> Python-only cell (real numbers, engine="python", EXCLUDED
+#                   from the cross-engine assert). Rust ATR/RSI approximations
+#                   diverge (indicators.py:18-32 vs batch_runner.rs:77-152);
+#                   stoch_kd has no Rust counterpart.
+#   item5_target -> flips to core=true / engine="both" once item 5 ports the
+#                   matching Rust indicator and the cell passes the 1e-3 assert.
+#                   The schema is unchanged by that flip, so python-only cells
+#                   become cross-engine WITHOUT a spec break (the value change
+#                   is itself a spec bump -> new versioned golden; the flip
+#                   invariant requires the python NET numbers to stay identical).
+#
+# CORPUS-BREADTH NOTE (effective-trials discipline, constraint #6): corpus
+# size = (enabled strategies) x (datasets) CELLS. Each cell is ONE strategy
+# over the ROLLING WFO. A strategy evaluated over K windows is STILL ONE
+# strategy, not K. The per-cell optimiser sweeps LOOKBACK_RANGE x RRR per
+# window = within-window in-sample tuning, NOT extra strategies, NOT extra
+# cells, and WFO windows are NEVER multiplied into corpus size. DSR trials =
+# distinct strategies per dataset (N=6), not windows.
+# ----------------------------------------------------------------------------
+[[strategies]]
+id = "engine_ema" ; lb = 50 ; core = true  ; enabled = true ; engine = "both" ; item5_target = false
+family = "trend" ; desc = "Engine-internal default: EMA_20 x EMA_lb crossover (THE parity-validated signal; engine's own default sig fn)"
+[[strategies]]
+id = "ema_cross"  ; lb = 50 ; core = true  ; enabled = true ; engine = "both" ; item5_target = false
+family = "trend" ; desc = "Fast EMA(lb) vs slow EMA(lb*4) — ewm(adjust=False), cross-engine identical"
+[[strategies]]
+id = "macd_zero"  ; lb = 50 ; core = true  ; enabled = true ; engine = "both" ; item5_target = false
+family = "trend" ; desc = "MACD line vs signal — ewm(adjust=False), cross-engine identical"
+[[strategies]]
+id = "atr_cross"  ; lb = 50 ; core = false ; enabled = true ; engine = "python" ; item5_target = true
+family = "breakout" ; desc = "SMA cross gated by ATR breakout+RSI. PYTHON-ONLY until item 5 ports ATR (true-range+Wilder)"
+[[strategies]]
+id = "rsi_revert" ; lb = 50 ; core = false ; enabled = true ; engine = "python" ; item5_target = true
+family = "mean_reversion" ; desc = "Long RSI<35 / short RSI>65. PYTHON-ONLY until item 5 ports RSI (ewm adjust=True+warmup)"
+[[strategies]]
+id = "stoch_kd"   ; lb = 50 ; core = false ; enabled = true ; engine = "python" ; item5_target = true
+family = "oscillator" ; desc = "Stochastic-K threshold. PYTHON-ONLY until item 5 ports compute_stoch to Rust"
