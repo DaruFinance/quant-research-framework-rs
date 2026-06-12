@@ -86,6 +86,10 @@ name = "_parity_volume"
 path = "examples/_parity_volume.rs"
 
 [[example]]
+name = "_parity_surface"
+path = "examples/_parity_surface.rs"
+
+[[example]]
 name = "_parity_pbo"
 path = "examples/_parity_pbo.rs"
 required-features = ["overfit"]

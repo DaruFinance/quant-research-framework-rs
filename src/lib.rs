@@ -175,6 +175,9 @@ pub mod haircut;
 // Volume indicators (item #2, v0.6.0). UNCONDITIONAL like src/metrics.rs.
 pub mod volume;
 
+// Item #1 — IS parameter-robustness isosurface emit (pure std + f64).
+pub mod opt_surface;
+
 #[derive(Clone)]
 pub struct Bar {
     pub time_unix: i64,
@@ -308,6 +311,10 @@ pub struct Config {
     /// record a loss larger than 1R or a gain larger than the configured
     /// RRR. No effect when use_forex is true.
     pub clamp_results: bool,
+    // ---- item #1 (IS isosurface emit) ----
+    pub emit_opt_surface: bool,
+    pub emit_opt_surface_sl: bool,
+    pub sl_override: Option<f64>,
 }
 impl Config {
     pub fn new() -> Self {
@@ -323,7 +330,12 @@ impl Config {
                  use_oos2: USE_OOS2, use_regime_seg: false, pip_size: 0.0001,
                  account_size: ACCOUNT_SIZE, mask_exits: false,
                  legacy_side_bug: false,
-                 max_hold_bars: 0, clamp_results: false }
+                 max_hold_bars: 0, clamp_results: false,
+                 emit_opt_surface: std::env::var("EMIT_OPT_SURFACE")
+                     .map(|v| v == "1" || v == "true").unwrap_or(false),
+                 emit_opt_surface_sl: std::env::var("EMIT_OPT_SURFACE_SL")
+                     .map(|v| v == "1" || v == "true").unwrap_or(false),
+                 sl_override: None }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
     /// Switch the reported Sharpe to the standard bar-based calendar-time
@@ -359,6 +371,8 @@ impl Config {
     /// Enable crypto-path R-clamp for gap-prone instruments. No-op in forex
     /// mode (forex already clamps). See `Config::clamp_results` docs.
     pub fn with_clamp_results(mut self, on: bool) -> Self { self.clamp_results = on; self }
+    pub fn with_emit_opt_surface(mut self, on: bool) -> Self { self.emit_opt_surface = on; self }
+    pub fn with_emit_opt_surface_sl(mut self, on: bool) -> Self { self.emit_opt_surface_sl = on; self }
     fn fee_rate(&self) -> f64 { self.fee_pct / 100.0 }
     fn slip(&self) -> f64 { self.slippage_pct * 0.01 }
     fn funding_rate(&self) -> f64 { FUNDING_FEE / 100.0 }
@@ -514,7 +528,10 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let position_size = if cfg.use_forex { 1.0 } else { cfg.position_size };
     let pip_size = cfg.pip_size;
     let slip = if cfg.use_forex { cfg.slippage_pct * pip_size } else { cfg.slip() };
-    let sl_perc = if cfg.use_forex { SL_PERCENTAGE * pip_size } else { SL_PERCENTAGE };
+    // Item #1: surface SL sweep substitutes a per-cell stop via cfg.sl_override
+    // (always None on default/parity paths, so this is a no-op there).
+    let sl_base = cfg.sl_override.unwrap_or(SL_PERCENTAGE);
+    let sl_perc = if cfg.use_forex { sl_base * pip_size } else { sl_base };
     let tp_perc = if cfg.use_forex { cfg.tp_percentage * pip_size } else { cfg.tp_percentage };
     let rrr_fx = if cfg.use_forex && sl_perc > 0.0 { tp_perc / sl_perc } else { 1.0 };
     let stop_pips_fx = if cfg.use_forex { sl_perc / pip_size } else { 1.0 };
@@ -1361,6 +1378,12 @@ pub fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, si
     // Optimise
     let (best_lb, met_is_opt) = optimiser(is_bars, cfg, sig_fn);
 
+    // Item #1: emit the baseline IS objective surface (opt-in, default off).
+    if cfg.emit_opt_surface {
+        let header = !std::path::Path::new("opt_surface.csv").exists();
+        crate::opt_surface::emit_surface_classic(is_bars, "baseline", cfg, sig_fn, header);
+    }
+
     if let Some(lb) = best_lb {
         let best_rrr = if OPTIMIZE_RRR { met_is_opt.rrr } else { None };
         let rrr_note = if let Some(r) = best_rrr { format!("  |  Best RRR = {}", r) } else { String::new() };
@@ -1522,6 +1545,12 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
         let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
         if lb_roll.is_none() { break; }
         let lb = lb_roll.unwrap();
+        // Item #1: emit the per-window IS objective surface (opt-in, default off).
+        if cfg.emit_opt_surface {
+            let header = !std::path::Path::new("opt_surface.csv").exists();
+            crate::opt_surface::emit_surface_classic(
+                is_bars_roll, &format!("{:02}", window_no), cfg, sig_fn, header);
+        }
         let oos_slice = &all_bars[oos_s..oos_e];
 
         let (rets_oos, eq_is_window) = run_wfo_window(
@@ -1976,6 +2005,15 @@ fn walk_forward_regime(
             is_bars, &regimes_is_local, n_regimes, cfg);
         if best_lbs.iter().all(|x| x.is_none()) { break; }
         let lb_tag = fmt_lb_tag(&best_lbs, &regime_cfg.labels);
+
+        // Item #1: emit the regime IS surface over the labels the engine TRADES
+        // (regimes_is), holding non-swept regimes at the FINAL optimised best_lbs.
+        if cfg.emit_opt_surface {
+            let header = !std::path::Path::new("opt_surface.csv").exists();
+            crate::opt_surface::emit_surface_regime(
+                is_bars, regimes_is, &best_lbs, &regime_cfg.labels,
+                &format!("{:02}", window_no), cfg, header);
+        }
 
         // IS run (for equity seed and reporting)
         let is_close: Vec<f64> = is_bars.iter().map(|b| b.close).collect();
