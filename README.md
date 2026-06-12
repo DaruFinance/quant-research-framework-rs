@@ -207,7 +207,13 @@ python tools/parity_forex.py --tol 0.001    # exit 0 = parity
 ```
 
 ### What is *not* yet jointly validated
-`tools/parity_combo.py` runs both engines with **all four v0.2.x features layered at once** (regime + WFO + forex + session). This combo still reports diffs — the remaining gap is in the forex/session interaction (it shows up even on the classic `Baseline IS/OOS` line), not in the regime engine. Single-feature parity (default, regime+WFO, forex) is verified; the four-way combo is the natural `paper-v3` milestone.
+
+The full ledger of every surface — green-and-gated or known-divergence-with-reason — is **[docs/PARITY.md](docs/PARITY.md)**. The short version:
+
+- **Four-way combo** (`tools/parity_combo.py`: regime + WFO + forex + session, all at once) still reports diffs — the gap is in the forex/session interaction (it shows up even on the classic `Baseline IS/OOS` line), not in the regime engine. Single-feature parity (default, regime+WFO, forex) is verified; the combo is the `paper-v3` milestone.
+- **USD/JPY in the frozen benchmark** is excluded from the cross-engine gate (`cross_engine_check = false`): the JPY `pip_size = 0.01` path has a ~1–2% residual `parity_forex` (EUR/USD) does not exercise. NET/GROSS numbers are still reported.
+- **Monte Carlo percentiles** and the **`INDICATOR_VARIANCE`** overlay diverge by design (unseeded / differently-seeded RNGs); see below.
+- **Python-only, no Rust counterpart:** `backtester/bootstrap.py` (stationary bootstrap) and the `examples/ml_*` strategies. Nothing to diff, not gated.
 
 ### Two non-deterministic sections intentionally diverge, by design of the reference
 1. **Monte Carlo percentiles** — Python uses NumPy's global RNG, Rust uses `StdRng` seeded to 42. Different algorithms, so percentiles differ; the distribution shape is the same.
