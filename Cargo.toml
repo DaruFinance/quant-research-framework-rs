@@ -72,6 +72,10 @@ path = "examples/batch_runner.rs"
 required-features = ["indicators"]
 
 [[example]]
+name = "benchmark_runner"
+path = "examples/benchmark_runner.rs"
+
+[[example]]
 name = "_parity_indicators"
 path = "examples/_parity_indicators.rs"
 required-features = ["indicators"]

@@ -53,14 +53,14 @@ const ACCOUNT_SIZE: f64 = 100_000.0;
 const RISK_AMOUNT: f64 = 2_500.0;
 const SLIPPAGE_PCT_DEFAULT: f64 = 0.03;
 const FEE_PCT_DEFAULT: f64 = 0.02;
-const FUNDING_FEE: f64 = 0.01;
-const DEFAULT_LB: usize = 50;
-const BACKTEST_CANDLES: usize = 10_000;
+pub const FUNDING_FEE: f64 = 0.01;
+pub const DEFAULT_LB: usize = 50;
+pub const BACKTEST_CANDLES: usize = 10_000;
 const OOS_CANDLES_BASE: usize = 90_000;
 const USE_OOS2: bool = false;
-const OPT_METRIC: &str = "Sharpe";
-const MIN_TRADES: usize = 10;
-const SMART_OPTIMIZATION: bool = true;
+pub const OPT_METRIC: &str = "Sharpe";
+pub const MIN_TRADES: usize = 10;
+pub const SMART_OPTIMIZATION: bool = true;
 const DRAWDOWN_CONSTRAINT: Option<f64> = None;
 const USE_MONTE_CARLO: bool = true;
 const MC_RUNS: usize = 1000;
@@ -68,10 +68,10 @@ const USE_SL: bool = true;
 const SL_PERCENTAGE: f64 = 1.0;
 const USE_TP_DEFAULT: bool = true;
 const TP_PERCENTAGE_DEFAULT: f64 = 3.0;
-const OPTIMIZE_RRR: bool = true;
-const USE_WFO: bool = true;
+pub const OPTIMIZE_RRR: bool = true;
+pub const USE_WFO: bool = true;
 const WFO_TRIGGER_MODE: &str = "candles";
-const WFO_TRIGGER_VAL: usize = 5000;
+pub const WFO_TRIGGER_VAL: usize = 5000;
 const FAST_EMA_SPAN: usize = 20;
 
 // Forex mode: when true, funding fees are skipped (FX brokers don't charge
@@ -315,6 +315,10 @@ pub struct Config {
     pub emit_opt_surface: bool,
     pub emit_opt_surface_sl: bool,
     pub sl_override: Option<f64>,
+    // ---- item #4 (benchmark v2): funding parameterization ----
+    /// Funding rate (% per 8h per leg). Default = FUNDING_FEE so existing
+    /// callers and the NET golden are unchanged; set 0.0 for a GROSS run.
+    pub funding_fee: f64,
 }
 impl Config {
     pub fn new() -> Self {
@@ -335,7 +339,8 @@ impl Config {
                      .map(|v| v == "1" || v == "true").unwrap_or(false),
                  emit_opt_surface_sl: std::env::var("EMIT_OPT_SURFACE_SL")
                      .map(|v| v == "1" || v == "true").unwrap_or(false),
-                 sl_override: None }
+                 sl_override: None,
+                 funding_fee: FUNDING_FEE }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
     /// Switch the reported Sharpe to the standard bar-based calendar-time
@@ -375,7 +380,7 @@ impl Config {
     pub fn with_emit_opt_surface_sl(mut self, on: bool) -> Self { self.emit_opt_surface_sl = on; self }
     fn fee_rate(&self) -> f64 { self.fee_pct / 100.0 }
     fn slip(&self) -> f64 { self.slippage_pct * 0.01 }
-    fn funding_rate(&self) -> f64 { FUNDING_FEE / 100.0 }
+    fn funding_rate(&self) -> f64 { self.funding_fee / 100.0 }
     fn dd_constraint(&self) -> Option<f64> { DRAWDOWN_CONSTRAINT.map(|d| d / 100.0) }
 }
 
@@ -876,7 +881,7 @@ fn decompose_costs(
     (fee_total, slippage, funding, gross_pnl)
 }
 
-fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Metrics {
+pub fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Metrics {
     let tc = rets.len();
     if tc == 0 {
         let mut m = Metrics::default();
@@ -1570,6 +1575,114 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
     println!("  Total OOS return segments: {}", all_oos_rets.len());
     println!("  Total OOS ROI: ${:.2}", cum_oos * ACCOUNT_SIZE);
     println!("  Final equity: ${:.2}", (seed_last + cum_oos) * ACCOUNT_SIZE);
+}
+
+// ============================================================================
+// Item #4 (benchmark v2): read-only WFO-harvest surface + default signal fn.
+// `walk_forward_collect` mirrors `walk_forward` (above) but RETURNS the OOS
+// harvest instead of printing the summary, with an EMPTY scenario set (no
+// robustness overlays). The harvested baseline rets_oos is overlay-independent,
+// so this is harvest-equivalent. No existing caller of `walk_forward` changes.
+// ============================================================================
+
+/// Out-of-sample harvest of one rolling walk-forward run (item #4 benchmark).
+/// `all_oos_rets` = concatenated OOS per-trade stream; `eq_wfo_oos_fraction` =
+/// OOS-only equity fraction (1.0 crypto / 0.0 forex, NOT seed-prefixed, so MDD
+/// agrees with the Python runner); `agg` = aggregated Metrics; `per_window_oos`
+/// = per-window OOS Metrics (dispersion / window count).
+pub struct WfoOut {
+    pub all_oos_rets: Vec<f64>,
+    pub eq_wfo_oos_fraction: Vec<f64>,
+    pub agg: Metrics,
+    pub per_window_oos: Vec<Metrics>,
+}
+
+/// Like `walk_forward` but RETURNS the OOS harvest (no summary print) and runs
+/// the WFO loop with an EMPTY scenario set. Read-only; no engine behaviour change.
+pub fn walk_forward_collect(
+    all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config,
+    strategy: &str, sig_fn: RawSignalsFn,
+) -> WfoOut {
+    let _ = eq_is_baseline; // OOS-only fraction starts at base0; seed not needed
+    let rb_scenarios_parsed: Vec<(String, RobustnessOpts)> = Vec::new(); // EMPTY
+
+    let n = all_bars.len();
+    let ni = n as i64;
+    let oos_candles = cfg.oos_candles as i64;
+    let start_total: i64 = ni - oos_candles;
+    let mut cur_start: i64 = start_total;
+    let mut window_no = 1usize;
+    let mut all_oos_rets: Vec<f64> = Vec::new();
+    let mut per_window_oos: Vec<Metrics> = Vec::new();
+    let base0 = if cfg.use_forex { 0.0 } else { 1.0 };
+
+    while cur_start < ni {
+        let cur_end: i64 = if WFO_TRIGGER_MODE == "candles" {
+            (cur_start + WFO_TRIGGER_VAL as i64).min(ni)
+        } else {
+            let cs_idx = python_iloc_idx(cur_start as isize, n);
+            let is_win_start = cs_idx.saturating_sub(BACKTEST_CANDLES);
+            let is_bars_roll = &all_bars[is_win_start..cs_idx];
+            let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
+            if lb_roll.is_none() { break; }
+            let lb = lb_roll.unwrap();
+            let oos_remaining = &all_bars[cs_idx..n];
+            let raw_tmp = sig_fn(oos_remaining, lb);
+            let sig_tmp = parse_signals_for(&raw_tmp, oos_remaining, cfg);
+            let (tr_tmp, _, _, _) = run_backtest(oos_remaining, &sig_tmp, cfg);
+            if tr_tmp.is_empty() { ni }
+            else { (cur_start + tr_tmp[WFO_TRIGGER_VAL.min(tr_tmp.len()) - 1].exit_idx as i64 + 1).min(ni) }
+        };
+
+        let is_raw_start = cur_start - BACKTEST_CANDLES as i64;
+        let (is_s, is_e) = python_iloc_slice(is_raw_start, cur_start, n);
+        let (oos_s, oos_e) = python_iloc_slice(cur_start, cur_end, n);
+        let is_bars_roll = &all_bars[is_s..is_e];
+        let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
+        if lb_roll.is_none() { break; }
+        let lb = lb_roll.unwrap();
+        let oos_slice = &all_bars[oos_s..oos_e];
+
+        let (rets_oos, _eq_is_window) = run_wfo_window(
+            is_bars_roll, oos_slice, lb, &format!("W{:02}", window_no),
+            cfg, strategy, sig_fn, &rb_scenarios_parsed, window_no == 1);
+
+        let mut eq_w = vec![base0];
+        let mut acc_w = base0;
+        for r in &rets_oos { acc_w += r; eq_w.push(acc_w); }
+        per_window_oos.push(compute_metrics_for(&rets_oos, &eq_w, cfg.use_forex));
+
+        all_oos_rets.extend_from_slice(&rets_oos);
+        cur_start = cur_end;
+        window_no += 1;
+    }
+
+    let mut eq = vec![base0];
+    let mut acc = base0;
+    for r in &all_oos_rets { acc += r; eq.push(acc); }
+    let agg = compute_metrics_for(&all_oos_rets, &eq, cfg.use_forex);
+
+    WfoOut { all_oos_rets, eq_wfo_oos_fraction: eq, agg, per_window_oos }
+}
+
+/// The engine's built-in default raw-signal function (EMA(FAST_EMA_SPAN) x
+/// EMA(lb)) — the signal the parity harness validates (mirror of
+/// src/main.rs::ema_crossover). Exposed read-only so the benchmark runner
+/// exercises the real default path on `engine_ema`, not a hand copy.
+pub fn default_ema_signal(bars: &[Bar], lb: usize) -> Vec<i8> {
+    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
+    let ema_fast = compute_ema(&close, FAST_EMA_SPAN);
+    let ema_slow = compute_ema(&close, lb);
+    let n = bars.len();
+    let mut raw = vec![0i8; n];
+    for i in 1..n {
+        if ema_fast[i - 1] > ema_slow[i - 1] {
+            raw[i] = 1;
+        } else if ema_fast[i - 1] < ema_slow[i - 1] {
+            raw[i] = -1;
+        }
+    }
+    raw
 }
 
 // ============================================================================
