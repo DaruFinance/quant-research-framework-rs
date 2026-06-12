@@ -18,7 +18,7 @@ on:
 jobs:
   parity:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40   # the v0.6.0 surfaces + benchmark each re-run the 6x6 WFO
 
     steps:
       - name: Checkout this repo
@@ -159,3 +159,12 @@ jobs:
           python tools/parity_pbo.py --tol 0.001
           python tools/parity_multitest.py --tol 0.001
           python tools/parity_overfit_lines.py
+
+      # ---- v0.6.0 reproducible benchmark (item 4): golden drift + cross-engine ----
+      - name: Benchmark — golden drift-guard + cross-engine (1e-3)
+        working-directory: quant-research-framework-rs
+        run: |
+          cargo build --release --example benchmark_runner
+          python tools/benchmark.py --check
+          ./target/release/examples/benchmark_runner --manifest tools/benchmark_manifest.toml --out /tmp/bench_rust.csv
+          python tools/benchmark.py --cross-engine --rust-csv /tmp/bench_rust.csv --tol 0.001
