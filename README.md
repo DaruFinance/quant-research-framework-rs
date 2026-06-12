@@ -6,9 +6,64 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19798592.svg)](https://doi.org/10.5281/zenodo.19798592)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-A faithful Rust port of the [**quant-research-framework**](https://github.com/DaruFinance/quant-research-framework) Python backtester: walk-forward optimization (WFO), robustness stress tests, and realism controls (fees, slippage, funding, SL/TP), with the same strategy logic and the same numeric output as the reference Python implementation.
+**A walk-forward backtester written twice — a Python reference and a Rust port — that proves in CI the two produce the same numbers.** Walk-forward optimization (WFO), robustness stress tests, realism controls (fees, slippage, funding, SL/TP), and strict no-look-ahead enforced at the ledger level.
 
-> Does an apparent edge survive **out-of-sample** evaluation under realistic frictions — or is it just fitting the past? Same question, same method, running **32–76× faster** (Python reference vs Rust port) and in **29–68× less memory** ([benchmarks](#performance)).
+It answers one question: *does an apparent edge survive out-of-sample evaluation under realistic frictions, or is it just fitting the past?* The Rust port answers it **32–76× faster** and in **29–68× less memory** than the Python reference ([benchmarks](#performance)), and a parity harness checks both engines agree within `1e-3` on every push.
+
+## Why two engines
+
+Most backtesters ask you to trust one implementation. This one is written twice and diffed: the Python reference is the readable spec, the Rust port is the fast spec, and a parity oracle runs both on identical input and asserts the metrics match. If the port drifts from the reference, CI goes red — the correctness claim is *enforced, not asserted*.
+
+```
+                ┌────────────────────────────────────────────────┐
+                │                same OHLC input                  │
+                │     data/SOLUSDT_1h.csv · EURUSD_1h.csv · …      │
+                └───────────────┬────────────────┬───────────────┘
+                                │                │
+                ┌───────────────▼──────┐  ┌──────▼───────────────┐
+                │  Python reference    │  │      Rust port       │
+                │  backtester/         │  │      src/lib.rs      │
+                │  (the spec, readable)│  │   + metrics · dsr ·  │
+                │                      │  │   pbo · opt_surface… │
+                └───────────────┬──────┘  └──────┬───────────────┘
+                                │ metrics        │ metrics
+                                ▼                ▼
+                ┌────────────────────────────────────────────────┐
+                │              parity oracle  (CI)                │
+                │      tools/parity_*.py  ·  assert |Δ| ≤ 1e-3    │
+                │   default 56/56 · regime+WFO 98/98 · fx 56/56   │
+                └────────────────────────┬───────────────────────┘
+                                         │
+                                 red if the port drifts
+```
+
+## Reproduce it in under 5 minutes
+
+One command builds the Rust engine, runs the cross-language parity suite, and fires the no-look-ahead leak guard:
+
+```bash
+make repro     # set QRF_PY_DIR=/path/to/quant-research-framework if it isn't a sibling checkout
+```
+
+The parity surfaces compare both engines metric-by-metric and end in `PARITY OK`; the published counts are **56/56** (default config), **98/98** (regime + WFO), and **56/56** (forex). The leak demo plants a strategy that reads 4 bars into the future, NaN-pollutes the future, and shows that exactly those 4 *past* bars move while the shipped causal strategy does not:
+
+```
+look-ahead leak demo  —  n=800 bars, pollute future at cut=400
+  causal EMA-cross (shipped)    :   0/400 past bars changed   PASS — no look-ahead
+  forward-peek EMA-cross (H=4)  :   4/400 past bars changed   LEAK CAUGHT
+```
+
+Run any piece on its own with `make parity`, `make leak`, or `make bench`. The leak demo (`tools/leak_demo.py`) is the same pollute-and-verify property the Hypothesis suite runs over a generated input space (the Python reference's `tests/test_invariants_property.py`).
+
+## What this is / what it isn't
+
+**It is** a correctness-first WFO backtesting engine, in two languages, with the equivalence machine-checked: realism controls on by default (fees, slippage, funding, SL/TP with intrabar high/low checks), strict no-look-ahead enforced by ledger-level invariant tests, and overfitting diagnostics (DSR/PSR/MinTRL/MinBTL, PBO/CSCV, deflated multiple-testing haircuts).
+
+**It isn't:**
+- **Not alpha.** The bundled strategies (EMA-cross, ATR-cross, …) are plumbing to exercise the engine, not trade signals. There is no edge here to deploy.
+- **Not live trading.** No broker connectivity, order management, or execution — it evaluates strategies on historical bars.
+- **Tested on crypto, FX, and synthetic GBM only.** SOL/BTC/DOGE-USDT, EUR/USD, USD/JPY, and a GBM generator. Equities, futures, and options are untried.
+- **Parity-gated on the core surfaces only.** The stationary-bootstrap module (`backtester/bootstrap.py`) and the `examples/ml_*` strategies are Python-only — no Rust counterpart, no cross-engine check. See [open parity gaps](#what-is-not-yet-jointly-validated).
 
 ## Quick Start
 
