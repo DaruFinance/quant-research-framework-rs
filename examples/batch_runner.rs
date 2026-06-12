@@ -29,6 +29,9 @@ use rayon::prelude::*;
 use quant_research_framework_rs::{
     classic_single_run, Bar, Config, Metrics, RawSignalsFn,
 };
+// Shared indicator surface (item 5 — indicator parity). Replaces the
+// inline ATR/RSI/SMA copies below that diverged from the Python engine.
+use quant_research_framework_rs::indicators::{compute_atr, compute_rsi, compute_sma, compute_stoch};
 
 // ---------------------------------------------------------------------------
 // Shared utilities
@@ -60,51 +63,6 @@ fn ema(close: &[f64], span: usize) -> Vec<f64> {
     out
 }
 
-fn sma(close: &[f64], length: usize) -> Vec<f64> {
-    let mut out = vec![f64::NAN; close.len()];
-    let mut sum = 0.0;
-    for i in 0..close.len() {
-        sum += close[i];
-        if i >= length {
-            sum -= close[i - length];
-        }
-        if i + 1 >= length {
-            out[i] = sum / length as f64;
-        }
-    }
-    out
-}
-
-fn rsi(close: &[f64], length: usize) -> Vec<f64> {
-    let n = close.len();
-    let mut out = vec![f64::NAN; n];
-    if n < 2 {
-        return out;
-    }
-    let alpha = 1.0 / length as f64;
-    let mut avg_gain = 0.0_f64;
-    let mut avg_loss = 0.0_f64;
-    for i in 1..n {
-        let d = close[i] - close[i - 1];
-        let g = if d > 0.0 { d } else { 0.0 };
-        let l = if d < 0.0 { -d } else { 0.0 };
-        if i == 1 {
-            avg_gain = g;
-            avg_loss = l;
-        } else {
-            avg_gain = alpha * g + (1.0 - alpha) * avg_gain;
-            avg_loss = alpha * l + (1.0 - alpha) * avg_loss;
-        }
-        if avg_loss <= 0.0 {
-            out[i] = 100.0;
-        } else {
-            let rs = avg_gain / avg_loss;
-            out[i] = 100.0 - 100.0 / (1.0 + rs);
-        }
-    }
-    out
-}
-
 // ---------------------------------------------------------------------------
 // Strategy library
 // ---------------------------------------------------------------------------
@@ -121,23 +79,16 @@ fn signal_ema_cross(bars: &[Bar], lb: usize) -> Vec<i8> {
 }
 
 fn signal_atr_cross(bars: &[Bar], lb: usize) -> Vec<i8> {
-    // Simplified ATR-cross: fast SMA + ATR(approx) breakout, RSI gate.
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    let fast = sma(&close, lb);
-    let slow = sma(&close, lb * 4);
-    let r = rsi(&close, lb);
-    // ATR approximation: mean (high - low) over `lb` bars
-    let mut atr = vec![f64::NAN; bars.len()];
-    let mut sum = 0.0;
-    for i in 0..bars.len() {
-        sum += bars[i].high - bars[i].low;
-        if i >= lb {
-            sum -= bars[i - lb].high - bars[i - lb].low;
-        }
-        if i + 1 >= lb {
-            atr[i] = sum / lb as f64;
-        }
-    }
+    // Canonical shared indicators (match Python backtester/indicators.py).
+    // Replaces the prior inline mean(high-low) ATR + adjust=false RSI that
+    // diverged from the Python engine — see Item-5 indicator-parity package.
+    let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
+    let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
+    let fast = compute_sma(&close, lb);
+    let slow = compute_sma(&close, lb * 4);
+    let r = compute_rsi(&close, lb);
+    let atr = compute_atr(&high, &low, &close, lb);
     let mut sig = vec![0i8; bars.len()];
     for i in 0..bars.len() {
         if !fast[i].is_nan() && !slow[i].is_nan() && !atr[i].is_nan() && !r[i].is_nan() {
@@ -175,12 +126,35 @@ fn signal_macd_zero(bars: &[Bar], lb: usize) -> Vec<i8> {
 
 fn signal_rsi_revert(bars: &[Bar], lb: usize) -> Vec<i8> {
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    let r = rsi(&close, lb);
+    let r = compute_rsi(&close, lb);
     let mut sig = vec![0i8; bars.len()];
     for i in 0..bars.len() {
         sig[i] = if !r[i].is_nan() && r[i] < 35.0 {
             1
         } else if !r[i].is_nan() && r[i] > 65.0 {
+            -1
+        } else {
+            0
+        };
+    }
+    shifted(sig)
+}
+
+/// Stochastic %K reversion. Mirrors the Python `signal_stoch_kd`
+/// (examples/batch_runner/run_batch.py:113-118): long when %K < 20,
+/// short when %K > 80. Uses the shared `compute_stoch` (matches
+/// backtester/indicators.py::compute_stoch). Added in item 5 to close the
+/// Stochastic engine gap (was Python-only).
+fn signal_stoch_kd(bars: &[Bar], lb: usize) -> Vec<i8> {
+    let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
+    let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
+    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
+    let k = compute_stoch(&high, &low, &close, lb);
+    let mut sig = vec![0i8; bars.len()];
+    for i in 0..bars.len() {
+        sig[i] = if !k[i].is_nan() && k[i] < 20.0 {
+            1
+        } else if !k[i].is_nan() && k[i] > 80.0 {
             -1
         } else {
             0
@@ -220,6 +194,8 @@ fn strategies() -> Vec<BatchSpec> {
         BatchSpec { name: "atr_cross_lb30_no_tp",  sig_fn: signal_atr_cross,  lb: 30, tp_pct: 0.0, use_tp: false },
         BatchSpec { name: "macd_zero_lb20_tp4.0",  sig_fn: signal_macd_zero,  lb: 20, tp_pct: 4.0, use_tp: true  },
         BatchSpec { name: "rsi_revert_lb21_tp1.4", sig_fn: signal_rsi_revert, lb: 21, tp_pct: 1.4, use_tp: true  },
+        BatchSpec { name: "stoch_kd_lb14_tp0.8",   sig_fn: signal_stoch_kd,   lb: 14, tp_pct: 0.8, use_tp: true  },
+        BatchSpec { name: "stoch_kd_lb21_tp1.2",   sig_fn: signal_stoch_kd,   lb: 21, tp_pct: 1.2, use_tp: true  },
     ]
 }
 

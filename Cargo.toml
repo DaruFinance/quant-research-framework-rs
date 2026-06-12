@@ -1,6 +1,6 @@
 [package]
 name = "quant-research-framework-rs"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 description = "Walk-forward backtester with robustness tests (Rust port of quant-research-framework)"
 license = "MIT"
@@ -47,6 +47,8 @@ carry = ["panel"]
 # usable without the panel/pairs stack, as Python ships `backtester.dsr`
 # as a thin standalone module.
 dsr = ["dep:statrs"]
+# Shared indicator surface (item 5 — indicator parity). Pure-Rust, zero new deps.
+indicators = []
 
 [dev-dependencies]
 # Rayon is used only by the parallel batch_runner example; it is NOT a
@@ -64,6 +66,12 @@ path = "src/main.rs"
 [[example]]
 name = "batch_runner"
 path = "examples/batch_runner.rs"
+required-features = ["indicators"]
+
+[[example]]
+name = "_parity_indicators"
+path = "examples/_parity_indicators.rs"
+required-features = ["indicators"]
 
 [[example]]
 name = "_parity_dsr"

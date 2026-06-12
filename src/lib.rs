@@ -155,6 +155,13 @@ pub mod carry;
 #[cfg(feature = "dsr")]
 pub mod dsr;
 
+// Shared TradingView/pandas-style indicators (roadmap item 5 — indicator
+// parity). Single source of truth for the example strategies; gated behind
+// the `indicators` feature so it never touches the default build or the
+// default EMA-cross parity surface. Guarded by tools/parity_indicators.py.
+#[cfg(feature = "indicators")]
+pub mod indicators;
+
 #[derive(Clone)]
 pub struct Bar {
     pub time_unix: i64,
