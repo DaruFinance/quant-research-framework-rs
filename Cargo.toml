@@ -49,6 +49,9 @@ carry = ["panel"]
 dsr = ["dep:statrs"]
 # Shared indicator surface (item 5 — indicator parity). Pure-Rust, zero new deps.
 indicators = []
+# Overfitting-statistics layer (item 3). Pulls in `dsr` so the multitest
+# example's dsr::{psr,...} imports resolve under --features overfit.
+overfit = ["dep:statrs", "dsr"]
 
 [dev-dependencies]
 # Rayon is used only by the parallel batch_runner example; it is NOT a
@@ -81,6 +84,16 @@ required-features = ["dsr"]
 [[example]]
 name = "_parity_volume"
 path = "examples/_parity_volume.rs"
+
+[[example]]
+name = "_parity_pbo"
+path = "examples/_parity_pbo.rs"
+required-features = ["overfit"]
+
+[[example]]
+name = "_parity_multitest"
+path = "examples/_parity_multitest.rs"
+required-features = ["overfit"]
 
 [profile.release]
 opt-level = 3

@@ -162,6 +162,16 @@ pub mod dsr;
 #[cfg(feature = "indicators")]
 pub mod indicators;
 
+// Overfitting-statistics layer (roadmap item 3). PBO/CSCV + multiple-testing
+// haircut. Gated behind `overfit` (pulls in `dsr` for PSR/MinTRL). Outside
+// the engine parity surface; guarded by tools/parity_pbo.py / parity_multitest.py.
+#[cfg(feature = "overfit")]
+pub mod pbo;
+#[cfg(feature = "overfit")]
+pub mod multitest;
+#[cfg(feature = "overfit")]
+pub mod haircut;
+
 // Volume indicators (item #2, v0.6.0). UNCONDITIONAL like src/metrics.rs.
 pub mod volume;
 

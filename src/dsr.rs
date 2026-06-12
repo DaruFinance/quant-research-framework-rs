@@ -36,6 +36,9 @@ use statrs::distribution::{ContinuousCDF, Normal};
 /// Euler–Mascheroni constant. Matches `backtester.dsr.EULER_GAMMA`.
 pub const EULER_GAMMA: f64 = 0.5772156649015329;
 
+/// Guard for the division by (SR_hat - SR*) in MinTRL.
+const SR_TARGET_FLOOR: f64 = 1e-12;
+
 /// Standard-normal helper. `Normal::new(0, 1)` is infallible for these
 /// arguments; we unwrap rather than thread a `Result` to keep the public
 /// signatures identical to the Python module.
@@ -104,17 +107,33 @@ pub fn deflated_sharpe_ratio(
     //     g_4 = E[(x - mu)^4] / sigma^4   (= 3 for a Normal),
     // NOT excess kurtosis. The (g_4 - 1) coefficient is therefore correct
     // as written below: it reduces to (3 - 1)/4 = 0.5 in the Normal case.
-    let tf = t as f64;
-    let mu = rets.iter().sum::<f64>() / tf;
-    let sd = sample_var_ddof1(&rets).sqrt(); // std, ddof=1
-    if sd <= 0.0 {
+    let denom_sq = match sr_std_correction(&rets, sharpe_chosen) {
+        Some(d) => d,
+        None => return f64::NAN,
+    };
+    if denom_sq <= 0.0 {
         return f64::NAN;
     }
-    // g_3 / g_4 use the population mean of z^k (division by t, not t-1),
-    // matching numpy's `np.mean(z ** 3)` / `np.mean(z ** 4)`.
+
+    let z_hat = (sharpe_chosen - sr_0) * ((t as f64) - 1.0).sqrt() / denom_sq.sqrt();
+    standard_normal().cdf(z_hat)
+}
+
+/// Bailey-LdP 2014 eq (9) variance-correction term
+///     1 - g_3*SR + (g_4 - 1)*SR^2/4
+/// with g_4 the RAW fourth standardised moment. `rets` finite-filtered.
+/// None if sd <= 0. Shared by DSR/PSR/MinTRL; arithmetic order matches
+/// the Python `_sr_std_correction`.
+fn sr_std_correction(rets: &[f64], sharpe: f64) -> Option<f64> {
+    let tf = rets.len() as f64;
+    let mu = rets.iter().sum::<f64>() / tf;
+    let sd = sample_var_ddof1(rets).sqrt();
+    if sd <= 0.0 {
+        return None;
+    }
     let mut sum_z3 = 0.0f64;
     let mut sum_z4 = 0.0f64;
-    for &r in &rets {
+    for &r in rets {
         let z = (r - mu) / sd;
         let z2 = z * z;
         sum_z3 += z2 * z;
@@ -122,15 +141,61 @@ pub fn deflated_sharpe_ratio(
     }
     let g_3 = sum_z3 / tf;
     let g_4 = sum_z4 / tf;
+    Some(1.0 - g_3 * sharpe + (g_4 - 1.0) * sharpe * sharpe / 4.0)
+}
 
-    let denom_sq =
-        1.0 - g_3 * sharpe_chosen + (g_4 - 1.0) * sharpe_chosen * sharpe_chosen / 4.0;
-    if denom_sq <= 0.0 {
+/// Probabilistic Sharpe Ratio (Bailey-LdP 2014). DSR = PSR with
+/// SR* = SR_0. P(SR>SR*) in [0,1], NaN on the DSR guards.
+pub fn probabilistic_sharpe_ratio(sharpe: f64, returns: &[f64], sr_benchmark: f64) -> f64 {
+    let rets: Vec<f64> = returns.iter().copied().filter(|r| r.is_finite()).collect();
+    let t = rets.len();
+    if t < 3 || !sharpe.is_finite() {
         return f64::NAN;
     }
-
-    let z_hat = (sharpe_chosen - sr_0) * (tf - 1.0).sqrt() / denom_sq.sqrt();
+    let denom_sq = match sr_std_correction(&rets, sharpe) {
+        Some(d) if d > 0.0 => d,
+        _ => return f64::NAN,
+    };
+    let z_hat = (sharpe - sr_benchmark) * ((t as f64) - 1.0).sqrt() / denom_sq.sqrt();
     standard_normal().cdf(z_hat)
+}
+
+/// Minimum Track Record Length (Bailey-LdP 2014 eq 19). Observation
+/// count, inf if SR <= SR*, NaN on the DSR guards.
+pub fn min_track_record_length(
+    sharpe: f64, returns: &[f64], sr_benchmark: f64, prob: f64,
+) -> f64 {
+    let rets: Vec<f64> = returns.iter().copied().filter(|r| r.is_finite()).collect();
+    if rets.len() < 3 || !sharpe.is_finite() {
+        return f64::NAN;
+    }
+    let denom_sq = match sr_std_correction(&rets, sharpe) {
+        Some(d) if d > 0.0 => d,
+        _ => return f64::NAN,
+    };
+    let excess = sharpe - sr_benchmark;
+    if excess <= SR_TARGET_FLOOR {
+        return f64::INFINITY;
+    }
+    let z_p = standard_normal().inverse_cdf(prob);
+    1.0 + denom_sq * (z_p / excess).powi(2)
+}
+
+/// Minimum Backtest Length (Bailey-Borwein-LdP-Zhu 2014). `sr_target`
+/// must be per-period. inf if sr_target<=0, NaN if n_trials<2.
+pub fn min_backtest_length(n_trials: usize, sr_target: f64) -> f64 {
+    if n_trials < 2 {
+        return f64::NAN;
+    }
+    if sr_target <= SR_TARGET_FLOOR {
+        return f64::INFINITY;
+    }
+    let nf = n_trials as f64;
+    let e = std::f64::consts::E;
+    let nd = standard_normal();
+    let z_combo = (1.0 - EULER_GAMMA) * nd.inverse_cdf(1.0 - 1.0 / nf)
+        + EULER_GAMMA * nd.inverse_cdf(1.0 - 1.0 / (nf * e));
+    (z_combo / sr_target).powi(2)
 }
 
 /// One-line summary mirroring `backtester.dsr.report`. Kept for API
