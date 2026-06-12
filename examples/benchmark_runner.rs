@@ -97,7 +97,7 @@ fn sig_for(id: &str) -> Option<RawSignalsFn> {
 }
 
 // ---- tiny manifest reader (no toml crate; dep-light, constraint #4) --------
-struct Dataset { id: String, path: String, kind: String }
+struct Dataset { id: String, path: String, kind: String, oos: Option<usize> }
 struct Strat   { id: String, core: bool, enabled: bool }
 struct Wfo { backtest: usize, oos: usize, use_oos2: bool, default_lb: usize,
              lb_lo: usize, lb_hi: usize, trigger_val: usize }
@@ -105,14 +105,6 @@ struct Fr { net_fee: f64, net_slip: f64, net_fund: f64, pip_def: f64, pip_jpy: f
 struct Pins { opt_metric: String, min_trades: usize, optimize_rrr: bool,
               smart_opt: bool, use_wfo: bool, use_regime_seg: bool }
 
-fn kv<'a>(line: &'a str, key: &str) -> Option<&'a str> {
-    line.split(';').find_map(|kv| {
-        let mut it = kv.splitn(2, '=');
-        let k = it.next()?.trim();
-        let v = it.next()?.trim().trim_matches('"');
-        if k == key { Some(v) } else { None }
-    })
-}
 fn num(v: &str) -> f64 {
     v.trim_start_matches([' ', '=']).split('#').next().unwrap().trim().parse().unwrap()
 }
@@ -122,6 +114,13 @@ fn scalar(line: &str, key: &str) -> Option<String> {
     if head != key { return None; }
     line.split('=').nth(1).map(|v|
         v.split('#').next().unwrap().trim().trim_matches('"').replace('_', ""))
+}
+fn strval(line: &str, key: &str) -> Option<String> {
+    // like `scalar` but preserves underscores (id / path / kind strings)
+    let head = line.split('=').next().unwrap().trim();
+    if head != key { return None; }
+    line.split('=').nth(1).map(|v|
+        v.split('#').next().unwrap().trim().trim_matches('"').to_string())
 }
 
 fn parse_manifest(path: &str) -> (Wfo, Fr, Pins, Vec<Dataset>, Vec<Strat>) {
@@ -138,15 +137,25 @@ fn parse_manifest(path: &str) -> (Wfo, Fr, Pins, Vec<Dataset>, Vec<Strat>) {
     for raw in txt.lines() {
         let line = raw.trim();
         if line.is_empty() || line.starts_with('#') { continue; }
-        if line.starts_with('[') { sect = line.to_string(); continue; }
+        if line.starts_with('[') {
+            sect = line.to_string();
+            if sect.starts_with("[[datasets]]") {
+                datasets.push(Dataset { id: String::new(), path: String::new(), kind: String::new(), oos: None });
+            } else if sect.starts_with("[[strategies]]") {
+                strats.push(Strat { id: String::new(), core: true, enabled: true });
+            }
+            continue;
+        }
         if let Some(v) = scalar(line, "opt_metric")    { pins.opt_metric = v; }
         if let Some(v) = scalar(line, "min_trades")    { pins.min_trades = v.parse().unwrap(); }
         if let Some(v) = scalar(line, "optimize_rrr")  { pins.optimize_rrr = v.contains("true"); }
         if let Some(v) = scalar(line, "smart_optimization") { pins.smart_opt = v.contains("true"); }
         if let Some(v) = scalar(line, "use_wfo")       { pins.use_wfo = v.contains("true"); }
         if let Some(v) = scalar(line, "use_regime_seg"){ pins.use_regime_seg = v.contains("true"); }
-        if let Some(v) = scalar(line, "backtest_candles") { wfo.backtest = v.parse().unwrap(); }
-        if let Some(v) = scalar(line, "oos_candles")   { wfo.oos = v.parse().unwrap(); }
+        if !sect.starts_with("[[") {  // global geometry only in [wfo]; per-dataset handled below
+            if let Some(v) = scalar(line, "backtest_candles") { wfo.backtest = v.parse().unwrap(); }
+            if let Some(v) = scalar(line, "oos_candles")   { wfo.oos = v.parse().unwrap(); }
+        }
         if let Some(v) = scalar(line, "use_oos2")      { wfo.use_oos2 = v.contains("true"); }
         if let Some(v) = scalar(line, "default_lb")    { wfo.default_lb = v.parse().unwrap(); }
         if let Some(v) = scalar(line, "wfo_trigger_val") { wfo.trigger_val = v.parse().unwrap(); }
@@ -165,18 +174,19 @@ fn parse_manifest(path: &str) -> (Wfo, Fr, Pins, Vec<Dataset>, Vec<Strat>) {
             if let Some(v) = line.strip_prefix("pip_default")  { fr.pip_def = num(v); }
             if let Some(v) = line.strip_prefix("pip_jpy")      { fr.pip_jpy = num(v); }
         }
-        if line.starts_with("id =") && kv(line, "path").is_some() {
-            datasets.push(Dataset {
-                id: kv(line, "id").unwrap().into(),
-                path: kv(line, "path").unwrap().into(),
-                kind: kv(line, "kind").unwrap().into(),
-            });
-        } else if line.starts_with("id =") && kv(line, "lb").is_some() {
-            strats.push(Strat {
-                id: kv(line, "id").unwrap().into(),
-                core: kv(line, "core").map(|s| s.contains("true")).unwrap_or(true),
-                enabled: kv(line, "enabled").map(|s| s.contains("true")).unwrap_or(true),
-            });
+        if sect.starts_with("[[datasets]]") {
+            if let Some(d) = datasets.last_mut() {
+                if let Some(v) = strval(line, "id")   { d.id = v; }
+                if let Some(v) = strval(line, "path") { d.path = v; }
+                if let Some(v) = strval(line, "kind") { d.kind = v; }
+                if let Some(v) = scalar(line, "oos_candles") { d.oos = v.parse().ok(); }
+            }
+        } else if sect.starts_with("[[strategies]]") {
+            if let Some(s) = strats.last_mut() {
+                if let Some(v) = strval(line, "id")      { s.id = v; }
+                if let Some(v) = strval(line, "core")    { s.core = v.contains("true"); }
+                if let Some(v) = strval(line, "enabled") { s.enabled = v.contains("true"); }
+            }
         }
     }
     (wfo, fr, pins, datasets, strats)
@@ -262,7 +272,8 @@ fn main() {
             let mut cfg_net = Config::new();
             // IS window is the compile-time const BACKTEST_CANDLES (asserted ==
             // manifest backtest_candles); not a Config field, so not set here.
-            cfg_net.oos_candles = if wfo.use_oos2 { wfo.oos * 2 } else { wfo.oos };
+            let oos_for_ds = ds.oos.unwrap_or(wfo.oos);  // per-dataset geometry override
+            cfg_net.oos_candles = if wfo.use_oos2 { oos_for_ds * 2 } else { oos_for_ds };
             cfg_net.use_oos2 = wfo.use_oos2;
             cfg_net.sharpe_bar = false;
             if ds.kind == "fx" {
@@ -278,7 +289,7 @@ fn main() {
 
             // ---- GROSS (frictionless) ----
             let mut cfg_g = Config::new();
-            cfg_g.oos_candles = if wfo.use_oos2 { wfo.oos * 2 } else { wfo.oos };
+            cfg_g.oos_candles = if wfo.use_oos2 { oos_for_ds * 2 } else { oos_for_ds };
             cfg_g.use_oos2 = wfo.use_oos2;
             cfg_g.sharpe_bar = false;
             if ds.kind == "fx" {

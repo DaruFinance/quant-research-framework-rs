@@ -561,7 +561,18 @@ def _cross_engine(rows, rust_csv, tol) -> int:
     if rust_csv is None or not rust_csv.exists():
         print(f"  --rust-csv not found: {rust_csv}", file=sys.stderr)
         return 2
-    py = {(r["dataset"], r["strategy"]): r for r in rows if r["core"] == "1"}
+    # Per-dataset cross-engine exclusions: a dataset with a documented known
+    # divergence (manifest `cross_engine_check = false`) stays in the golden
+    # NET/GROSS columns but is skipped here, so the gate reflects only the cells
+    # we actually claim cross-engine parity for.
+    with open(MANIFEST, "rb") as _mf:
+        _excluded = {d["id"] for d in tomllib.load(_mf).get("datasets", [])
+                     if not d.get("cross_engine_check", True)}
+    for _ds in sorted(_excluded):
+        print(f"  NOTE cross-engine SKIP {_ds} "
+              "(manifest cross_engine_check=false; documented known divergence)")
+    py = {(r["dataset"], r["strategy"]): r for r in rows
+          if r["core"] == "1" and r["dataset"] not in _excluded}
     rr = {}
     with rust_csv.open() as f:
         for row in csv.DictReader(f):

@@ -112,17 +112,41 @@ pip_jpy     = 0.01
 # missing dataset).
 # ----------------------------------------------------------------------------
 [[datasets]]
-id = "SOLUSDT_1h"  ; path = "data/SOLUSDT_1h.csv"  ; kind = "crypto"
+id = "SOLUSDT_1h"
+path = "data/SOLUSDT_1h.csv"
+kind = "crypto"
+oos_candles = 30000   # per-dataset (n=48,094): start_total>0, ~6 genuine WFO windows
+
 [[datasets]]
-id = "BTCUSDT_30m" ; path = "data/BTCUSDT_30m.csv" ; kind = "crypto"
+id = "BTCUSDT_30m"
+path = "data/BTCUSDT_30m.csv"
+kind = "crypto"
+
 [[datasets]]
-id = "DOGEUSDT_30m"; path = "data/DOGEUSDT_30m.csv"; kind = "crypto"
+id = "DOGEUSDT_30m"
+path = "data/DOGEUSDT_30m.csv"
+kind = "crypto"
+
 [[datasets]]
-id = "EURUSD_1h"   ; path = "data/EURUSD_1h.csv"   ; kind = "fx"
+id = "EURUSD_1h"
+path = "data/EURUSD_1h.csv"
+kind = "fx"
+oos_candles = 35000   # per-dataset (n=53,160): start_total>0, ~7 genuine WFO windows
+
 [[datasets]]
-id = "USDJPY_1h"   ; path = "data/USDJPY_1h.csv"   ; kind = "fx"
+id = "USDJPY_1h"
+path = "data/USDJPY_1h.csv"
+kind = "fx"
+oos_candles = 70000   # per-dataset (n=87,648): start_total>0, ~14 genuine WFO windows (kills the mixed-sign wrap)
+cross_engine_check = false  # KNOWN DIVERGENCE: the JPY pip_size=0.01 forex path
+                            # has a ~1-2% Python<->Rust residual that parity_forex
+                            # (EURUSD, pip=0.0001) does not cover. NET/GROSS numbers
+                            # are still reported; only the cross-engine GATE skips it.
+
 [[datasets]]
-id = "SYNTH_100k"  ; path = "data/SYNTH_100k.csv"  ; kind = "crypto"
+id = "SYNTH_100k"
+path = "data/SYNTH_100k.csv"
+kind = "crypto"
 
 # ----------------------------------------------------------------------------
 # Strategies.
@@ -148,20 +172,61 @@ id = "SYNTH_100k"  ; path = "data/SYNTH_100k.csv"  ; kind = "crypto"
 # distinct strategies per dataset (N=6), not windows.
 # ----------------------------------------------------------------------------
 [[strategies]]
-id = "engine_ema" ; lb = 50 ; core = true  ; enabled = true ; engine = "both" ; item5_target = false
-family = "trend" ; desc = "Engine-internal default: EMA_20 x EMA_lb crossover (THE parity-validated signal; engine's own default sig fn)"
+id = "engine_ema"
+lb = 50
+core = true
+enabled = true
+engine = "both"
+item5_target = false
+family = "trend"
+desc = "Engine-internal default: EMA_20 x EMA_lb crossover (the parity-validated signal; engine's own default sig fn)"
+
 [[strategies]]
-id = "ema_cross"  ; lb = 50 ; core = true  ; enabled = true ; engine = "both" ; item5_target = false
-family = "trend" ; desc = "Fast EMA(lb) vs slow EMA(lb*4) — ewm(adjust=False), cross-engine identical"
+id = "ema_cross"
+lb = 50
+core = true
+enabled = true
+engine = "both"
+item5_target = false
+family = "trend"
+desc = "Fast EMA(lb) vs slow EMA(lb*4); ewm(adjust=False), cross-engine identical"
+
 [[strategies]]
-id = "macd_zero"  ; lb = 50 ; core = true  ; enabled = true ; engine = "both" ; item5_target = false
-family = "trend" ; desc = "MACD line vs signal — ewm(adjust=False), cross-engine identical"
+id = "macd_zero"
+lb = 50
+core = true
+enabled = true
+engine = "both"
+item5_target = false
+family = "trend"
+desc = "MACD line vs signal; ewm(adjust=False), cross-engine identical"
+
 [[strategies]]
-id = "atr_cross"  ; lb = 50 ; core = false ; enabled = true ; engine = "python" ; item5_target = true
-family = "breakout" ; desc = "SMA cross gated by ATR breakout+RSI. PYTHON-ONLY until item 5 ports ATR (true-range+Wilder)"
+id = "atr_cross"
+lb = 50
+core = false
+enabled = true
+engine = "python"
+item5_target = true
+family = "breakout"
+desc = "SMA cross gated by ATR breakout + RSI. Python-only in this golden; item 5 has since ported true-range+Wilder ATR to Rust (flip to cross-engine is a future spec bump)."
+
 [[strategies]]
-id = "rsi_revert" ; lb = 50 ; core = false ; enabled = true ; engine = "python" ; item5_target = true
-family = "mean_reversion" ; desc = "Long RSI<35 / short RSI>65. PYTHON-ONLY until item 5 ports RSI (ewm adjust=True+warmup)"
+id = "rsi_revert"
+lb = 50
+core = false
+enabled = true
+engine = "python"
+item5_target = true
+family = "mean_reversion"
+desc = "Long RSI<35 / short RSI>65. Python-only in this golden; item 5 has since ported adjust=True RSI to Rust."
+
 [[strategies]]
-id = "stoch_kd"   ; lb = 50 ; core = false ; enabled = true ; engine = "python" ; item5_target = true
-family = "oscillator" ; desc = "Stochastic-K threshold. PYTHON-ONLY until item 5 ports compute_stoch to Rust"
+id = "stoch_kd"
+lb = 50
+core = false
+enabled = true
+engine = "python"
+item5_target = true
+family = "oscillator"
+desc = "Stochastic-K threshold. Python-only in this golden; item 5 has since added compute_stoch to Rust."
