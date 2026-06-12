@@ -20,7 +20,7 @@ fn make_bars(n: usize, start_unix: i64, interval_s: i64) -> Vec<Bar> {
         let t = start_unix + i as i64 * interval_s;
         // Mild trending series so the EMA strategy actually trades.
         let p = 100.0 + (i as f64 * 0.05).sin() + (i as f64 * 0.0003);
-        Bar { time_unix: t, open: p, high: p * 1.002, low: p * 0.998, close: p }
+        Bar::ohlc(t, p, p * 1.002, p * 0.998, p)
     }).collect()
 }
 

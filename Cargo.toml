@@ -78,6 +78,10 @@ name = "_parity_dsr"
 path = "examples/_parity_dsr.rs"
 required-features = ["dsr"]
 
+[[example]]
+name = "_parity_volume"
+path = "examples/_parity_volume.rs"
+
 [profile.release]
 opt-level = 3
 lto = true

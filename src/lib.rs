@@ -162,6 +162,9 @@ pub mod dsr;
 #[cfg(feature = "indicators")]
 pub mod indicators;
 
+// Volume indicators (item #2, v0.6.0). UNCONDITIONAL like src/metrics.rs.
+pub mod volume;
+
 #[derive(Clone)]
 pub struct Bar {
     pub time_unix: i64,
@@ -169,6 +172,15 @@ pub struct Bar {
     pub high: f64,
     pub low: f64,
     pub close: f64,
+    /// Item #2 (v0.6.0): per-bar volume; 0.0 when 6th CSV column absent.
+    pub volume: f64,
+}
+
+impl Bar {
+    /// Construct a clean OHLC bar with volume defaulted to 0.0 (item #2).
+    pub fn ohlc(time_unix: i64, open: f64, high: f64, low: f64, close: f64) -> Self {
+        Bar { time_unix, open, high, low, close, volume: 0.0 }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -378,7 +390,12 @@ pub fn load_ohlc(path: &str) -> Vec<Bar> {
         let high: f64 = fields[2].trim().parse().expect("bad high");
         let low: f64 = fields[3].trim().parse().expect("bad low");
         let close: f64 = fields[4].trim().parse().expect("bad close");
-        bars.push(Bar { time_unix, open, high, low, close });
+        let volume: f64 = fields.get(5)
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        bars.push(Bar { time_unix, open, high, low, close, volume });
     }
     bars.sort_by_key(|b| b.time_unix);
     bars
