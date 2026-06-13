@@ -30,8 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **License → Apache-2.0** (was MIT) across `LICENSE`, `Cargo.toml`, `README.md`.
-- Version → 0.6.0. Performance refreshed to a single measurement pass: **32–76× faster,
-  29–68× less memory** (reproduce with `tools/bench.py`).
+- Version → 0.6.0. Performance refreshed to a single measurement pass: **25–79× faster,
+  29–69× less memory** (median wall-clock over 5 warm runs; reproduce with
+  `tools/bench.py --runs 5 --stat median`). This single band now matches the README,
+  the paper, and `CITATION.cff`.
 
 ### Notes
 - All new behaviour is opt-in / feature-gated; the default build and the parity surfaces

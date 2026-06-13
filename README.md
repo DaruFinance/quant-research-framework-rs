@@ -8,7 +8,7 @@
 
 **A walk-forward backtester written twice — a Python reference and a Rust port — that proves in CI the two produce the same numbers.** Walk-forward optimization (WFO), robustness stress tests, realism controls (fees, slippage, funding, SL/TP), and strict no-look-ahead enforced at the ledger level.
 
-It answers one question: *does an apparent edge survive out-of-sample evaluation under realistic frictions, or is it just fitting the past?* The Rust port answers it **32–76× faster** and in **29–68× less memory** than the Python reference ([benchmarks](#performance)), and a parity harness checks both engines agree within `1e-3` on every push.
+It answers one question: *does an apparent edge survive out-of-sample evaluation under realistic frictions, or is it just fitting the past?* The Rust port answers it **25–79× faster** and in **29–69× less memory** than the Python reference ([benchmarks](#performance)), and a parity harness checks both engines agree within `1e-3` on every push.
 
 ## Why two engines
 
@@ -226,24 +226,26 @@ If you disable those two sources of randomness, the outputs are identical down t
 Both implementations run the same default pipeline (IS/OOS baseline +
 smart-optimiser + WFO + Monte Carlo + robustness overlays) on slices of
 the bundled `SOLUSDT_1h.csv`. Measured on a WSL2 Linux shell with
-`/usr/bin/time -v`, min wall-clock and max peak RSS over 3 runs after a
-warm-up. Reproduce with:
+`/usr/bin/time -v`, **median** wall-clock and peak RSS over 5 runs after a
+warm-up (the warm-up absorbs Python's one-time Numba JIT cost). Reproduce
+with:
 
 ```bash
-python tools/bench.py --sizes 15000,25000,35000,48000 --runs 3
+python tools/bench.py --sizes 15000,25000,35000,48000 --runs 5 --stat median
 ```
 
 | Bars   | Python (s) | Rust (s) | Speed-up | Python RSS (MB) | Rust RSS (MB) |
 |-------:|-----------:|---------:|---------:|----------------:|--------------:|
-| 15,000 |       3.78 |     0.05 |   75.60× |             273 |             4 |
-| 25,000 |       4.53 |     0.11 |   41.18× |             279 |             6 |
-| 35,000 |       6.17 |     0.16 |   38.56× |             280 |             8 |
-| 48,000 |       7.92 |     0.25 |   31.68× |             291 |            10 |
+| 15,000 |       3.94 |     0.05 |   78.80× |             276 |             4 |
+| 25,000 |       5.23 |     0.12 |   43.58× |             278 |             6 |
+| 35,000 |       5.46 |     0.16 |   34.12× |             281 |             8 |
+| 48,000 |       6.54 |     0.26 |   25.15× |             291 |            10 |
 
-The Python wall time includes numba JIT compile cost, which is amortised
-the more bars you process — Rust's relative advantage shrinks but never
-disappears (~32× at full 48k bars). Memory-wise, Rust holds at 29–68×
-lower peak RSS (29× at the largest dataset): no pandas, no NumPy,
+So **25–79× faster** across the range, **29–69× less memory**. The high end
+is at small N where the Rust runtime (0.05 s) is near timer resolution and
+Python is still paying fixed overhead; the steady-state figure is the full
+48k-bar row (~25× faster, 29× less memory). Rust's advantage shrinks as
+Python's JIT cost amortises but never disappears: no pandas, no NumPy,
 single-threaded with zero allocations in the hot loop.
 
 ## Comparison vs other open-source backtesters

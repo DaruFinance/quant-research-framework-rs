@@ -66,15 +66,26 @@ def first(pat, txt, g=1):
     mm = re.search(pat, txt or "")
     return mm.group(g) if mm else None
 
+cit_rs, cit_py = rd(REPO_RS / "CITATION.cff") or "", rd(REPO_PY / "CITATION.cff") or ""
 versions = {
     "Cargo.toml":   first(r'(?m)^\s*version\s*=\s*"([^"]+)"', cargo),
     "pyproject":    first(r'(?m)^\s*version\s*=\s*"([^"]+)"', pyproj),
     "__version__":  first(r'__version__\s*=\s*"([^"]+)"', rd(REPO_PY / "backtester" / "__init__.py")),
     "CHANGELOG-rs": first(r'(?m)^##\s*\[([0-9][^\]]*)\]', rd(REPO_RS / "CHANGELOG.md")),
     "CHANGELOG-py": first(r'(?m)^##\s*\[([0-9][^\]]*)\]', rd(REPO_PY / "CHANGELOG.md")),
+    "CITATION-rs":  first(r'(?m)^version:\s*"?([0-9][^"\s]*)"?', cit_rs),
+    "CITATION-py":  first(r'(?m)^version:\s*"?([0-9][^"\s]*)"?', cit_py),
 }
 distinct = {v for v in versions.values() if v}
 must(len(distinct) == 1, f"[version] not synchronised: {versions}")
+
+# ---- 4b. CITATION.cff license fields are Apache-2.0, not MIT ----
+for name, cit in (("rust", cit_rs), ("python", cit_py)):
+    must(bool(cit), f"[cite] {name}: CITATION.cff missing")
+    if cit:
+        must("license: MIT" not in cit, f"[cite] {name} CITATION.cff still declares 'license: MIT'")
+        must(f"license: {CANON_LICENSE}" in cit,
+             f"[cite] {name} CITATION.cff does not declare license: {CANON_LICENSE}")
 
 # ---- 5. one speed band, identical across both READMEs ----
 def speed_band(txt):
