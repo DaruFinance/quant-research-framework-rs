@@ -248,8 +248,15 @@ def main() -> int:
     args = ap.parse_args()
 
     if not FIXTURE.exists():
-        sys.stderr.write(
-            f"fixture missing: {FIXTURE}\nrun: python tools/make_volume_fixture.py\n")
+        # The fixture is deterministic and untracked; auto-generate it so this
+        # harness is self-contained on a fresh checkout / in CI / under make repro.
+        sys.stderr.write(f"fixture missing: {FIXTURE} — generating via "
+                         f"tools/make_volume_fixture.py ...\n")
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import make_volume_fixture
+        make_volume_fixture.main()
+    if not FIXTURE.exists():
+        sys.stderr.write(f"fixture generation failed: {FIXTURE}\n")
         return 2
 
     df = _load_df()
