@@ -45,15 +45,14 @@ One command builds the Rust engine, runs the cross-language parity suite, and fi
 make repro     # set QRF_PY_DIR=/path/to/quant-research-framework if it isn't a sibling checkout
 ```
 
-The parity surfaces compare both engines metric-by-metric and end in `PARITY OK`; the published counts are **56/56** (default config), **98/98** (regime + WFO), and **56/56** (forex). The leak demo plants a strategy that reads 4 bars into the future, NaN-pollutes the future, and shows that exactly those 4 *past* bars move while the shipped causal strategy does not:
+The parity surfaces compare both engines metric-by-metric and end in `PARITY OK`; the published counts are **56/56** (default config), **98/98** (regime + WFO), and **56/56** (forex). The leak demo (the paper's `listings/lah_demo.py`) runs two strategies through a future-pollution test: it replaces every bar after #400 with noise and checks that the signals *before* #400 are unchanged. The causal strategy is untouched; a deliberately leaky one that peeks 5 bars ahead moves exactly the 4 bars that reach across the boundary:
 
 ```
-look-ahead leak demo  —  n=800 bars, pollute future at cut=400
-  causal EMA-cross (shipped)    :   0/400 past bars changed   PASS — no look-ahead
-  forward-peek EMA-cross (H=4)  :   4/400 past bars changed   LEAK CAUGHT
+[PASS] good (paper Listing 1, .take(idx-1) shift): 0 of 400 bars affected by post-bar-400 pollution.
+[FAIL] buggy (deliberate close.shift(-5) peek): 4 of 400 bars affected by post-bar-400 pollution; first leak at bar 395, last at bar 398.
 ```
 
-Run any piece on its own with `make parity`, `make leak`, or `make bench`. The leak demo (`tools/leak_demo.py`) is the same pollute-and-verify property the Hypothesis suite runs over a generated input space (the Python reference's `tests/test_invariants_property.py`).
+Run any piece on its own with `make parity`, `make leak`, or `make bench`. The leak demo is the same pollute-and-verify property the Hypothesis suite runs over a generated input space (the Python reference's `tests/test_invariants_property.py`).
 
 ## What this is / what it isn't
 

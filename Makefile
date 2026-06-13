@@ -28,7 +28,7 @@ parity: build
 	$(PY) tools/parity_forex.py  --csv data/EURUSD_1h.csv  --tol 0.001
 
 leak:
-	$(PY) tools/leak_demo.py
+	$(PY) $(QRF_PY_DIR)/listings/lah_demo.py
 
 bench: build
 	$(PY) tools/benchmark.py --check

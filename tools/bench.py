@@ -47,6 +47,7 @@ TIME_RE = re.compile(r"^QRF_BENCH\s+(?P<elapsed>[\d.]+)\s+(?P<rss_kb>\d+)\s*$",
 class Sample:
     elapsed_s: float
     peak_rss_mb: float
+    std_pct: float = 0.0   # wall-clock sample std-dev as % of the reported stat
 
 
 def slice_csv(src: Path, n_rows: int, dst: Path) -> None:
@@ -93,7 +94,9 @@ def bench_engine(label: str, cmd: list[str], runs: int,
     # min is the best-case. RSS is always the peak observed.
     elapsed = statistics.median(elapseds) if stat == "median" else min(elapseds)
     rss = max(s.peak_rss_mb for s in samples)
-    return Sample(elapsed_s=elapsed, peak_rss_mb=rss)
+    std_pct = (statistics.stdev(elapseds) / elapsed * 100.0
+               if len(elapseds) > 1 and elapsed > 0 else 0.0)
+    return Sample(elapsed_s=elapsed, peak_rss_mb=rss, std_pct=std_pct)
 
 
 PY_DRIVER = """
@@ -193,13 +196,18 @@ def main() -> int:
             f"{speedup:>7.2f}× | {py.peak_rss_mb:>15.0f} | {rs.peak_rss_mb:>13.0f} |"
         )
     speedups = [py.elapsed_s / rs.elapsed_s for _, py, rs in rows if rs.elapsed_s > 0]
+    mems = [py.peak_rss_mb / rs.peak_rss_mb for _, py, rs in rows if rs.peak_rss_mb > 0]
     if speedups:
+        py_std = max(py.std_pct for _, py, _ in rows)
+        rs_std = max(rs.std_pct for _, _, rs in rows)
         lines.append("")
         lines.append(
             f"_{args.stat} wall-clock over {args.runs} runs after one warm-up "
             f"(Python includes Numba JIT in the warm-up, not the timed runs); "
             f"RSS is the peak observed. Speed-up band: "
-            f"{min(speedups):.0f}–{max(speedups):.0f}×._")
+            f"{min(speedups):.0f}–{max(speedups):.0f}×; memory band: "
+            f"{min(mems):.0f}–{max(mems):.0f}×; max wall-clock sample std-dev: "
+            f"Python {py_std:.1f}%, Rust {rs_std:.1f}%._")
     table = "\n".join(lines)
     print(table)
     if args.out:
