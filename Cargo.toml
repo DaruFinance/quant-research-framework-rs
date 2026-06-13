@@ -20,7 +20,7 @@ chrono-tz = { version = "0.10", default-features = false }
 # Optional. Pulled in only when the `panel` feature is active. Item #1
 # (Phase 2) uses ndarray for the time × asset × field N-D array; csv
 # reads the per-asset OHLC files; serde plumbing through csv.
-ndarray = { version = "0.16", optional = true }
+ndarray = { version = "0.17", optional = true }
 csv = { version = "1.3", optional = true }
 
 # Normal CDF / inverse-CDF for the Deflated Sharpe Ratio (roadmap item 09).
