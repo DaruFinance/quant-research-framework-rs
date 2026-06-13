@@ -11,16 +11,14 @@
 name: parity
 
 on:
-  push:
-    branches: [main]
+  push:                 # every branch — correctness is gated on every push, not just main
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
   parity:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40   # the v0.6.0 surfaces + benchmark each re-run the 6x6 WFO
 
     steps:
       - name: Checkout this repo
@@ -32,7 +30,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: DaruFinance/quant-research-framework
-          ref: main
+          ref: feat/v0.6.0   # release coordination — revert to `main` when v0.6.0 merges
           path: quant-research-framework
 
       - name: Set up Rust toolchain
@@ -66,6 +64,10 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.10'
+
+      - name: Consistency guard (license / version / headline figures across artifacts)
+        working-directory: quant-research-framework-rs
+        run: python tools/check_consistency.py
 
       - name: Install Python framework deps
         working-directory: quant-research-framework
@@ -124,3 +126,45 @@ jobs:
       - name: Parity — carry primitives (funding / basis / OI / triggers / models)
         working-directory: quant-research-framework-rs
         run: python tools/parity_carry.py --tol 0.001
+
+      # ---- v0.6.0 surfaces (items 5 / 2 / 1 / 3). These need the Python engine
+      # at the coordinated v0.6.0 (volume_indicators, opt_surface, haircut, the
+      # dsr/pbo additions); keep the Python `ref` above in lockstep at release. ----
+      - name: Build gated examples (indicators / overfit)
+        working-directory: quant-research-framework-rs
+        run: |
+          cargo build  --release --features indicators --example batch_runner
+          cargo clippy --release --features indicators --example batch_runner -- -D warnings
+          cargo build  --release --features overfit
+          cargo clippy --release --features overfit --no-deps -- -D warnings
+
+      - name: Parity — shared indicators (SMA/EMA/MACD/RSI/ATR/Stochastic)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_indicators.py --tol 0.001
+
+      - name: Parity — volume indicators + strategy
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_volume.py --tol 0.001
+
+      - name: Parity — IS objective surface (2-axis + SL-3axis + bar-Sharpe)
+        working-directory: quant-research-framework-rs
+        run: |
+          python tools/parity_surface.py
+          python tools/parity_surface.py --sl3
+          python tools/parity_surface.py --sharpe bar --irregular
+
+      - name: Parity — overfitting stats (PBO / multitest / overfit-lines guard)
+        working-directory: quant-research-framework-rs
+        run: |
+          python tools/parity_pbo.py --tol 0.001
+          python tools/parity_multitest.py --tol 0.001
+          python tools/parity_overfit_lines.py
+
+      # ---- v0.6.0 reproducible benchmark (item 4): golden drift + cross-engine ----
+      - name: Benchmark — golden drift-guard + cross-engine (1e-3)
+        working-directory: quant-research-framework-rs
+        run: |
+          cargo build --release --example benchmark_runner
+          python tools/benchmark.py --check
+          ./target/release/examples/benchmark_runner --manifest tools/benchmark_manifest.toml --out /tmp/bench_rust.csv
+          python tools/benchmark.py --cross-engine --rust-csv /tmp/bench_rust.csv --tol 0.001

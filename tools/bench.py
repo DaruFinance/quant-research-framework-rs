@@ -22,6 +22,7 @@ import argparse
 import os
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -46,6 +47,7 @@ TIME_RE = re.compile(r"^QRF_BENCH\s+(?P<elapsed>[\d.]+)\s+(?P<rss_kb>\d+)\s*$",
 class Sample:
     elapsed_s: float
     peak_rss_mb: float
+    std_pct: float = 0.0   # wall-clock sample std-dev as % of the reported stat
 
 
 def slice_csv(src: Path, n_rows: int, dst: Path) -> None:
@@ -77,6 +79,7 @@ def time_command(cmd: list[str], env: dict | None = None,
 
 
 def bench_engine(label: str, cmd: list[str], runs: int,
+                 stat: str = "median",
                  env: dict | None = None,
                  cwd: Path | None = None) -> Sample:
     samples = []
@@ -86,9 +89,14 @@ def bench_engine(label: str, cmd: list[str], runs: int,
         sys.stderr.write(
             f"  [{label} run {r+1}/{runs}] {s.elapsed_s:.2f}s, "
             f"{s.peak_rss_mb:.0f} MB\n")
-    elapsed = min(s.elapsed_s for s in samples)
+    elapseds = [s.elapsed_s for s in samples]
+    # median is the conservative/steady-state default (the published band);
+    # min is the best-case. RSS is always the peak observed.
+    elapsed = statistics.median(elapseds) if stat == "median" else min(elapseds)
     rss = max(s.peak_rss_mb for s in samples)
-    return Sample(elapsed_s=elapsed, peak_rss_mb=rss)
+    std_pct = (statistics.stdev(elapseds) / elapsed * 100.0
+               if len(elapseds) > 1 and elapsed > 0 else 0.0)
+    return Sample(elapsed_s=elapsed, peak_rss_mb=rss, std_pct=std_pct)
 
 
 PY_DRIVER = """
@@ -134,6 +142,9 @@ def main() -> int:
                    help="comma-separated list of bar counts")
     p.add_argument("--runs", type=int, default=DEFAULT_RUNS,
                    help=f"runs per size per engine (default: {DEFAULT_RUNS})")
+    p.add_argument("--stat", choices=("median", "min"), default="median",
+                   help="aggregate wall-clock across runs (default: median, "
+                        "the conservative/steady-state number; min = best case)")
     p.add_argument("--out", type=Path, default=None,
                    help="optional path to write the markdown table")
     args = p.parse_args()
@@ -165,13 +176,13 @@ def main() -> int:
             py_cmd, py_env = python_cmd(sliced)
             time_command(py_cmd, env=py_env)
             sys.stderr.write(f"[bench] Python timing ({args.runs} runs)\n")
-            py = bench_engine("python", py_cmd, args.runs, env=py_env)
+            py = bench_engine("python", py_cmd, args.runs, args.stat, env=py_env)
 
             sys.stderr.write(f"[bench] Rust warm-up...\n")
             rs_cmd = rust_cmd(sliced, binary)
             time_command(rs_cmd)
             sys.stderr.write(f"[bench] Rust timing ({args.runs} runs)\n")
-            rs = bench_engine("rust", rs_cmd, args.runs)
+            rs = bench_engine("rust", rs_cmd, args.runs, args.stat)
 
             rows.append((n, py, rs))
 
@@ -184,6 +195,19 @@ def main() -> int:
             f"| {n:>6,} | {py.elapsed_s:>10.2f} | {rs.elapsed_s:>8.2f} | "
             f"{speedup:>7.2f}× | {py.peak_rss_mb:>15.0f} | {rs.peak_rss_mb:>13.0f} |"
         )
+    speedups = [py.elapsed_s / rs.elapsed_s for _, py, rs in rows if rs.elapsed_s > 0]
+    mems = [py.peak_rss_mb / rs.peak_rss_mb for _, py, rs in rows if rs.peak_rss_mb > 0]
+    if speedups:
+        py_std = max(py.std_pct for _, py, _ in rows)
+        rs_std = max(rs.std_pct for _, _, rs in rows)
+        lines.append("")
+        lines.append(
+            f"_{args.stat} wall-clock over {args.runs} runs after one warm-up "
+            f"(Python includes Numba JIT in the warm-up, not the timed runs); "
+            f"RSS is the peak observed. Speed-up band: "
+            f"{min(speedups):.0f}–{max(speedups):.0f}×; memory band: "
+            f"{min(mems):.0f}–{max(mems):.0f}×; max wall-clock sample std-dev: "
+            f"Python {py_std:.1f}%, Rust {rs_std:.1f}%._")
     table = "\n".join(lines)
     print(table)
     if args.out:

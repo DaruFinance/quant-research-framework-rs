@@ -45,6 +45,8 @@ pub fn bars_for_asset(panel: &PanelData, asset: &str) -> Result<Vec<Bar>, String
     let open_idx = panel.fields.iter().position(|f| f == "open").unwrap();
     let high_idx = panel.fields.iter().position(|f| f == "high").unwrap();
     let low_idx = panel.fields.iter().position(|f| f == "low").unwrap();
+    // Item #2: volume is OPTIONAL in the panel; Option, never .unwrap() (B3 fix).
+    let volume_idx = panel.fields.iter().position(|f| f == "volume");
 
     let n = panel.times.len();
     let mut bars = Vec::with_capacity(n);
@@ -55,6 +57,7 @@ pub fn bars_for_asset(panel: &PanelData, asset: &str) -> Result<Vec<Bar>, String
             high: panel.data[[ti, ai, high_idx]],
             low: panel.data[[ti, ai, low_idx]],
             close: panel.data[[ti, ai, close_idx]],
+            volume: volume_idx.map(|vi| panel.data[[ti, ai, vi]]).unwrap_or(0.0),
         });
     }
     Ok(bars)

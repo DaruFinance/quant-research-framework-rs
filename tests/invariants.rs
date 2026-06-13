@@ -16,7 +16,7 @@ fn make_bars(n: usize, start_unix: i64, interval_s: i64, seed: u64) -> Vec<Bar> 
         let t = start_unix + i as i64 * interval_s;
         let r: f64 = rng.gen::<f64>() * 0.02 - 0.01;
         p *= (1.0 + r).max(0.5);
-        Bar { time_unix: t, open: p, high: p * 1.002, low: p * 0.998, close: p }
+        Bar::ohlc(t, p, p * 1.002, p * 0.998, p)
     }).collect()
 }
 
@@ -263,7 +263,7 @@ fn session_end_marks_last_in_session_bar_per_day() {
     let start: i64 = 1_705_276_800;          // 2024-01-15 00:00 UTC
     let bars: Vec<Bar> = (0..96).map(|i| {
         let t = start + (i as i64) * 3600;
-        Bar { time_unix: t, open: 100.0, high: 100.1, low: 99.9, close: 100.0 }
+        Bar::ohlc(t, 100.0, 100.1, 99.9, 100.0)
     }).collect();
 
     let cfg = Config::new().with_sessions(true, 8, 17);

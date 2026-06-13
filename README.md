@@ -6,9 +6,63 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19798592.svg)](https://doi.org/10.5281/zenodo.19798592)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-A faithful Rust port of the [**quant-research-framework**](https://github.com/DaruFinance/quant-research-framework) Python backtester: walk-forward optimization (WFO), robustness stress tests, and realism controls (fees, slippage, funding, SL/TP), with the same strategy logic and the same numeric output as the reference Python implementation.
+**A walk-forward backtester written twice — a Python reference and a Rust port — that proves in CI the two produce the same numbers.** Walk-forward optimization (WFO), robustness stress tests, realism controls (fees, slippage, funding, SL/TP), and strict no-look-ahead enforced at the ledger level.
 
-> Does an apparent edge survive **out-of-sample** evaluation under realistic frictions — or is it just fitting the past? Same question, same method, running 25–60× faster and in ~37× less memory ([benchmarks](#performance)).
+It answers one question: *does an apparent edge survive out-of-sample evaluation under realistic frictions, or is it just fitting the past?* The Rust port answers it **23.8–57× faster** and in **33–65× less memory** than the Python reference ([benchmarks](#performance)), and a parity harness checks both engines agree within `1e-3` on every push.
+
+## Why two engines
+
+Most backtesters ask you to trust one implementation. This one is written twice and diffed: the Python reference is the readable spec, the Rust port is the fast spec, and a parity oracle runs both on identical input and asserts the metrics match. If the port drifts from the reference, CI goes red — the correctness claim is *enforced, not asserted*.
+
+```
+                ┌────────────────────────────────────────────────┐
+                │                same OHLC input                  │
+                │     data/SOLUSDT_1h.csv · EURUSD_1h.csv · …      │
+                └───────────────┬────────────────┬───────────────┘
+                                │                │
+                ┌───────────────▼──────┐  ┌──────▼───────────────┐
+                │  Python reference    │  │      Rust port       │
+                │  backtester/         │  │      src/lib.rs      │
+                │  (the spec, readable)│  │   + metrics · dsr ·  │
+                │                      │  │   pbo · opt_surface… │
+                └───────────────┬──────┘  └──────┬───────────────┘
+                                │ metrics        │ metrics
+                                ▼                ▼
+                ┌────────────────────────────────────────────────┐
+                │              parity oracle  (CI)                │
+                │      tools/parity_*.py  ·  assert |Δ| ≤ 1e-3    │
+                │   default 56/56 · regime+WFO 98/98 · fx 56/56   │
+                └────────────────────────┬───────────────────────┘
+                                         │
+                                 red if the port drifts
+```
+
+## Reproduce it in under 5 minutes
+
+One command builds the Rust engine, runs the cross-language parity suite, and fires the no-look-ahead leak guard:
+
+```bash
+make repro     # set QRF_PY_DIR=/path/to/quant-research-framework if it isn't a sibling checkout
+```
+
+The parity surfaces compare both engines metric-by-metric and end in `PARITY OK`; the published counts are **56/56** (default config), **98/98** (regime + WFO), and **56/56** (forex). The leak demo (the paper's `listings/lah_demo.py`) runs two strategies through a future-pollution test: it replaces every bar after #400 with noise and checks that the signals *before* #400 are unchanged. The causal strategy is untouched; a deliberately leaky one that peeks 5 bars ahead moves exactly the 4 bars that reach across the boundary:
+
+```
+[PASS] good (paper Listing 1, .take(idx-1) shift): 0 of 400 bars affected by post-bar-400 pollution.
+[FAIL] buggy (deliberate close.shift(-5) peek): 4 of 400 bars affected by post-bar-400 pollution; first leak at bar 395, last at bar 398.
+```
+
+Run any piece on its own with `make parity`, `make leak`, or `make bench`. The leak demo is the same pollute-and-verify property the Hypothesis suite runs over a generated input space (the Python reference's `tests/test_invariants_property.py`).
+
+## What this is / what it isn't
+
+**It is** a correctness-first WFO backtesting engine, in two languages, with the equivalence machine-checked: realism controls on by default (fees, slippage, funding, SL/TP with intrabar high/low checks), strict no-look-ahead enforced by ledger-level invariant tests, and overfitting diagnostics (DSR/PSR/MinTRL/MinBTL, PBO/CSCV, deflated multiple-testing haircuts).
+
+**It isn't:**
+- **Not alpha.** The bundled strategies (EMA-cross, ATR-cross, …) are plumbing to exercise the engine, not trade signals. There is no edge here to deploy.
+- **Not live trading.** No broker connectivity, order management, or execution — it evaluates strategies on historical bars.
+- **Tested on crypto, FX, and synthetic GBM only.** SOL/BTC/DOGE-USDT, EUR/USD, USD/JPY, and a GBM generator. Equities, futures, and options are untried.
+- **Parity-gated on the core surfaces only.** The stationary-bootstrap module (`backtester/bootstrap.py`) and the `examples/ml_*` strategies are Python-only — no Rust counterpart, no cross-engine check. See [open parity gaps](#what-is-not-yet-jointly-validated).
 
 ## Quick Start
 
@@ -152,7 +206,13 @@ python tools/parity_forex.py --tol 0.001    # exit 0 = parity
 ```
 
 ### What is *not* yet jointly validated
-`tools/parity_combo.py` runs both engines with **all four v0.2.x features layered at once** (regime + WFO + forex + session). This combo still reports diffs — the remaining gap is in the forex/session interaction (it shows up even on the classic `Baseline IS/OOS` line), not in the regime engine. Single-feature parity (default, regime+WFO, forex) is verified; the four-way combo is the natural `paper-v3` milestone.
+
+The full ledger of every surface — green-and-gated or known-divergence-with-reason — is **[docs/PARITY.md](docs/PARITY.md)**. The short version:
+
+- **Four-way combo** (`tools/parity_combo.py`: regime + WFO + forex + session, all at once) still reports diffs — the gap is in the forex/session interaction (it shows up even on the classic `Baseline IS/OOS` line), not in the regime engine. Single-feature parity (default, regime+WFO, forex) is verified; the combo is the `paper-v3` milestone.
+- **USD/JPY in the frozen benchmark** is excluded from the cross-engine gate (`cross_engine_check = false`): the JPY `pip_size = 0.01` path has a ~1–2% residual `parity_forex` (EUR/USD) does not exercise. NET/GROSS numbers are still reported.
+- **Monte Carlo percentiles** and the **`INDICATOR_VARIANCE`** overlay diverge by design (unseeded / differently-seeded RNGs); see below.
+- **Python-only, no Rust counterpart:** `backtester/bootstrap.py` (stationary bootstrap) and the `examples/ml_*` strategies. Nothing to diff, not gated.
 
 ### Two non-deterministic sections intentionally diverge, by design of the reference
 1. **Monte Carlo percentiles** — Python uses NumPy's global RNG, Rust uses `StdRng` seeded to 42. Different algorithms, so percentiles differ; the distribution shape is the same.
@@ -163,27 +223,33 @@ If you disable those two sources of randomness, the outputs are identical down t
 ## Performance
 
 Both implementations run the same default pipeline (IS/OOS baseline +
-smart-optimiser + WFO + Monte Carlo + robustness overlays) on slices of
-the bundled `SOLUSDT_1h.csv`. Measured on a WSL2 Linux shell with
-`/usr/bin/time -v`, min wall-clock and max peak RSS over 3 runs after a
-warm-up. Reproduce with:
+smart-optimiser + WFO + Monte Carlo + robustness overlays) on slices of the
+bundled `SOLUSDT_1h.csv`, single-threaded. The published benchmark is
+`tools/bench_paper.py` — the same harness, numbers, and methodology the
+[paper](#citation) reports: **median** warm wall-clock over `n=5` runs after
+one untimed warm-up (which absorbs Python's one-time Numba JIT cost), with a
+separately-reported Python cold run, and peak RSS as the max observed.
+Reproduce with:
 
 ```bash
-python tools/bench.py --sizes 15000,25000,35000,48000 --runs 3
+python tools/bench_paper.py --runs 5
 ```
 
-| Bars   | Python (s) | Rust (s) | Speed-up | Python RSS (MB) | Rust RSS (MB) |
-|-------:|-----------:|---------:|---------:|----------------:|--------------:|
-| 15,000 |       3.03 |     0.05 |   60.60× |             273 |             4 |
-| 25,000 |       3.75 |     0.10 |   37.50× |             277 |             6 |
-| 35,000 |       4.60 |     0.14 |   32.86× |             282 |             7 |
-| 48,000 |       5.78 |     0.23 |   25.13× |             294 |             8 |
+| Bars   | Python warm (s) | Rust (s) | Speed-up | Python RSS (MB) | Rust RSS (MB) |
+|-------:|----------------:|---------:|---------:|----------------:|--------------:|
+|  5,000 |    2.32 ± 0.06  |    0.01  |  232×†   |             270 |           2.8 |
+| 15,000 |    2.85 ± 0.05  |    0.05  |  57.0×   |             273 |           4.2 |
+| 30,000 |    3.98 ± 0.09  |    0.12  |  33.2×   |             280 |           6.2 |
+| 48,000 |    5.71 ± 0.10  |    0.24  |  23.8×   |             294 |           8.8 |
 
-The Python wall time includes numba JIT compile cost, which is amortised
-the more bars you process — Rust's relative advantage shrinks but never
-disappears (~25× at full 48k bars). Memory-wise, Rust holds at ~37×
-lower peak RSS regardless of dataset size: no pandas, no NumPy,
-single-threaded with zero allocations in the hot loop.
+So **23.8–57× faster** and **33–65× less memory** across the 15k–48k range.
+†The 5,000-bar row is a measurement-floor artifact — Rust there (0.01 s) sits
+at the `/usr/bin/time` resolution — so the 232× should not be over-interpreted.
+The steady-state figure is the full 48k-bar row (23.8× faster, 33× less
+memory); the band widens at smaller N as Python's fixed overhead dominates.
+Rust's edge: no pandas, no NumPy, single-threaded with zero allocations in the
+hot loop. (`tools/bench.py` is a lighter quick-check variant of the same
+workload; `bench_paper.py` is the citable measurement.)
 
 ## Comparison vs other open-source backtesters
 
@@ -203,8 +269,8 @@ not (verified against primary docs as of 2026-04):
 The **combination** is the contribution: WFO + per-regime LB + strict
 no-look-ahead enforced by ledger-level invariant tests + a Python
 reference and Rust port whose metric outputs agree within $10^{-3}$
-relative tolerance on three deterministic surfaces (210 / 210 metric
-points across 30 stages). Each cell individually exists somewhere; no
+relative tolerance on every validated surface, enforced continuously by the
+`parity_*.py` harness suite in CI. Each cell individually exists somewhere; no
 other framework ships the whole bundle.
 
 [vbt]: https://github.com/polakowo/vectorbt
@@ -241,4 +307,4 @@ and citing either implies the other (sibling cross-reference).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Apache-2.0 — see [LICENSE](LICENSE).

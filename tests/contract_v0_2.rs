@@ -13,7 +13,7 @@ fn make_bars(n: usize) -> Vec<Bar> {
     (0..n).map(|i| {
         let t = 1_600_000_000 + i as i64 * 3600;
         let p = 100.0 + (i as f64 * 0.01).sin();
-        Bar { time_unix: t, open: p, high: p * 1.001, low: p * 0.999, close: p }
+        Bar::ohlc(t, p, p * 1.001, p * 0.999, p)
     }).collect()
 }
 

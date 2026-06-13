@@ -1,7 +1,9 @@
 # Rust / Cargo
 /target
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock IS committed: this crate ships binaries + examples, and a pinned
+# lock makes `cargo build` / CI / the benchmark byte-reproducible. (Library
+# consumers ignore our lock, so committing it costs them nothing.)
 
 # Editor / OS
 .vscode/

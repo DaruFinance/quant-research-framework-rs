@@ -44,6 +44,7 @@ pub fn pollute_bars_after(bars: &[Bar], cut: usize) -> Vec<Bar> {
                 high: 12_345.0,
                 low: 12_345.0,
                 close: f64::NAN,
+                volume: f64::NAN,
             });
         }
     }

@@ -1,6 +1,6 @@
 [package]
 name = "quant-research-framework-rs"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 description = "Walk-forward backtester with robustness tests (Rust port of quant-research-framework)"
 license = "Apache-2.0"
@@ -47,15 +47,17 @@ carry = ["panel"]
 # usable without the panel/pairs stack, as Python ships `backtester.dsr`
 # as a thin standalone module.
 dsr = ["dep:statrs"]
+# Shared indicator surface (item 5 — indicator parity). Pure-Rust, zero new deps.
+indicators = []
+# Overfitting-statistics layer (item 3). Pulls in `dsr` so the multitest
+# example's dsr::{psr,...} imports resolve under --features overfit.
+overfit = ["dep:statrs", "dsr"]
 
 [dev-dependencies]
 # Rayon is used only by the parallel batch_runner example; it is NOT a
 # runtime dependency of the engine and does not appear in the published
 # parity claim of three direct deps in §5.1 of the paper.
 rayon = "1.10"
-# Used only by ad-hoc enumeration examples (enumerate_t1.rs etc.) for
-# silencing stdout via dup2 during 5000-strategy sweeps.
-libc = "0.2"
 
 [[bin]]
 name = "backtester"
@@ -64,11 +66,40 @@ path = "src/main.rs"
 [[example]]
 name = "batch_runner"
 path = "examples/batch_runner.rs"
+required-features = ["indicators"]
+
+[[example]]
+name = "benchmark_runner"
+path = "examples/benchmark_runner.rs"
+
+[[example]]
+name = "_parity_indicators"
+path = "examples/_parity_indicators.rs"
+required-features = ["indicators"]
 
 [[example]]
 name = "_parity_dsr"
 path = "examples/_parity_dsr.rs"
 required-features = ["dsr"]
+
+# NOTE: _parity_volume and _parity_surface are intentionally NOT declared as
+# [[example]] targets. They are gitignored, generated at runtime by
+# tools/parity_{volume,surface}.py and built with default features (no
+# required-features). Declaring them would make `cargo test` fail on a clean
+# checkout where the files don't exist yet; cargo autodiscovers them from
+# examples/ once the harness writes them, and `cargo build --example
+# _parity_{volume,surface}` works without an explicit entry. The other
+# _parity_* examples below DO need declarations only for their required-features.
+
+[[example]]
+name = "_parity_pbo"
+path = "examples/_parity_pbo.rs"
+required-features = ["overfit"]
+
+[[example]]
+name = "_parity_multitest"
+path = "examples/_parity_multitest.rs"
+required-features = ["overfit"]
 
 [profile.release]
 opt-level = 3

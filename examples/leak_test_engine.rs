@@ -84,6 +84,7 @@ fn load_bars(csv_path: &str) -> Vec<Bar> {
             high:      cols[2].trim().parse().expect("bad high"),
             low:       cols[3].trim().parse().expect("bad low"),
             close:     cols[4].trim().parse().expect("bad close"),
+            volume:    0.0,
         });
     }
     bars

@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-06-12
+
+### Added
+- **Shared indicator module** (`src/indicators.rs`, `indicators` feature) — canonical
+  TradingView/pandas SMA/EMA/MACD/RSI/ATR/Stochastic; single source of truth for the
+  example strategies, cross-engine parity-locked by `tools/parity_indicators.py`.
+- **OHLCV contract + volume** — optional 6th CSV `volume` column (backward-compatible),
+  `src/volume.rs` (OBV, VWAP rolling+session, vol SMA/EMA, relative volume, z-score,
+  MFI, A/D), four volume strategy examples, `tools/parity_volume.py`.
+- **Overfitting-statistics layer** (`overfit` feature) — `src/{pbo,multitest,haircut}.rs`
+  (CSCV/PBO, Bonferroni/Holm/BH-FDR, White Reality Check, Romano-Wolf, Harvey-Liu
+  haircut) + PSR / MinTRL / MinBTL in `src/dsr.rs`; `tools/parity_pbo.py`,
+  `tools/parity_multitest.py`.
+- **IS parameter-robustness isosurface** — `src/opt_surface.rs` emits the dense
+  in-sample objective grid (opt-in via `Config.emit_opt_surface`, default off);
+  `tools/render_surface.py` renders it; `tools/parity_surface.py`.
+- **Reproducible robustness benchmark — engine surface** — `Config.funding_fee`
+  (default-value-preserving), `pub walk_forward_collect` / `WfoOut` /
+  `default_ema_signal` / `compute_metrics_for`, pub engine consts. *(Benchmark
+  runner/golden tooling in `tools/benchmark.py` is experimental.)*
+- **`tools/check_consistency.py`** — CI guard enforcing license / version / headline-
+  figure consistency across all repo artifacts.
+
+### Changed
+- **License → Apache-2.0** (was MIT) across `LICENSE`, `Cargo.toml`, `README.md`.
+- Version → 0.6.0. One canonical performance band — **23.8–57× faster, 33–65× less
+  memory** — from the paper-grade harness `tools/bench_paper.py` (median warm wall-clock
+  over n=5; the 5,000-bar 232× is a measurement-floor artifact). This single band now
+  matches the README, the paper, and `CITATION.cff`. (`tools/bench.py` gained a
+  `--stat {median,min}` flag and a std-dev footnote as a quick-check variant.)
+
+### Notes
+- All new behaviour is opt-in / feature-gated; the default build and the parity surfaces
+  (`parity_check` 56/56, `parity_regime` 98/98, `parity_forex` 56/56, ledger, dsr) remain
+  byte-identical.
+
 ## [0.3.3] — 2026-05-03
 
 ### Fixed

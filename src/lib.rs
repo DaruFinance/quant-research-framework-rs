@@ -53,14 +53,14 @@ const ACCOUNT_SIZE: f64 = 100_000.0;
 const RISK_AMOUNT: f64 = 2_500.0;
 const SLIPPAGE_PCT_DEFAULT: f64 = 0.03;
 const FEE_PCT_DEFAULT: f64 = 0.02;
-const FUNDING_FEE: f64 = 0.01;
-const DEFAULT_LB: usize = 50;
-const BACKTEST_CANDLES: usize = 10_000;
+pub const FUNDING_FEE: f64 = 0.01;
+pub const DEFAULT_LB: usize = 50;
+pub const BACKTEST_CANDLES: usize = 10_000;
 const OOS_CANDLES_BASE: usize = 90_000;
 const USE_OOS2: bool = false;
-const OPT_METRIC: &str = "Sharpe";
-const MIN_TRADES: usize = 10;
-const SMART_OPTIMIZATION: bool = true;
+pub const OPT_METRIC: &str = "Sharpe";
+pub const MIN_TRADES: usize = 10;
+pub const SMART_OPTIMIZATION: bool = true;
 const DRAWDOWN_CONSTRAINT: Option<f64> = None;
 const USE_MONTE_CARLO: bool = true;
 const MC_RUNS: usize = 1000;
@@ -68,10 +68,10 @@ const USE_SL: bool = true;
 const SL_PERCENTAGE: f64 = 1.0;
 const USE_TP_DEFAULT: bool = true;
 const TP_PERCENTAGE_DEFAULT: f64 = 3.0;
-const OPTIMIZE_RRR: bool = true;
-const USE_WFO: bool = true;
+pub const OPTIMIZE_RRR: bool = true;
+pub const USE_WFO: bool = true;
 const WFO_TRIGGER_MODE: &str = "candles";
-const WFO_TRIGGER_VAL: usize = 5000;
+pub const WFO_TRIGGER_VAL: usize = 5000;
 const FAST_EMA_SPAN: usize = 20;
 
 // Forex mode: when true, funding fees are skipped (FX brokers don't charge
@@ -155,6 +155,29 @@ pub mod carry;
 #[cfg(feature = "dsr")]
 pub mod dsr;
 
+// Shared TradingView/pandas-style indicators (roadmap item 5 — indicator
+// parity). Single source of truth for the example strategies; gated behind
+// the `indicators` feature so it never touches the default build or the
+// default EMA-cross parity surface. Guarded by tools/parity_indicators.py.
+#[cfg(feature = "indicators")]
+pub mod indicators;
+
+// Overfitting-statistics layer (roadmap item 3). PBO/CSCV + multiple-testing
+// haircut. Gated behind `overfit` (pulls in `dsr` for PSR/MinTRL). Outside
+// the engine parity surface; guarded by tools/parity_pbo.py / parity_multitest.py.
+#[cfg(feature = "overfit")]
+pub mod pbo;
+#[cfg(feature = "overfit")]
+pub mod multitest;
+#[cfg(feature = "overfit")]
+pub mod haircut;
+
+// Volume indicators (item #2, v0.6.0). UNCONDITIONAL like src/metrics.rs.
+pub mod volume;
+
+// Item #1 — IS parameter-robustness isosurface emit (pure std + f64).
+pub mod opt_surface;
+
 #[derive(Clone)]
 pub struct Bar {
     pub time_unix: i64,
@@ -162,6 +185,15 @@ pub struct Bar {
     pub high: f64,
     pub low: f64,
     pub close: f64,
+    /// Item #2 (v0.6.0): per-bar volume; 0.0 when 6th CSV column absent.
+    pub volume: f64,
+}
+
+impl Bar {
+    /// Construct a clean OHLC bar with volume defaulted to 0.0 (item #2).
+    pub fn ohlc(time_unix: i64, open: f64, high: f64, low: f64, close: f64) -> Self {
+        Bar { time_unix, open, high, low, close, volume: 0.0 }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -279,6 +311,14 @@ pub struct Config {
     /// record a loss larger than 1R or a gain larger than the configured
     /// RRR. No effect when use_forex is true.
     pub clamp_results: bool,
+    // ---- item #1 (IS isosurface emit) ----
+    pub emit_opt_surface: bool,
+    pub emit_opt_surface_sl: bool,
+    pub sl_override: Option<f64>,
+    // ---- item #4 (benchmark v2): funding parameterization ----
+    /// Funding rate (% per 8h per leg). Default = FUNDING_FEE so existing
+    /// callers and the NET golden are unchanged; set 0.0 for a GROSS run.
+    pub funding_fee: f64,
 }
 impl Config {
     pub fn new() -> Self {
@@ -294,7 +334,13 @@ impl Config {
                  use_oos2: USE_OOS2, use_regime_seg: false, pip_size: 0.0001,
                  account_size: ACCOUNT_SIZE, mask_exits: false,
                  legacy_side_bug: false,
-                 max_hold_bars: 0, clamp_results: false }
+                 max_hold_bars: 0, clamp_results: false,
+                 emit_opt_surface: std::env::var("EMIT_OPT_SURFACE")
+                     .map(|v| v == "1" || v == "true").unwrap_or(false),
+                 emit_opt_surface_sl: std::env::var("EMIT_OPT_SURFACE_SL")
+                     .map(|v| v == "1" || v == "true").unwrap_or(false),
+                 sl_override: None,
+                 funding_fee: FUNDING_FEE }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
     /// Switch the reported Sharpe to the standard bar-based calendar-time
@@ -330,9 +376,11 @@ impl Config {
     /// Enable crypto-path R-clamp for gap-prone instruments. No-op in forex
     /// mode (forex already clamps). See `Config::clamp_results` docs.
     pub fn with_clamp_results(mut self, on: bool) -> Self { self.clamp_results = on; self }
+    pub fn with_emit_opt_surface(mut self, on: bool) -> Self { self.emit_opt_surface = on; self }
+    pub fn with_emit_opt_surface_sl(mut self, on: bool) -> Self { self.emit_opt_surface_sl = on; self }
     fn fee_rate(&self) -> f64 { self.fee_pct / 100.0 }
     fn slip(&self) -> f64 { self.slippage_pct * 0.01 }
-    fn funding_rate(&self) -> f64 { FUNDING_FEE / 100.0 }
+    fn funding_rate(&self) -> f64 { self.funding_fee / 100.0 }
     fn dd_constraint(&self) -> Option<f64> { DRAWDOWN_CONSTRAINT.map(|d| d / 100.0) }
 }
 
@@ -371,7 +419,12 @@ pub fn load_ohlc(path: &str) -> Vec<Bar> {
         let high: f64 = fields[2].trim().parse().expect("bad high");
         let low: f64 = fields[3].trim().parse().expect("bad low");
         let close: f64 = fields[4].trim().parse().expect("bad close");
-        bars.push(Bar { time_unix, open, high, low, close });
+        let volume: f64 = fields.get(5)
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        bars.push(Bar { time_unix, open, high, low, close, volume });
     }
     bars.sort_by_key(|b| b.time_unix);
     bars
@@ -480,7 +533,10 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let position_size = if cfg.use_forex { 1.0 } else { cfg.position_size };
     let pip_size = cfg.pip_size;
     let slip = if cfg.use_forex { cfg.slippage_pct * pip_size } else { cfg.slip() };
-    let sl_perc = if cfg.use_forex { SL_PERCENTAGE * pip_size } else { SL_PERCENTAGE };
+    // Item #1: surface SL sweep substitutes a per-cell stop via cfg.sl_override
+    // (always None on default/parity paths, so this is a no-op there).
+    let sl_base = cfg.sl_override.unwrap_or(SL_PERCENTAGE);
+    let sl_perc = if cfg.use_forex { sl_base * pip_size } else { sl_base };
     let tp_perc = if cfg.use_forex { cfg.tp_percentage * pip_size } else { cfg.tp_percentage };
     let rrr_fx = if cfg.use_forex && sl_perc > 0.0 { tp_perc / sl_perc } else { 1.0 };
     let stop_pips_fx = if cfg.use_forex { sl_perc / pip_size } else { 1.0 };
@@ -825,7 +881,7 @@ fn decompose_costs(
     (fee_total, slippage, funding, gross_pnl)
 }
 
-fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Metrics {
+pub fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Metrics {
     let tc = rets.len();
     if tc == 0 {
         let mut m = Metrics::default();
@@ -1327,6 +1383,12 @@ pub fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, si
     // Optimise
     let (best_lb, met_is_opt) = optimiser(is_bars, cfg, sig_fn);
 
+    // Item #1: emit the baseline IS objective surface (opt-in, default off).
+    if cfg.emit_opt_surface {
+        let header = !std::path::Path::new("opt_surface.csv").exists();
+        crate::opt_surface::emit_surface_classic(is_bars, "baseline", cfg, sig_fn, header);
+    }
+
     if let Some(lb) = best_lb {
         let best_rrr = if OPTIMIZE_RRR { met_is_opt.rrr } else { None };
         let rrr_note = if let Some(r) = best_rrr { format!("  |  Best RRR = {}", r) } else { String::new() };
@@ -1488,6 +1550,12 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
         let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
         if lb_roll.is_none() { break; }
         let lb = lb_roll.unwrap();
+        // Item #1: emit the per-window IS objective surface (opt-in, default off).
+        if cfg.emit_opt_surface {
+            let header = !std::path::Path::new("opt_surface.csv").exists();
+            crate::opt_surface::emit_surface_classic(
+                is_bars_roll, &format!("{:02}", window_no), cfg, sig_fn, header);
+        }
         let oos_slice = &all_bars[oos_s..oos_e];
 
         let (rets_oos, eq_is_window) = run_wfo_window(
@@ -1507,6 +1575,114 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
     println!("  Total OOS return segments: {}", all_oos_rets.len());
     println!("  Total OOS ROI: ${:.2}", cum_oos * ACCOUNT_SIZE);
     println!("  Final equity: ${:.2}", (seed_last + cum_oos) * ACCOUNT_SIZE);
+}
+
+// ============================================================================
+// Item #4 (benchmark v2): read-only WFO-harvest surface + default signal fn.
+// `walk_forward_collect` mirrors `walk_forward` (above) but RETURNS the OOS
+// harvest instead of printing the summary, with an EMPTY scenario set (no
+// robustness overlays). The harvested baseline rets_oos is overlay-independent,
+// so this is harvest-equivalent. No existing caller of `walk_forward` changes.
+// ============================================================================
+
+/// Out-of-sample harvest of one rolling walk-forward run (item #4 benchmark).
+/// `all_oos_rets` = concatenated OOS per-trade stream; `eq_wfo_oos_fraction` =
+/// OOS-only equity fraction (1.0 crypto / 0.0 forex, NOT seed-prefixed, so MDD
+/// agrees with the Python runner); `agg` = aggregated Metrics; `per_window_oos`
+/// = per-window OOS Metrics (dispersion / window count).
+pub struct WfoOut {
+    pub all_oos_rets: Vec<f64>,
+    pub eq_wfo_oos_fraction: Vec<f64>,
+    pub agg: Metrics,
+    pub per_window_oos: Vec<Metrics>,
+}
+
+/// Like `walk_forward` but RETURNS the OOS harvest (no summary print) and runs
+/// the WFO loop with an EMPTY scenario set. Read-only; no engine behaviour change.
+pub fn walk_forward_collect(
+    all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config,
+    strategy: &str, sig_fn: RawSignalsFn,
+) -> WfoOut {
+    let _ = eq_is_baseline; // OOS-only fraction starts at base0; seed not needed
+    let rb_scenarios_parsed: Vec<(String, RobustnessOpts)> = Vec::new(); // EMPTY
+
+    let n = all_bars.len();
+    let ni = n as i64;
+    let oos_candles = cfg.oos_candles as i64;
+    let start_total: i64 = ni - oos_candles;
+    let mut cur_start: i64 = start_total;
+    let mut window_no = 1usize;
+    let mut all_oos_rets: Vec<f64> = Vec::new();
+    let mut per_window_oos: Vec<Metrics> = Vec::new();
+    let base0 = if cfg.use_forex { 0.0 } else { 1.0 };
+
+    while cur_start < ni {
+        let cur_end: i64 = if WFO_TRIGGER_MODE == "candles" {
+            (cur_start + WFO_TRIGGER_VAL as i64).min(ni)
+        } else {
+            let cs_idx = python_iloc_idx(cur_start as isize, n);
+            let is_win_start = cs_idx.saturating_sub(BACKTEST_CANDLES);
+            let is_bars_roll = &all_bars[is_win_start..cs_idx];
+            let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
+            if lb_roll.is_none() { break; }
+            let lb = lb_roll.unwrap();
+            let oos_remaining = &all_bars[cs_idx..n];
+            let raw_tmp = sig_fn(oos_remaining, lb);
+            let sig_tmp = parse_signals_for(&raw_tmp, oos_remaining, cfg);
+            let (tr_tmp, _, _, _) = run_backtest(oos_remaining, &sig_tmp, cfg);
+            if tr_tmp.is_empty() { ni }
+            else { (cur_start + tr_tmp[WFO_TRIGGER_VAL.min(tr_tmp.len()) - 1].exit_idx as i64 + 1).min(ni) }
+        };
+
+        let is_raw_start = cur_start - BACKTEST_CANDLES as i64;
+        let (is_s, is_e) = python_iloc_slice(is_raw_start, cur_start, n);
+        let (oos_s, oos_e) = python_iloc_slice(cur_start, cur_end, n);
+        let is_bars_roll = &all_bars[is_s..is_e];
+        let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
+        if lb_roll.is_none() { break; }
+        let lb = lb_roll.unwrap();
+        let oos_slice = &all_bars[oos_s..oos_e];
+
+        let (rets_oos, _eq_is_window) = run_wfo_window(
+            is_bars_roll, oos_slice, lb, &format!("W{:02}", window_no),
+            cfg, strategy, sig_fn, &rb_scenarios_parsed, window_no == 1);
+
+        let mut eq_w = vec![base0];
+        let mut acc_w = base0;
+        for r in &rets_oos { acc_w += r; eq_w.push(acc_w); }
+        per_window_oos.push(compute_metrics_for(&rets_oos, &eq_w, cfg.use_forex));
+
+        all_oos_rets.extend_from_slice(&rets_oos);
+        cur_start = cur_end;
+        window_no += 1;
+    }
+
+    let mut eq = vec![base0];
+    let mut acc = base0;
+    for r in &all_oos_rets { acc += r; eq.push(acc); }
+    let agg = compute_metrics_for(&all_oos_rets, &eq, cfg.use_forex);
+
+    WfoOut { all_oos_rets, eq_wfo_oos_fraction: eq, agg, per_window_oos }
+}
+
+/// The engine's built-in default raw-signal function (EMA(FAST_EMA_SPAN) x
+/// EMA(lb)) — the signal the parity harness validates (mirror of
+/// src/main.rs::ema_crossover). Exposed read-only so the benchmark runner
+/// exercises the real default path on `engine_ema`, not a hand copy.
+pub fn default_ema_signal(bars: &[Bar], lb: usize) -> Vec<i8> {
+    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
+    let ema_fast = compute_ema(&close, FAST_EMA_SPAN);
+    let ema_slow = compute_ema(&close, lb);
+    let n = bars.len();
+    let mut raw = vec![0i8; n];
+    for i in 1..n {
+        if ema_fast[i - 1] > ema_slow[i - 1] {
+            raw[i] = 1;
+        } else if ema_fast[i - 1] < ema_slow[i - 1] {
+            raw[i] = -1;
+        }
+    }
+    raw
 }
 
 // ============================================================================
@@ -1942,6 +2118,15 @@ fn walk_forward_regime(
             is_bars, &regimes_is_local, n_regimes, cfg);
         if best_lbs.iter().all(|x| x.is_none()) { break; }
         let lb_tag = fmt_lb_tag(&best_lbs, &regime_cfg.labels);
+
+        // Item #1: emit the regime IS surface over the labels the engine TRADES
+        // (regimes_is), holding non-swept regimes at the FINAL optimised best_lbs.
+        if cfg.emit_opt_surface {
+            let header = !std::path::Path::new("opt_surface.csv").exists();
+            crate::opt_surface::emit_surface_regime(
+                is_bars, regimes_is, &best_lbs, &regime_cfg.labels,
+                &format!("{:02}", window_no), cfg, header);
+        }
 
         // IS run (for equity seed and reporting)
         let is_close: Vec<f64> = is_bars.iter().map(|b| b.close).collect();
