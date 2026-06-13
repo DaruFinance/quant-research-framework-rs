@@ -82,13 +82,14 @@ name = "_parity_dsr"
 path = "examples/_parity_dsr.rs"
 required-features = ["dsr"]
 
-[[example]]
-name = "_parity_volume"
-path = "examples/_parity_volume.rs"
-
-[[example]]
-name = "_parity_surface"
-path = "examples/_parity_surface.rs"
+# NOTE: _parity_volume and _parity_surface are intentionally NOT declared as
+# [[example]] targets. They are gitignored, generated at runtime by
+# tools/parity_{volume,surface}.py and built with default features (no
+# required-features). Declaring them would make `cargo test` fail on a clean
+# checkout where the files don't exist yet; cargo autodiscovers them from
+# examples/ once the harness writes them, and `cargo build --example
+# _parity_{volume,surface}` works without an explicit entry. The other
+# _parity_* examples below DO need declarations only for their required-features.
 
 [[example]]
 name = "_parity_pbo"
