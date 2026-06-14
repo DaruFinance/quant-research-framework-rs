@@ -23,17 +23,25 @@ if new_src == src:
 open('src/lib.rs', 'w').write(new_src)
 "
     cargo build --release >/dev/null 2>&1
-    local out
+    local out summary max_rel
     set +e
-    out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
+    # Full output (not tail -1): the per-field "rel=" lines feed the max-rel calc.
+    out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
     set -e
     git checkout -- src/lib.rs
-    if [[ "$out" == *"OK"* ]]; then
+    summary=$(echo "$out" | grep -E 'PARITY (OK|FAIL)' | tail -1)
+    # Max relative deviation across parity_check.py's "rel={rel:6.2%}" fields.
+    max_rel=$(echo "$out" | python3 -c "
+import re, sys
+rels = [float(x) for x in re.findall(r'rel=\s*([0-9.]+)%', sys.stdin.read())]
+print(f'{max(rels):.2f}' if rels else 'n/a')
+")
+    if [[ "$summary" == *"OK"* ]]; then
         echo "$label, 0, <5e-5, OK"
     else
         local n
-        n=$(echo "$out" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+')
-        echo "$label, ${n:-?}, <run for max-rel>, FAIL"
+        n=$(echo "$summary" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+')
+        echo "$label, ${n:-?}, ${max_rel}, FAIL"
     fi
 }
 

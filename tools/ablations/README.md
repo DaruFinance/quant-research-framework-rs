@@ -22,7 +22,17 @@ bash tools/ablations/funding_skip.sh    # 1 row: missed funding accrual
 
 Each script prints a single line per row in CSV format
 (`bug_class, mismatches, max_rel_dev_pct, result`) suitable for
-pasting into Table 3.
+pasting into Table 3. The `max_rel_dev_pct` column is computed by the
+script itself: it scans every per-field `rel=NN.NN%` line that
+`tools/parity_check.py` prints (see that file's `compare()` format
+string, `rel={rel:6.2%}`) and reports the maximum as a bare percentage.
+So Table 3's "Max metric rel. dev." column is reproducible from the
+scripts, not hand-copied.
+
+The two intrabar-logic scripts (`funding_sign.sh`, `sl_tp_priority.sh`)
+also run `tools/parity_ledger.py` and print a wider line
+(`bug_class, metric=N, ledger=N, max_rel=NN.NN`), where `max_rel` is the
+same max-over-`rel=` metric-surface figure.
 
 ## Safety
 

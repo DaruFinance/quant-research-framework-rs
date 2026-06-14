@@ -27,10 +27,11 @@ open('src/lib.rs', 'w').write(src)
 "
 
 cargo build --release >/dev/null 2>&1
-# parity scripts exit non-zero on mismatch; capture without aborting
+# parity scripts exit non-zero on mismatch; capture without aborting.
+# Capture FULL output (not tail -1) so the per-field "rel=" lines feed max-rel.
 set +e
-metric_out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
-ledger_out=$(python3 tools/parity_ledger.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
+metric_out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
+ledger_out=$(python3 tools/parity_ledger.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
 set -e
 
 git checkout -- src/lib.rs
@@ -39,4 +40,11 @@ cargo build --release >/dev/null 2>&1
 m_n=$(echo "$metric_out" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+' || echo 0)
 l_n=$(echo "$ledger_out" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+' || echo 0)
 
-echo "sl_tp_priority, metric=${m_n:-0}, ledger=${l_n:-0}"
+# Max relative deviation on the metric surface (parity_check.py "rel={rel:6.2%}").
+max_rel=$(echo "$metric_out" | python3 -c "
+import re, sys
+rels = [float(x) for x in re.findall(r'rel=\s*([0-9.]+)%', sys.stdin.read())]
+print(f'{max(rels):.2f}' if rels else 'n/a')
+")
+
+echo "sl_tp_priority, metric=${m_n:-0}, ledger=${l_n:-0}, max_rel=${max_rel}"

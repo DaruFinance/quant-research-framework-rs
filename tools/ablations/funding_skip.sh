@@ -31,15 +31,27 @@ open('src/lib.rs', 'w').write(src.replace(old, new))
 
 cargo build --release >/dev/null 2>&1
 set +e
-out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
+# Capture the FULL parity output so the per-field `rel=` lines are available
+# for the max-relative-deviation calculation.
+out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
 set -e
 
 git checkout -- src/lib.rs
 cargo build --release >/dev/null 2>&1
 
-if [[ "$out" == *"OK"* ]]; then
+summary=$(echo "$out" | grep -E 'PARITY (OK|FAIL)' | tail -1)
+
+# Max relative deviation across every "rel=NN.NN%" metric line emitted by
+# parity_check.py (compare() prints "rel={rel:6.2%}"). Bare percent for Table 3.
+max_rel=$(echo "$out" | python3 -c "
+import re, sys
+rels = [float(x) for x in re.findall(r'rel=\s*([0-9.]+)%', sys.stdin.read())]
+print(f'{max(rels):.2f}' if rels else 'n/a')
+")
+
+if [[ "$summary" == *"OK"* ]]; then
     echo "funding_skip, 0, <5e-5, OK"
 else
-    n=$(echo "$out" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+')
-    echo "funding_skip, ${n:-?}, <run for max-rel>, FAIL"
+    n=$(echo "$summary" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+')
+    echo "funding_skip, ${n:-?}, ${max_rel}, FAIL"
 fi
