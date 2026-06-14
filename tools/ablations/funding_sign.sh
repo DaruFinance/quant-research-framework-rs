@@ -43,8 +43,12 @@ set -e
 git checkout -- src/lib.rs
 cargo build --release >/dev/null 2>&1
 
-m_n=$(echo "$metric_out" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+' || echo 0)
-l_n=$(echo "$ledger_out" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+' || echo 0)
+# Parse the SUMMARY lines only. parity_ledger prints per-field "[FAIL] N field
+# mismatches" lines before the final "LEDGER PARITY FAIL: M mismatches" total,
+# so a bare "[0-9]+ mismatches" grep grabbed the wrong (first) number. Anchor on
+# the summary prefixes instead; "OK" lines carry no number, so default to 0.
+m_n=$(echo "$metric_out" | grep -oE 'PARITY FAIL: [0-9]+' | grep -oE '[0-9]+' || true); m_n=${m_n:-0}
+l_n=$(echo "$ledger_out" | grep -oE 'LEDGER PARITY FAIL: [0-9]+' | grep -oE '[0-9]+' || true); l_n=${l_n:-0}
 
 # Max relative deviation on the metric surface (parity_check.py "rel={rel:6.2%}").
 max_rel=$(echo "$metric_out" | python3 -c "

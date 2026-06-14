@@ -34,6 +34,9 @@ set +e
 # Capture the FULL parity output so the per-field `rel=` lines are available
 # for the max-relative-deviation calculation.
 out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
+# Also diff the per-trade ledger so the Table 3 Ledger column is produced by
+# this script (not just parity_check). The binary is freshly built above.
+ledger_out=$(python3 tools/parity_ledger.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
 set -e
 
 git checkout -- src/lib.rs
@@ -49,9 +52,11 @@ rels = [float(x) for x in re.findall(r'rel=\s*([0-9.]+)%', sys.stdin.read())]
 print(f'{max(rels):.2f}' if rels else 'n/a')
 ")
 
+l_n=$(echo "$ledger_out" | grep -oE 'LEDGER PARITY FAIL: [0-9]+' | grep -oE '[0-9]+' || true); l_n=${l_n:-0}
+
 if [[ "$summary" == *"OK"* ]]; then
-    echo "funding_skip, 0, <5e-5, OK"
+    echo "funding_skip, metric=0, ledger=${l_n}, max_rel=<5e-5, OK"
 else
-    n=$(echo "$summary" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+')
-    echo "funding_skip, ${n:-?}, ${max_rel}, FAIL"
+    n=$(echo "$summary" | grep -oE 'PARITY FAIL: [0-9]+' | grep -oE '[0-9]+' || true)
+    echo "funding_skip, metric=${n:-0}, ledger=${l_n}, max_rel=${max_rel}, FAIL"
 fi

@@ -137,7 +137,14 @@ bt.main()
 
 def run_rust(csv_path: Path) -> Path:
     bin_path = REPO_RUST / "target" / "release" / "backtester"
-    if not bin_path.exists():
+    src = REPO_RUST / "src" / "lib.rs"
+    # Rebuild if the binary is missing OR older than the engine source, so a
+    # stale binary (e.g. left by an ablation patch) can never be diffed
+    # silently. Mirrors the guard in parity_check.py — without it, running
+    # this harness directly after editing lib.rs would compare a stale build.
+    stale = (not bin_path.exists()
+             or (src.exists() and src.stat().st_mtime > bin_path.stat().st_mtime))
+    if stale:
         subprocess.run(["cargo", "build", "--release"], cwd=REPO_RUST,
                        check=True, capture_output=True)
     proc = subprocess.run([str(bin_path), str(Path(csv_path).resolve())],
@@ -244,6 +251,56 @@ def compare(py: list[TradeRow], rs: list[TradeRow], tol: float) -> int:
     return fails
 
 
+def _full_coverage_check(py: list[TradeRow], rs: list[TradeRow],
+                         tol: float) -> int:
+    """Stronger coverage gate: the (sample, entry_unix, side) key used by
+    compare() keeps one representative per key, so an overlapping WFO window
+    that re-enters the same bar collapses to a single row. This check matches
+    *all* base-stage rows on (sample, entry, exit, side) with multiplicity and
+    compares the five fields under the same relative tolerance, so no
+    economically-distinct trade can be silently dropped by the dedup. For a
+    clean run this is 0; if it ever diverged while compare() agreed, the dedup
+    would be masking a real difference."""
+    from collections import defaultdict
+    pf = [t for t in py if t.sample in _BASE_SAMPLES]
+    rf = [t for t in rs if t.sample in _BASE_SAMPLES]
+
+    def k4(t: TradeRow) -> tuple:
+        return (_norm_sample(t.sample), t.entry_unix, t.exit_unix, t.side)
+
+    pg: dict = defaultdict(list)
+    rg: dict = defaultdict(list)
+    for t in pf:
+        pg[k4(t)].append(t)
+    for t in rf:
+        rg[k4(t)].append(t)
+
+    fields = ("open_entry", "close_entry", "open_exit", "close_exit", "pnl")
+    unmatched = 0
+    field_fails = 0
+    for k in set(pg) | set(rg):
+        a = sorted(pg.get(k, []), key=lambda t: t.pnl)
+        b = sorted(rg.get(k, []), key=lambda t: t.pnl)
+        for x, y in zip(a, b):
+            for fld in fields:
+                av, bv = getattr(x, fld), getattr(y, fld)
+                denom = max(abs(av), abs(bv), 1e-9)
+                if abs(av - bv) / denom > tol and not (abs(av) < 1e-6
+                                                       and abs(bv) < 1e-6):
+                    field_fails += 1
+        unmatched += abs(len(a) - len(b))
+
+    total = unmatched + field_fails
+    if total == 0:
+        print(f"\n[OK] full base-ledger coverage: all {len(pf)} Python / "
+              f"{len(rf)} Rust base-stage trades agree on (entry, exit, side) "
+              f"— no trade masked by the entry-key dedup")
+    else:
+        print(f"\n[FAIL] full base-ledger coverage: {unmatched} unmatched + "
+              f"{field_fails} field divergences over {len(pf)}/{len(rf)} base rows")
+    return total
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", type=Path, required=True,
@@ -275,9 +332,13 @@ def main() -> int:
     rs = load_ledger(rs_path)
 
     fails = compare(py, rs, args.tol)
-    if fails == 0:
+    coverage = _full_coverage_check(py, rs, args.tol)
+    if fails == 0 and coverage == 0:
         print("\nLEDGER PARITY OK")
         return 0
+    # The reported mismatch count is the keyed per-trade diff (compare);
+    # a non-zero coverage with fails == 0 would mean the dedup masked a
+    # difference, which is itself a failure.
     print(f"\nLEDGER PARITY FAIL: {fails} mismatches")
     return 1
 
