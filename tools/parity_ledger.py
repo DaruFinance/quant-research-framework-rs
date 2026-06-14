@@ -126,34 +126,49 @@ bt.PRINT_EQUITY_CURVE = False
 bt.USE_MONTE_CARLO   = False
 bt.main()
 """ % str(REPO_PY)
+    out_path = REPO_PY / "trade_list.csv"
+    # Start from a clean slate. The engine decides truncate-vs-append per WFO
+    # window via `not os.path.exists(trade_list.csv)`, so a stale file from a
+    # prior run would be appended to, contaminating the ledger (the cause of the
+    # 134..3242-row variation seen when this harness is run repeatedly in place).
+    out_path.unlink(missing_ok=True)
     proc = subprocess.run([sys.executable, "-c", driver], env=env,
                           cwd=REPO_PY, capture_output=True, text=True,
                           timeout=900)
     if proc.returncode != 0:
         sys.stderr.write(f"Python run failed:\n{proc.stderr}\n")
         sys.exit(2)
-    return REPO_PY / "trade_list.csv"
+    return out_path
 
 
-def run_rust(csv_path: Path) -> Path:
+def ensure_rust_built() -> Path:
+    """Build the Rust binary if missing or older than the engine source, and
+    return its path. Rebuilding if stale (mirrors parity_check.py) prevents a
+    stale binary — e.g. left by an ablation patch — from being diffed silently.
+    Called up front in main() so neither engine run triggers a *mid-run*
+    recompile, which (combined with a stale ledger) made this surface
+    non-reproducible from a fresh checkout."""
     bin_path = REPO_RUST / "target" / "release" / "backtester"
     src = REPO_RUST / "src" / "lib.rs"
-    # Rebuild if the binary is missing OR older than the engine source, so a
-    # stale binary (e.g. left by an ablation patch) can never be diffed
-    # silently. Mirrors the guard in parity_check.py — without it, running
-    # this harness directly after editing lib.rs would compare a stale build.
     stale = (not bin_path.exists()
              or (src.exists() and src.stat().st_mtime > bin_path.stat().st_mtime))
     if stale:
         subprocess.run(["cargo", "build", "--release"], cwd=REPO_RUST,
                        check=True, capture_output=True)
+    return bin_path
+
+
+def run_rust(csv_path: Path) -> Path:
+    bin_path = ensure_rust_built()
+    out_path = REPO_RUST / "trade_list.csv"
+    out_path.unlink(missing_ok=True)  # clean slate (see run_python)
     proc = subprocess.run([str(bin_path), str(Path(csv_path).resolve())],
                           cwd=REPO_RUST, capture_output=True, text=True,
                           timeout=600)
     if proc.returncode != 0:
         sys.stderr.write(f"Rust run failed:\n{proc.stderr}\n")
         sys.exit(2)
-    return REPO_RUST / "trade_list.csv"
+    return out_path
 
 
 def _norm_sample(s: str) -> str:
@@ -323,6 +338,11 @@ def main() -> int:
     print(f"CSV        : {csv_abs}")
     print(f"Tolerance  : {args.tol*100:.3g}%\n")
 
+    # Build the Rust binary up front so neither engine run triggers a mid-run
+    # recompile; that, plus run_python/run_rust clearing any stale trade_list.csv,
+    # makes this surface reproducible from a fresh checkout and run-to-run.
+    ensure_rust_built()
+
     print("Running Python...")
     py_path = run_python(csv_abs)
     print("Running Rust...")
@@ -336,10 +356,11 @@ def main() -> int:
     if fails == 0 and coverage == 0:
         print("\nLEDGER PARITY OK")
         return 0
-    # The reported mismatch count is the keyed per-trade diff (compare);
-    # a non-zero coverage with fails == 0 would mean the dedup masked a
-    # difference, which is itself a failure.
-    print(f"\nLEDGER PARITY FAIL: {fails} mismatches")
+    # Report both surfaces so the summary line can't contradict the detail above
+    # (a non-zero coverage with fails == 0 means the dedup masked a difference,
+    # which is itself a failure — don't print "FAIL: 0 mismatches").
+    print(f"\nLEDGER PARITY FAIL: {fails} keyed mismatches, "
+          f"{coverage} full-coverage divergences")
     return 1
 
 
