@@ -7,6 +7,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
+# Force cargo to recompile after a source edit even on 1-second-mtime-resolution
+# filesystems, where a same-second edit (e.g. ablations run back-to-back) can be
+# missed by cargo's mtime-based change detection, leaving a stale binary that
+# could even report PARITY OK on a genuinely buggy build. Bump src/lib.rs's
+# mtime strictly past the current binary so the next `cargo build` recompiles.
+bump_src() { python3 -c "import os; b=os.path.getmtime('target/release/backtester') if os.path.exists('target/release/backtester') else 0; m=max(os.path.getmtime('src/lib.rs'),b)+5; os.utime('src/lib.rs',(m,m))"; }
+
 git diff --quiet src/lib.rs || {
     echo "src/lib.rs has uncommitted changes; aborting" >&2
     exit 1
@@ -22,6 +29,7 @@ if old not in src:
 open('src/lib.rs', 'w').write(src.replace(old, new))
 "
 
+bump_src
 cargo build --release >/dev/null 2>&1
 set +e
 # Capture the FULL parity output: we need the per-field `rel=` lines to
@@ -33,6 +41,7 @@ ledger_out=$(python3 tools/parity_ledger.py --csv data/SOLUSDT_1h.csv --tol 0.00
 set -e
 
 git checkout -- src/lib.rs
+bump_src
 cargo build --release >/dev/null 2>&1
 
 summary=$(echo "$out" | grep -E 'PARITY (OK|FAIL)' | tail -1)

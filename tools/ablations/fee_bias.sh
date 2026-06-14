@@ -6,6 +6,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
+# Force cargo to recompile after a source edit even on 1-second-mtime-resolution
+# filesystems, where a same-second edit (e.g. ablations run back-to-back) can be
+# missed by cargo's mtime-based change detection, leaving a stale binary that
+# could even report PARITY OK on a genuinely buggy build. Bump src/lib.rs's
+# mtime strictly past the current binary so the next `cargo build` recompiles.
+bump_src() { python3 -c "import os; b=os.path.getmtime('target/release/backtester') if os.path.exists('target/release/backtester') else 0; m=max(os.path.getmtime('src/lib.rs'),b)+5; os.utime('src/lib.rs',(m,m))"; }
+
 git diff --quiet src/lib.rs || {
     echo "src/lib.rs has uncommitted changes; aborting" >&2
     exit 1
@@ -22,6 +29,7 @@ if new_src == src:
     print('FEE_PCT_DEFAULT marker not found', file=sys.stderr); sys.exit(1)
 open('src/lib.rs', 'w').write(new_src)
 "
+    bump_src
     cargo build --release >/dev/null 2>&1
     local out summary max_rel ledger_out l_n
     set +e
@@ -57,4 +65,5 @@ run_one "fee_0.01pct" "0.020002"
 run_one "fee_0.1pct"  "0.02002"
 run_one "fee_1pct"    "0.0202"
 
+bump_src
 cargo build --release >/dev/null 2>&1
