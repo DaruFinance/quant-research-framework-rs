@@ -32,8 +32,10 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -114,7 +116,18 @@ def load_ledger(path: Path) -> list[TradeRow]:
 
 
 def run_python(csv_path: Path) -> Path:
-    """Run the Python engine; returns the path to its written ledger."""
+    """Run the Python engine and return the path to its written ledger.
+
+    The engine's trade-ledger export is keyed to a single path (EXPORT_PATH) and
+    is NOT safe for concurrent writers sharing one file: two engine processes
+    pointed at the same trade_list.csv interleave and truncate each other's
+    rows (observed: 3 concurrent runs -> 5,179 garbled rows instead of 1,726).
+    We therefore give every invocation a private EXPORT_PATH under its own temp
+    directory, so concurrent parity runs (or a parallel sweep) are isolated and
+    each ledger is deterministic. This is also inherently clean — no stale file
+    from a prior run can be appended to."""
+    workdir = Path(tempfile.mkdtemp(prefix="qrf_py_ledger_"))
+    out_path = workdir / "trade_list.csv"
     env = os.environ.copy()
     env["BT_CSV"] = str(Path(csv_path).resolve())
     env["MPLBACKEND"] = "Agg"
@@ -124,18 +137,14 @@ sys.path.insert(0, %r)
 import backtester as bt
 bt.PRINT_EQUITY_CURVE = False
 bt.USE_MONTE_CARLO   = False
+bt.EXPORT_PATH       = %r
 bt.main()
-""" % str(REPO_PY)
-    out_path = REPO_PY / "trade_list.csv"
-    # Start from a clean slate. The engine decides truncate-vs-append per WFO
-    # window via `not os.path.exists(trade_list.csv)`, so a stale file from a
-    # prior run would be appended to, contaminating the ledger (the cause of the
-    # 134..3242-row variation seen when this harness is run repeatedly in place).
-    out_path.unlink(missing_ok=True)
+""" % (str(REPO_PY), str(out_path))
     proc = subprocess.run([sys.executable, "-c", driver], env=env,
                           cwd=REPO_PY, capture_output=True, text=True,
                           timeout=900)
     if proc.returncode != 0:
+        shutil.rmtree(workdir, ignore_errors=True)
         sys.stderr.write(f"Python run failed:\n{proc.stderr}\n")
         sys.exit(2)
     return out_path
@@ -159,16 +168,19 @@ def ensure_rust_built() -> Path:
 
 
 def run_rust(csv_path: Path) -> Path:
+    # Run in a private temp directory so the binary's cwd-relative trade_list.csv
+    # can't collide with a concurrent run (see run_python). The binary takes the
+    # CSV as an absolute argument, so it needs nothing else from its cwd.
     bin_path = ensure_rust_built()
-    out_path = REPO_RUST / "trade_list.csv"
-    out_path.unlink(missing_ok=True)  # clean slate (see run_python)
+    workdir = Path(tempfile.mkdtemp(prefix="qrf_rs_ledger_"))
     proc = subprocess.run([str(bin_path), str(Path(csv_path).resolve())],
-                          cwd=REPO_RUST, capture_output=True, text=True,
+                          cwd=workdir, capture_output=True, text=True,
                           timeout=600)
     if proc.returncode != 0:
+        shutil.rmtree(workdir, ignore_errors=True)
         sys.stderr.write(f"Rust run failed:\n{proc.stderr}\n")
         sys.exit(2)
-    return out_path
+    return workdir / "trade_list.csv"
 
 
 def _norm_sample(s: str) -> str:
@@ -339,8 +351,9 @@ def main() -> int:
     print(f"Tolerance  : {args.tol*100:.3g}%\n")
 
     # Build the Rust binary up front so neither engine run triggers a mid-run
-    # recompile; that, plus run_python/run_rust clearing any stale trade_list.csv,
-    # makes this surface reproducible from a fresh checkout and run-to-run.
+    # recompile; combined with each run writing its ledger to a private temp
+    # directory (run_python/run_rust), this makes the surface reproducible from a
+    # fresh checkout, run-to-run, and under concurrent invocation.
     ensure_rust_built()
 
     print("Running Python...")
@@ -350,6 +363,8 @@ def main() -> int:
 
     py = load_ledger(py_path)
     rs = load_ledger(rs_path)
+    shutil.rmtree(py_path.parent, ignore_errors=True)
+    shutil.rmtree(rs_path.parent, ignore_errors=True)
 
     fails = compare(py, rs, args.tol)
     coverage = _full_coverage_check(py, rs, args.tol)
