@@ -3,14 +3,14 @@
 # Paper: "A Reproducibility-First Walk-Forward Backtester with
 # Tolerance-Bounded Cross-Language Parity" (Vieira Gatto, 2026), Appendix A.
 #
-#   make repro   # all three parity surfaces + look-ahead leak demo, one summary
-#   make parity  # the three cross-language parity surfaces only
+#   make repro   # all four parity surfaces + look-ahead leak demo, one summary
+#   make parity  # the four cross-language parity surfaces only
 #   make leak    # the no-look-ahead invariant ("leak") demo only
 #   make bench   # the paper-grade Python-vs-Rust benchmark (n=5)
 #
 # The parity surfaces require the sibling Python repo
 # (../quant-research-framework, or set QRF_PY_DIR) and a Rust toolchain.
-# All three compare deterministic metric outputs within a 0.1% (1e-3)
+# The first three compare deterministic metric outputs and the fourth the per-trade ledger, all within a 0.1% (1e-3)
 # relative tolerance, matching the paper.
 
 PYTHON ?= python3
@@ -21,12 +21,14 @@ CSV    ?= data/SOLUSDT_1h.csv
 
 # --- individual parity surfaces -------------------------------------------
 parity:
-	@echo "== parity surface 1/3: default config (parity_check.py) =="
+	@echo "== parity surface 1/4: default config (parity_check.py) =="
 	$(PYTHON) tools/parity_check.py --csv $(CSV) --tol $(TOL)
-	@echo "== parity surface 2/3: regime+WFO (parity_regime.py) =="
+	@echo "== parity surface 2/4: regime+WFO (parity_regime.py) =="
 	$(PYTHON) tools/parity_regime.py --csv $(CSV) --tol $(TOL)
-	@echo "== parity surface 3/3: forex mode (parity_forex.py) =="
+	@echo "== parity surface 3/4: forex mode (parity_forex.py) =="
 	$(PYTHON) tools/parity_forex.py --tol $(TOL)
+	@echo "== parity surface 4/4: per-trade ledger (parity_ledger.py) =="
+	$(PYTHON) tools/parity_ledger.py --csv $(CSV) --tol $(TOL)
 
 # --- no-look-ahead leak demo ----------------------------------------------
 # The two `*_no_lookahead` invariant tests pollute every bar past a cut
@@ -41,7 +43,7 @@ bench:
 	$(PYTHON) tools/bench_paper.py
 
 # --- full reproduction with a single pass/fail summary --------------------
-# Runs the three parity surfaces and the leak demo, tallies the outcome of
+# Runs the four parity surfaces and the leak demo, tallies the outcome of
 # each, and prints one PASS/FAIL line (Appendix A "make repro").
 repro:
 	@set -e; \
@@ -58,6 +60,7 @@ repro:
 	run "parity_check (default)"  $(PYTHON) tools/parity_check.py  --csv $(CSV) --tol $(TOL); \
 	run "parity_regime (regime+WFO)" $(PYTHON) tools/parity_regime.py --csv $(CSV) --tol $(TOL); \
 	run "parity_forex (forex mode)" $(PYTHON) tools/parity_forex.py --tol $(TOL); \
+	run "parity_ledger (per-trade)" $(PYTHON) tools/parity_ledger.py --csv $(CSV) --tol $(TOL); \
 	run "leak demo (no-look-ahead)" cargo test --release --test invariants no_lookahead; \
 	echo ""; \
 	echo "==================== make repro summary ===================="; \

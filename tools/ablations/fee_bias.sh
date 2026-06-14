@@ -56,10 +56,19 @@ print(f'{max(rels):.2f}' if rels else 'n/a')
     fi
 }
 
-# Clean baseline (no edit needed; assert)
-out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
-[[ "$out" == *"OK"* ]] && echo "fee_0pct, metric=0, ledger=0, max_rel=<5e-5, OK" || \
+# Clean baseline (no source edit needed) — measure BOTH surfaces rather than
+# asserting ledger=0, so every Table 3 cell including the clean row is produced
+# by this script.
+set +e
+out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
+ledger_out=$(python3 tools/parity_ledger.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
+set -e
+l_n=$(echo "$ledger_out" | grep -oE 'LEDGER PARITY FAIL: [0-9]+' | grep -oE '[0-9]+' || true); l_n=${l_n:-0}
+if echo "$out" | grep -q 'PARITY OK'; then
+    echo "fee_0pct, metric=0, ledger=${l_n}, max_rel=<5e-5, OK"
+else
     echo "fee_0pct, ?, ?, UNEXPECTED_FAIL"
+fi
 
 run_one "fee_0.01pct" "0.020002"
 run_one "fee_0.1pct"  "0.02002"
