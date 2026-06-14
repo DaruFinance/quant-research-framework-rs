@@ -120,7 +120,12 @@ bt.main()
 
 def run_rust(csv: Path) -> str:
     bin_path = REPO_RUST / "target" / "release" / "backtester"
-    if not bin_path.exists():
+    src = REPO_RUST / "src" / "lib.rs"
+    # Rebuild if the binary is missing OR older than the engine source, so a
+    # stale binary (e.g. left by an ablation patch) can never be diffed silently.
+    stale = (not bin_path.exists()
+             or (src.exists() and src.stat().st_mtime > bin_path.stat().st_mtime))
+    if stale:
         subprocess.run(["cargo", "build", "--release"], cwd=REPO_RUST, check=True,
                        capture_output=True)
     proc = subprocess.run([str(bin_path), str(csv)], cwd=REPO_RUST,
