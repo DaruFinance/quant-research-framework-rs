@@ -5,6 +5,10 @@
 # lock makes `cargo build` / CI / the benchmark byte-reproducible. (Library
 # consumers ignore our lock, so committing it costs them nothing.)
 
+# Python bytecode from the tools/ harnesses
+__pycache__/
+*.py[cod]
+
 # Editor / OS
 .vscode/
 .idea/
