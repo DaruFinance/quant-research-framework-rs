@@ -94,10 +94,10 @@ mod tests {
     }
 
     #[test]
-    fn multi_asset_flag_errors_pending_phase2() {
+    fn multi_asset_flag_errors_until_the_panel_plugin_lands() {
         let key = RouteKey { multi_asset: true, ..Default::default() };
         let err = dispatch(key).unwrap_err();
-        assert!(format!("{}", err).contains("Phase 2"));
+        assert!(format!("{}", err).contains("panel plugin"));
     }
 
     #[test]
