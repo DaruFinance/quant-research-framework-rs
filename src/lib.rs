@@ -355,6 +355,14 @@ impl Config {
         self.account_size = 1.0;
         self
     }
+    /// Set `pip_size` from the dataset path, mirroring the Python
+    /// reference's import-time `PIP_SIZE` resolution. Chain after
+    /// `with_forex_defaults` so JPY-quoted pairs size correctly:
+    /// `Config::new().with_forex_defaults().with_pip_size_for(&csv)`.
+    pub fn with_pip_size_for(mut self, csv_path: &str) -> Self {
+        self.pip_size = resolve_pip_size(csv_path);
+        self
+    }
     pub fn with_sessions(mut self, on: bool, start_h: u32, end_h: u32) -> Self {
         self.use_sessions = on; self.session_start_hour = start_h; self.session_end_hour = end_h; self
     }
@@ -405,6 +413,32 @@ fn ny_hour_minute(unix_ts: i64) -> (u32, u32) {
 // ============================================================================
 // 1. LOAD DATA
 // ============================================================================
+/// Resolve the forex pip size for a dataset path.
+///
+/// Mirrors the Python reference's `_resolve_pip_size`: an explicit
+/// `BT_PIP_SIZE` wins, otherwise a path containing "JPY" resolves to the
+/// two-decimal pip of JPY-quoted crosses and anything else to 0.0001.
+/// The substring heuristic is fragile (it fires on a file named
+/// "FUJPYR.csv" too), so it warns, exactly as the Python side does.
+pub fn resolve_pip_size(csv_path: &str) -> f64 {
+    if let Ok(raw) = std::env::var("BT_PIP_SIZE") {
+        match raw.parse::<f64>() {
+            Ok(v) => return v,
+            Err(_) => panic!("BT_PIP_SIZE={:?} is not a valid float", raw),
+        }
+    }
+    if csv_path.to_uppercase().contains("JPY") {
+        eprintln!(
+            "warning: pip_size auto-set to 0.01 because CSV path {:?} contains \
+             'JPY'. This substring heuristic is fragile; set BT_PIP_SIZE \
+             explicitly to silence this warning.",
+            csv_path
+        );
+        return 0.01;
+    }
+    0.0001
+}
+
 pub fn load_ohlc(path: &str) -> Vec<Bar> {
     let file = File::open(path).unwrap_or_else(|_| panic!("CSV file not found: {}", path));
     let reader = BufReader::new(file);
@@ -439,12 +473,77 @@ fn age_dataset(bars: Vec<Bar>, age: usize) -> Vec<Bar> {
 // 2. INDICATORS - EMA matching pandas ewm(span=X, adjust=False)
 // ============================================================================
 pub fn compute_ema(close: &[f64], span: usize) -> Vec<f64> {
+    // Ablation hook for the speed-up decomposition (tools/ablations/
+    // rolling_materialized.sh). With QRF_ROLLING=materialized set, dispatch to
+    // a naive O(n*w) window recompute that is numerically equivalent to the
+    // shipped O(n) recursion below. That isolates the algorithmic term (rolling
+    // statistics materialised the way pandas computes them) from the language
+    // term. With the variable unset this is the shipped path, unchanged.
+    if rolling_is_materialized() {
+        return compute_ema_materialized(close, span);
+    }
     let alpha = 2.0 / (span as f64 + 1.0);
     let mut ema = vec![0.0f64; close.len()];
     if close.is_empty() { return ema; }
     ema[0] = close[0];
     for i in 1..close.len() {
         ema[i] = alpha * close[i] + (1.0 - alpha) * ema[i - 1];
+    }
+    ema
+}
+
+/// True iff QRF_ROLLING=materialized is set.
+#[inline]
+fn rolling_is_materialized() -> bool {
+    std::env::var("QRF_ROLLING")
+        .map(|v| v == "materialized")
+        .unwrap_or(false)
+}
+
+/// Window multiplier for the materialised EMA. With adjust=False the EMA is an
+/// infinite geometric-weighted sum of past closes with ratio (1-alpha), so a
+/// finite window of W = MULT*span truncates a tail of weight (1-alpha)^W. At
+/// MULT=40 that tail is ~exp(-80) for any span, far inside the 1e-3 parity
+/// tolerance, while the per-bar work is still a genuine O(n*w) recompute.
+const EMA_MAT_WINDOW_MULT: usize = 40;
+
+/// Effective window multiplier; QRF_ROLLING_MULT overrides the default. Dialling
+/// it down tightens the window and shows the apparent algorithmic factor is a
+/// function of the window, not a property of the engines.
+#[inline]
+fn ema_mat_window_mult() -> usize {
+    std::env::var("QRF_ROLLING_MULT")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&m| m >= 1)
+        .unwrap_or(EMA_MAT_WINDOW_MULT)
+}
+
+/// Naive O(n*w) EMA. For every output bar, re-walk a finite window of preceding
+/// closes and accumulate the geometric weights from scratch, mimicking how a
+/// materialised rolling reduction recomputes each window.
+fn compute_ema_materialized(close: &[f64], span: usize) -> Vec<f64> {
+    let n = close.len();
+    let mut ema = vec![0.0f64; n];
+    if n == 0 { return ema; }
+    let alpha = 2.0 / (span as f64 + 1.0);
+    let one_minus = 1.0 - alpha;
+    let window = span.saturating_mul(ema_mat_window_mult()).max(1);
+    ema[0] = close[0];
+    for i in 1..n {
+        let start = i.saturating_sub(window);
+        // Seed on the truncation boundary: below `window` bars of history the
+        // window covers the whole series, so seed with close[0] exactly as the
+        // recursion does; past it, the truncated tail is negligible.
+        let mut acc = if start == 0 {
+            close[0] * one_minus.powi(i as i32)
+        } else {
+            close[start] * one_minus.powi((i - start) as i32)
+        };
+        for k in (start + 1)..=i {
+            acc += alpha * close[k] * one_minus.powi((i - k) as i32);
+        }
+        ema[i] = acc;
     }
     ema
 }
