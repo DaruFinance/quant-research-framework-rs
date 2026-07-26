@@ -1,6 +1,6 @@
 # Quant Research Backtester — Rust port
 
-> Rust port of the backtester Daniel Gatto uses for the studies on [daru.finance/research/quant-framework](https://www.daru.finance/research/quant-framework).
+> Rust port of the backtester Daniel Gatto uses for the studies on [daru.finance/research/quant-framework](https://daru.finance/research/quant-framework).
 
 [![parity](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/parity.yml/badge.svg)](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/parity.yml)
 [![docs](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml/badge.svg)](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml)
