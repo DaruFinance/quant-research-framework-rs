@@ -1,4 +1,4 @@
-//! Carry / basis / funding plugin (Phase 3 T6, items #38..#43, Rust mirror).
+//! Carry / basis / funding plugin (Rust mirror).
 //!
 //! Mirror of Python's ``backtester.carry`` package.  All loaders read
 //! CSV (the parity scripts always shake out CSV first; parquet adds a

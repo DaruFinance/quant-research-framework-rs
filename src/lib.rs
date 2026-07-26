@@ -311,11 +311,11 @@ pub struct Config {
     /// record a loss larger than 1R or a gain larger than the configured
     /// RRR. No effect when use_forex is true.
     pub clamp_results: bool,
-    // ---- item #1 (IS isosurface emit) ----
+    // ---- IS isosurface emit ----
     pub emit_opt_surface: bool,
     pub emit_opt_surface_sl: bool,
     pub sl_override: Option<f64>,
-    // ---- item #4 (benchmark v2): funding parameterization ----
+    // ---- benchmark v2: funding parameterization ----
     /// Funding rate (% per 8h per leg). Default = FUNDING_FEE so existing
     /// callers and the NET golden are unchanged; set 0.0 for a GROSS run.
     pub funding_fee: f64,
@@ -1684,7 +1684,7 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
 // so this is harvest-equivalent. No existing caller of `walk_forward` changes.
 // ============================================================================
 
-/// Out-of-sample harvest of one rolling walk-forward run (item #4 benchmark).
+/// Out-of-sample harvest of one rolling walk-forward run (benchmark path).
 /// `all_oos_rets` = concatenated OOS per-trade stream; `eq_wfo_oos_fraction` =
 /// OOS-only equity fraction (1.0 crypto / 0.0 forex, NOT seed-prefixed, so MDD
 /// agrees with the Python runner); `agg` = aggregated Metrics; `per_window_oos`

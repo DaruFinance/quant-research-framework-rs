@@ -17,8 +17,8 @@ plus the field list to diff. Default invocations check the ``base``
 family only, preserving the 210-points-at-1e-3 claim today.
 
 ``--include`` adds opt-in families that exist for forward
-compatibility: ``costs`` (item #3 stdout exposure when ``record_costs``
-flips on), ``sortino``, ``panel`` (item #1+#4+#5),
+compatibility: ``costs`` (cost-decomposition stdout exposure when ``record_costs``
+flips on), ``sortino``, ``panel``,
 ``pairs`` (Phase 3), ``carry`` (Phase 3). None of these emit new
 stdout lines yet; the registry slots are placeholders that will be
 populated as the corresponding items land.

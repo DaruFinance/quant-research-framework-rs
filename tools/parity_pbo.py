@@ -113,7 +113,7 @@ def run_python(fixture: Path) -> Dict[str, float]:
     return out
 
 
-RUST_DRIVER = r'''//! Cross-language parity harness binary (item #3, PBO/CSCV).
+RUST_DRIVER = r'''//! Cross-language parity harness binary (PBO/CSCV).
 //! Generated at runtime by tools/parity_pbo.py.
 #![cfg(feature = "overfit")]
 

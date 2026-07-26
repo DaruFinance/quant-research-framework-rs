@@ -1,4 +1,4 @@
-//! Portfolio sizing primitives (item #6 Rust mirror).
+//! Portfolio sizing primitives (Rust mirror).
 //!
 //! ``equal_weights`` and ``erc_weights`` mirror
 //! ``backtester.panel.sizing``. The Python side uses scipy SLSQP; the

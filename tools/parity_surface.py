@@ -86,7 +86,7 @@ def run_python(fixture: Path, workdir: Path, sl3: bool, sharpe: str) -> Dict[Tup
     return _read_grid(workdir / "opt_surface.csv")
 
 
-RUST_DRIVER = r'''//! Cross-language parity harness binary (item #1, IS surface).
+RUST_DRIVER = r'''//! Cross-language parity harness binary (IS surface).
 //! Generated at runtime by tools/parity_surface.py. Emits the dense classic IS
 //! objective grid for the whole fixture as window_idx "0".
 use quant_research_framework_rs::{load_ohlc, Bar, Config, compute_ema};

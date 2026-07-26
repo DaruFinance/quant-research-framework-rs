@@ -1,4 +1,4 @@
-//! Pairs / stat-arb plugin (Phase 3 T2, items #9, #10, #11, #12, #13).
+//! Pairs / stat-arb plugin.
 //!
 //! Mirror of Python's ``backtester.pairs`` package.  All primitives
 //! consume only data at indices ``<= t`` for any decision at logical

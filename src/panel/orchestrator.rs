@@ -1,9 +1,9 @@
-//! Panel walk-forward orchestrator (item #5 iter, Rust mirror).
+//! Panel walk-forward orchestrator (Rust mirror).
 //!
 //! Phase 2 contribution from the Rust side is intentionally minimum-
 //! viable: the data-shape mirror, not the full per-asset WFO. The
 //! Python side does the heavy WFO lifting via
-//! ``backtester.panel.orchestrator.walk_forward_panel`` so item #5
+//! ``backtester.panel.orchestrator.walk_forward_panel`` so the dispatch
 //! iter's verification gate (per-asset ledger bit-identical to single-
 //! asset run) is exercised end-to-end on the Python path.
 //!

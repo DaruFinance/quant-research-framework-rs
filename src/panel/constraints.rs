@@ -1,4 +1,4 @@
-//! Portfolio-level constraints (item #45 Rust mirror).
+//! Portfolio-level constraints (Rust mirror).
 //!
 //! Single-asset weight cap (iterative redistribution to strictly
 //! under-cap legs, avoiding the cap-oscillation loop) + gross

@@ -287,7 +287,7 @@ def run_python(fixture: Path) -> Dict[str, float]:
     return out
 
 
-RUST_DRIVER = r'''//! Cross-language parity harness binary (item #3, multitest/dsr-gapfill/haircut).
+RUST_DRIVER = r'''//! Cross-language parity harness binary (multitest/dsr-gapfill/haircut).
 //! Generated at runtime by tools/parity_multitest.py.
 #![cfg(feature = "overfit")]
 

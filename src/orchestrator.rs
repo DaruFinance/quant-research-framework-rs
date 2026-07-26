@@ -50,7 +50,7 @@ pub enum OrchestratorMode {
 pub fn dispatch(key: RouteKey) -> Result<OrchestratorMode, RouteError> {
     if key.multi_asset {
         return Err(RouteError::NotYetSupported(
-            "multi_asset routes ship in Phase 2 (item #5 iter, item #1)"
+            "multi_asset routes ship with the panel plugin"
                 .to_string(),
         ));
     }

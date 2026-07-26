@@ -1,4 +1,4 @@
-//! Position-construction neutralizations (item #7 Rust mirror).
+//! Position-construction neutralizations (Rust mirror).
 //!
 //! Three modes (``Dollar``, ``Beta``, ``Sigma``) layered on top of a
 //! raw weight vector. Pure-function with the same semantics as the

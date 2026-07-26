@@ -1,4 +1,4 @@
-//! Multi-term IS objective (item #44 Rust mirror).
+//! Multi-term IS objective (Rust mirror).
 //!
 //! Mirrors ``backtester.objectives.MultiTermObjective`` in Python.
 //!
