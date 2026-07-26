@@ -26,6 +26,7 @@ populated as the corresponding items land.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -256,6 +257,22 @@ def compare(py: Dict[str, Dict[str, float]],
                 ok = p == r
                 marker = "OK" if ok else "DIFF"
                 print(f"    {fld:>8}: py={p}  rs={r}  [{marker}]")
+                if not ok:
+                    diffs += 1
+                continue
+            # Non-finite values must be handled before the relative
+            # deviation: inf - inf and nan - nan are both nan, and
+            # `nan <= tol` is False, so two engines that agree exactly on
+            # a degenerate stage (a zero-trade window reports PF = inf)
+            # would otherwise be reported as a divergence. Identical
+            # values pass whatever they are; a one-sided inf or nan is a
+            # real disagreement and still fails.
+            p_fin, r_fin = math.isfinite(p), math.isfinite(r)
+            if not (p_fin and r_fin):
+                ok = (p == r) or (math.isnan(p) and math.isnan(r))
+                marker = "OK" if ok else "DIFF"
+                print(f"    {fld:>8}: py={p:>14}  rs={r:>14}  "
+                      f"non-finite  [{marker}]")
                 if not ok:
                     diffs += 1
                 continue
