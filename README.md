@@ -181,10 +181,24 @@ This repo is a clean-room port of the Python reference at
 [`backtester/__init__.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/backtester/__init__.py).
 Three automated harnesses verify the port produces metrics that agree
 with the reference within `1e-3` relative tolerance on shared input.
-We avoid the term *byte-identical*: parity is tolerance-bounded by
-construction (the maximum observed relative deviation across all
-surfaces is below `5e-5`, the ledger's `%.4f` print precision floor),
-not bit-equality.
+We avoid the term *byte-identical* for the cross-language axis: parity
+there is tolerance-bounded by construction (the maximum observed relative
+deviation across all surfaces is below `5e-5`, the ledger's `%.4f` print
+precision floor), not bit-equality.
+
+**Cross-architecture parity is byte-identical**, which is a separate and
+stronger assertion. The same Rust source compiled for
+`aarch64-unknown-linux-gnu` reproduces every printed metric digit exactly:
+[`tools/parity_arch.py`](tools/parity_arch.py) string-compares the whole
+metric block against committed x86_64 goldens in `data/golden/` across all
+six bundled datasets (196 metric lines each, 1,176 in total). The
+[`parity-arm64`](.github/workflows/parity_arm64.yml) workflow gates it on
+three runners: an x86_64 drift guard, the aarch64 build under
+`qemu-user-static`, and a native ARM runner.
+
+```bash
+python tools/parity_arch.py --bin target/release/backtester   # exit 0 = byte-identical
+```
 
 ### Default-config surface (`tools/parity_check.py`)
 **56/56 metric points agree at 0.001 relative tolerance.** Covers the v0.1.0 feature set — IS/OOS baseline, smart-optimised look-back search with auto-RRR, candle/trade WFO, and the four v0.1.0 robustness scenarios (ENTRY_DRIFT, FEE_SHOCK, SLIPPAGE_SHOCK, INDICATOR_VARIANCE). Every `IS-raw`, `OOS-raw`, `IS-opt`, `OOS-opt`, `Baseline`, `ENT`, `FEE`, `SLI`, and `W01..W18 IS/OOS` line matches in trade count, ROI, PF, Sharpe, win rate, expectancy and max drawdown:
@@ -258,7 +272,7 @@ workload; `bench_paper.py` is the citable measurement.)
 What this framework emphasises that mainstream open-source alternatives do
 not (verified against primary docs as of 2026-04):
 
-| Framework              | License                  | Built-in WFO | Per-regime LB optimisation | Strict-LAH property tests | Cross-language byte-parity tests |
+| Framework              | License                  | Built-in WFO | Per-regime LB optimisation | Strict-LAH property tests | Cross-language parity tests |
 |------------------------|--------------------------|:------------:|:--------------------------:|:-------------------------:|:--------------------------------:|
 | **this** (Python + Rust) | Apache-2.0                    | ✓            | ✓                          | ✓                         | ✓                                |
 | [vectorbt][vbt]        | Apache-2.0 + Commons     | ✓ (Splitter) | ✗                          | ✗                         | n/a                              |
