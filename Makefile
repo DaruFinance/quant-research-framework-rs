@@ -17,7 +17,7 @@ export OPENBLAS_NUM_THREADS = 1   # single-threaded: deterministic + polite on s
 
 PY := python3
 
-.PHONY: repro parity leak bench test build
+.PHONY: repro parity leak bench sweep test build
 
 build:
 	cargo build --release
@@ -40,3 +40,10 @@ repro: parity leak
 	@echo
 	@echo "repro OK, both engines agree within 1e-3 on every parity surface,"
 	@echo "and the no-look-ahead guard caught the planted forward-peek bug."
+
+# --- full validation sweep ----------------------------------------------
+# Every parity surface on every dataset it supports, plus both test suites,
+# the consistency guard, the benchmark drift check and the cross-architecture
+# goldens. Slower and broader than `make repro`; this is the release gate.
+sweep:
+	QRF_PY_DIR=$(QRF_PY_DIR) bash tools/sweep_all.sh
