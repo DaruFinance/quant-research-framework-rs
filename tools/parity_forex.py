@@ -11,7 +11,7 @@ Usage
     python tools/parity_forex.py --tol 0.001
     python tools/parity_forex.py --include costs sortino
 
-Item #15 refactor: shares regex / subprocess / comparison logic via
+refactor: shares regex / subprocess / comparison logic via
 ``parity_common.py`` and ``parity_registry.json``. Behaviour unchanged
 when invoked without ``--include``.
 """

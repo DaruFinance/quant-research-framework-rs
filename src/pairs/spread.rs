@@ -1,4 +1,4 @@
-//! Spread-definition primitives (item #10, Phase 3 T2 — Rust mirror).
+//! Spread-definition primitives (Phase 3 T2 — Rust mirror).
 //!
 //! Closed-form ports of `log_ratio`, `ols_resid`, `kalman_beta_spread`.
 //! Each consumes panel cells at row indices `<= t_idx` only.

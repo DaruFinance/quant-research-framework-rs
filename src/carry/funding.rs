@@ -1,4 +1,4 @@
-//! Funding-rate stream loader (item #38, Rust mirror).
+//! Funding-rate stream loader (Rust mirror).
 //!
 //! Loads a perpetual funding-rate series from a CSV with columns
 //! `time, rate`.  Aligns to the venue's settlement boundary (8h for

@@ -1,4 +1,4 @@
-//! Walk-forward orchestrator dispatch (item #5, Rust mirror).
+//! Walk-forward orchestrator dispatch (Rust mirror).
 //!
 //! The Python framework's dispatch uses a 5-bool ``RouteKey`` dict; the
 //! Rust port mirrors the same concept via an `OrchestratorMode` enum

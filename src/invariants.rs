@@ -1,4 +1,4 @@
-//! Lookahead-leak harness (item #14, Rust mirror).
+//! Lookahead-leak harness (Rust mirror).
 //!
 //! Pollutes the tail of a `&[Bar]` slice past a cut index and asserts that
 //! a candidate function's output for indices `< cut` is unchanged. Used by

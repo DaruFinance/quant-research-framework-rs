@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Cross-language parity harness for the IS parameter-robustness isosurface
-(item #1). Proves Python and Rust dense IS objective grids agree cell-by-cell
+"""Cross-language parity harness for the IS parameter-robustness isosurface.
+
+Proves Python and Rust dense IS objective grids agree cell-by-cell
 within rel-tol 1e-3 + abs floor on seeded fixtures.
 
 Mirrors tools/parity_dsr.py: write fixture -> Python emit -> generate

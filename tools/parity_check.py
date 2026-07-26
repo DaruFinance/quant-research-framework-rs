@@ -15,7 +15,7 @@ The shared regex / subprocess / comparison machinery lives in
 ``tools/parity_common.py``; this script is a thin driver that selects
 the ``base`` metric family from ``tools/parity_registry.json``.
 
-Item #15 refactor: behaviour is bit-identical to the pre-#15 single-
+refactor: behaviour is bit-identical to the pre-#15 single-
 file script when invoked without ``--include``. The 210/210 default
 parity claim is unchanged.
 

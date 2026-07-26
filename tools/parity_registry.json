@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of truth for parity-script tag whitelists and field sets per metric family (item #15). Loaded by tools/parity_common.py:MetricRegistry.load(). New items add families here when they introduce new metric stdout lines; --include <family> opts those into the gate. Default-config invocations check the 'base' family only.",
+  "_comment": "Single source of truth for parity-script tag whitelists and field sets per metric family. Loaded by tools/parity_common.py:MetricRegistry.load(). New items add families here when they introduce new metric stdout lines; --include <family> opts those into the gate. Default-config invocations check the 'base' family only.",
   "families": [
     {
       "name": "base",
@@ -67,7 +67,7 @@
     },
     {
       "name": "multi-leg",
-      "description": "Per-leg trade rows in the trade ledger (item #2). Currently kernel emits one leg per logical trade, so the multi-leg metric surface is identical to base. Reserved for item #28 (hedge engine) and #34 (arb state machine) which will introduce true multi-leg ledgers.",
+      "description": "Per-leg trade rows in the trade ledger. Currently kernel emits one leg per logical trade, so the multi-leg metric surface is identical to base. Reserved for item #28 (hedge engine) and #34 (arb state machine) which will introduce true multi-leg ledgers.",
       "tags": [],
       "fields": []
     }

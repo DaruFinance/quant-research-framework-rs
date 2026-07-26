@@ -1,4 +1,4 @@
-//! Perp-vs-spot basis loader (item #39, Rust mirror).
+//! Perp-vs-spot basis loader (Rust mirror).
 
 #![cfg(feature = "carry")]
 

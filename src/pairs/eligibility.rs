@@ -1,4 +1,4 @@
-//! Pre-screening eligibility filters (item #13, Rust mirror).
+//! Pre-screening eligibility filters (Rust mirror).
 
 #![cfg(feature = "pairs")]
 

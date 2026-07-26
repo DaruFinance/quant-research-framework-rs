@@ -1,4 +1,4 @@
-"""Shared parity-script primitives (item #15).
+"""Shared parity-script primitives.
 
 The three default parity scripts (``parity_check.py``,
 ``parity_regime.py``, ``parity_forex.py``) all do essentially the same
@@ -18,7 +18,7 @@ family only, preserving the 210-points-at-1e-3 claim today.
 
 ``--include`` adds opt-in families that exist for forward
 compatibility: ``costs`` (item #3 stdout exposure when ``record_costs``
-flips on), ``sortino`` (item #44), ``panel`` (item #1+#4+#5),
+flips on), ``sortino``, ``panel`` (item #1+#4+#5),
 ``pairs`` (Phase 3), ``carry`` (Phase 3). None of these emit new
 stdout lines yet; the registry slots are placeholders that will be
 populated as the corresponding items land.

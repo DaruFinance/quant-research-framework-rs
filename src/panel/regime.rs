@@ -1,4 +1,4 @@
-//! Cross-asset regime detection (item #4, Rust mirror).
+//! Cross-asset regime detection (Rust mirror).
 //!
 //! Mirrors the Python ``backtester.panel.regime`` module. Two
 //! detector flavours ship:

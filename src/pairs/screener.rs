@@ -1,4 +1,4 @@
-//! Pair / spread screener (item #9, Phase 3 T2 — HIGH-RISK Rust mirror).
+//! Pair / spread screener (Phase 3 T2 — HIGH-RISK Rust mirror).
 //!
 //! Mirrors `backtester.pairs.screener` with one deliberate deviation:
 //! the Rust `engle_granger` returns the **ADF tau test statistic**

@@ -1,4 +1,4 @@
-//! Funding-momentum carry model (item #43, Rust mirror).
+//! Funding-momentum carry model (Rust mirror).
 
 #![cfg(feature = "carry")]
 

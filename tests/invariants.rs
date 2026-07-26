@@ -27,7 +27,7 @@ fn ny_hour(unix_ts: i64) -> u32 {
 }
 
 // ----------------------------------------------------------------------------
-// Item #14: lookahead-leak harness self-tests.
+// lookahead-leak harness self-tests.
 // ----------------------------------------------------------------------------
 
 /// The default regime detector consumes only past close values (an

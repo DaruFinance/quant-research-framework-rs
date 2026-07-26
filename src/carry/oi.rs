@@ -1,4 +1,4 @@
-//! Open-interest stream loader (item #40, Rust mirror).
+//! Open-interest stream loader (Rust mirror).
 
 #![cfg(feature = "carry")]
 

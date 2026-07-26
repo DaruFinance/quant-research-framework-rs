@@ -1,4 +1,4 @@
-//! Event-driven rebalance scheduler (item #42, HIGH-RISK Rust mirror).
+//! Event-driven rebalance scheduler (HIGH-RISK Rust mirror).
 
 #![cfg(feature = "carry")]
 

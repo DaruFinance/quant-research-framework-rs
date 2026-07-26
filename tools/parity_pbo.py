@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-language parity harness for PBO / CSCV (item #3, part D).
+"""Cross-language parity harness for PBO / CSCV (part D).
 
 Compares Python ``backtester.pbo`` against the Rust ``pbo`` module
 (feature ``overfit``) on a battery of fixed ``(T, N)`` equity matrices.

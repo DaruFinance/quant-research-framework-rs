@@ -172,10 +172,10 @@ pub mod multitest;
 #[cfg(feature = "overfit")]
 pub mod haircut;
 
-// Volume indicators (item #2, v0.6.0). UNCONDITIONAL like src/metrics.rs.
+// Volume indicators (v0.6.0). UNCONDITIONAL like src/metrics.rs.
 pub mod volume;
 
-// Item #1 — IS parameter-robustness isosurface emit (pure std + f64).
+// IS parameter-robustness isosurface emit (pure std + f64).
 pub mod opt_surface;
 
 #[derive(Clone)]
@@ -185,12 +185,12 @@ pub struct Bar {
     pub high: f64,
     pub low: f64,
     pub close: f64,
-    /// Item #2 (v0.6.0): per-bar volume; 0.0 when 6th CSV column absent.
+    /// (v0.6.0): per-bar volume; 0.0 when 6th CSV column absent.
     pub volume: f64,
 }
 
 impl Bar {
-    /// Construct a clean OHLC bar with volume defaulted to 0.0 (item #2).
+    /// Construct a clean OHLC bar with volume defaulted to 0.0.
     pub fn ohlc(time_unix: i64, open: f64, high: f64, low: f64, close: f64) -> Self {
         Bar { time_unix, open, high, low, close, volume: 0.0 }
     }
@@ -205,17 +205,17 @@ pub struct Trade {
     pub exit_price: f64,
     pub qty: f64,
     pub pnl: f64,
-    /// Item #2: leg index within a multi-leg trade group. Always 0 in
+    /// leg index within a multi-leg trade group. Always 0 in
     /// single-leg single-asset mode. Set by the backtest core at every
     /// `trades.push(...)` site; aggregation lives downstream.
     pub leg_id: u32,
-    /// Item #2: shared group id across legs of the same logical trade.
+    /// shared group id across legs of the same logical trade.
     /// Single-leg mode emits `trade_group_id == trades.len()` at push
     /// time so every leg row is its own group. The trade ledger CSV
     /// schema stays at 15 columns (these fields are internal); parity
     /// vs Python is preserved.
     pub trade_group_id: u64,
-    /// Item #3: cost decomposition. fee + slippage + funding +
+    /// cost decomposition. fee + slippage + funding +
     /// net_pnl == gross_pnl by construction, satisfying the leg-level
     /// identity to floating-point tolerance. net_pnl == pnl. In forex
     /// mode slippage and funding are 0 (R-unit math folds them in).
@@ -297,7 +297,7 @@ pub struct Config {
     /// where the optimiser's side comparison always took the short
     /// branch. See CHANGELOG v0.3.1 / Python v0.2.5.
     pub legacy_side_bug: bool,
-    /// Item #46: maximum hold period in bars. 0 = no force-close
+    /// maximum hold period in bars. 0 = no force-close
     /// (engine behaves as pre-#46). When > 0, the kernel emits a code-2
     /// / code-4 close at bar i for any open position with
     /// `(i - ent_bar) >= max_hold_bars`. Priority: news/session >
@@ -365,7 +365,7 @@ impl Config {
     }
     pub fn with_mask_exits(mut self, on: bool) -> Self { self.mask_exits = on; self }
     pub fn with_legacy_side_bug(mut self, on: bool) -> Self { self.legacy_side_bug = on; self }
-    /// Item #46: cap the number of bars a position can be held.
+    /// cap the number of bars a position can be held.
     /// 0 (default) disables; >0 makes the kernel force-close at bar i
     /// when `(i - ent_bar) >= max_hold_bars`. Mirrors Python's
     /// `MAX_HOLD_BARS` module constant.
@@ -533,7 +533,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let position_size = if cfg.use_forex { 1.0 } else { cfg.position_size };
     let pip_size = cfg.pip_size;
     let slip = if cfg.use_forex { cfg.slippage_pct * pip_size } else { cfg.slip() };
-    // Item #1: surface SL sweep substitutes a per-cell stop via cfg.sl_override
+    // surface SL sweep substitutes a per-cell stop via cfg.sl_override
     // (always None on default/parity paths, so this is a no-op there).
     let sl_base = cfg.sl_override.unwrap_or(SL_PERCENTAGE);
     let sl_perc = if cfg.use_forex { sl_base * pip_size } else { sl_base };
@@ -637,7 +637,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         if end_bar_flag {
             code = if open_pos == 1 { 2 } else if open_pos == -1 { 4 } else { 0 };
         } else if cfg.max_hold_bars > 0 && open_pos != 0 && code != 2 && code != 4 {
-            // Item #46: hold-period force-close (only when not a session-end
+            // hold-period force-close (only when not a session-end
             // bar — session-end takes precedence, matching Python's elif).
             let held = (idx as i64) - (ent_bar as i64);
             if held >= cfg.max_hold_bars as i64 {
@@ -684,7 +684,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 } else {
                     pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc)
                 };
-                // Item #3: cost decomposition (capture funding before reset).
+                // cost decomposition (capture funding before reset).
                 let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
                     open_pos, entry_price, exit_price, qty,
                     fee_entry, fee_exit, funding_acc, slip,
@@ -707,7 +707,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let exit_price = price_open * (1.0 + slip);
                 let fee_exit = qty * exit_price * fee_rate;
                 let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
-                // Item #3: cost decomposition.
+                // cost decomposition.
                 let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
                     -1, entry_price, exit_price, qty,
                     fee_entry, fee_exit, funding_acc, slip,
@@ -733,7 +733,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let exit_price = price_open * (1.0 - slip);
                 let fee_exit = qty * exit_price * fee_rate;
                 let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
-                // Item #3: cost decomposition.
+                // cost decomposition.
                 let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
                     1, entry_price, exit_price, qty,
                     fee_entry, fee_exit, funding_acc, slip,
@@ -758,7 +758,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let exit_price = price_open * (1.0 - slip);
             let fee_exit = qty * exit_price * fee_rate;
             let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
-            // Item #3: cost decomposition.
+            // cost decomposition.
             let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
                 1, entry_price, exit_price, qty,
                 fee_entry, fee_exit, funding_acc, slip,
@@ -776,7 +776,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let exit_price = price_open * (1.0 + slip);
             let fee_exit = qty * exit_price * fee_rate;
             let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
-            // Item #3: cost decomposition.
+            // cost decomposition.
             let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
                 -1, entry_price, exit_price, qty,
                 fee_entry, fee_exit, funding_acc, slip,
@@ -845,7 +845,7 @@ fn run_backtest(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics,
     backtest_core(bars, sig, cfg)
 }
 
-/// Item #3 cost decomposition for a single trade leg. Returns
+/// cost decomposition for a single trade leg. Returns
 /// `(fee, slippage, funding, gross_pnl)` satisfying
 /// `gross_pnl - fee - slippage - funding == pnl` to fp tolerance.
 /// Crypto recovers raw prices via the inverse slippage adjust:
@@ -1383,7 +1383,7 @@ pub fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, si
     // Optimise
     let (best_lb, met_is_opt) = optimiser(is_bars, cfg, sig_fn);
 
-    // Item #1: emit the baseline IS objective surface (opt-in, default off).
+    // emit the baseline IS objective surface (opt-in, default off).
     if cfg.emit_opt_surface {
         let header = !std::path::Path::new("opt_surface.csv").exists();
         crate::opt_surface::emit_surface_classic(is_bars, "baseline", cfg, sig_fn, header);
@@ -1550,7 +1550,7 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
         let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
         if lb_roll.is_none() { break; }
         let lb = lb_roll.unwrap();
-        // Item #1: emit the per-window IS objective surface (opt-in, default off).
+        // emit the per-window IS objective surface (opt-in, default off).
         if cfg.emit_opt_surface {
             let header = !std::path::Path::new("opt_surface.csv").exists();
             crate::opt_surface::emit_surface_classic(
@@ -1578,7 +1578,7 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
 }
 
 // ============================================================================
-// Item #4 (benchmark v2): read-only WFO-harvest surface + default signal fn.
+// (benchmark v2): read-only WFO-harvest surface + default signal fn.
 // `walk_forward_collect` mirrors `walk_forward` (above) but RETURNS the OOS
 // harvest instead of printing the summary, with an EMPTY scenario set (no
 // robustness overlays). The harvested baseline rets_oos is overlay-independent,
@@ -2119,7 +2119,7 @@ fn walk_forward_regime(
         if best_lbs.iter().all(|x| x.is_none()) { break; }
         let lb_tag = fmt_lb_tag(&best_lbs, &regime_cfg.labels);
 
-        // Item #1: emit the regime IS surface over the labels the engine TRADES
+        // emit the regime IS surface over the labels the engine TRADES
         // (regimes_is), holding non-swept regimes at the FINAL optimised best_lbs.
         if cfg.emit_opt_surface {
             let header = !std::path::Path::new("opt_surface.csv").exists();

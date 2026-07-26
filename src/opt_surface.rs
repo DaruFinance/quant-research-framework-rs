@@ -1,4 +1,4 @@
-//! Item #1 — IS parameter-robustness isosurface: dense in-sample objective
+//! IS parameter-robustness isosurface: dense in-sample objective
 //! grid emit. OPT-IN, parity-safe. Compiled unconditionally (pure std + f64,
 //! zero new crates); only INVOKED when `cfg.emit_opt_surface` is true, so
 //! default runs never touch this module and stay byte-identical.

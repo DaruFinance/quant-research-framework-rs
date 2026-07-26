@@ -45,7 +45,7 @@ pub fn bars_for_asset(panel: &PanelData, asset: &str) -> Result<Vec<Bar>, String
     let open_idx = panel.fields.iter().position(|f| f == "open").unwrap();
     let high_idx = panel.fields.iter().position(|f| f == "high").unwrap();
     let low_idx = panel.fields.iter().position(|f| f == "low").unwrap();
-    // Item #2: volume is OPTIONAL in the panel; Option, never .unwrap() (B3 fix).
+    // volume is OPTIONAL in the panel; Option, never .unwrap() (B3 fix).
     let volume_idx = panel.fields.iter().position(|f| f == "volume");
 
     let n = panel.times.len();

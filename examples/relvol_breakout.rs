@@ -1,4 +1,4 @@
-//! Relative-volume breakout (item #2). When relative volume (vol / volSMA)
+//! Relative-volume breakout. When relative volume (vol / volSMA)
 //! exceeds a threshold AND the prior close breaks the prior-N high/low
 //! channel, trade in the breakout direction.
 //!

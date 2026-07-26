@@ -1,4 +1,4 @@
-//! On-chain stream loader with snapshot pinning (item #41, Rust mirror).
+//! On-chain stream loader with snapshot pinning (Rust mirror).
 //!
 //! The Rust port doesn't ship the SHA-256 helper (the Python side
 //! pulls hashlib for free; the Rust side would need a `sha2` crate

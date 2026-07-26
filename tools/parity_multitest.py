@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-language parity harness for multiple-testing corrections, the
 gap-fill DSR pieces (PSR / MinTRL / MinBTL), and the Harvey-Liu haircut
-(item #3, part D).
+(part D).
 
 Two fixture families, both deterministic and parity-clean:
 

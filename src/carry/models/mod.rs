@@ -1,4 +1,4 @@
-//! Funding-signal model library (item #43, Rust mirror).
+//! Funding-signal model library (Rust mirror).
 
 #![cfg(feature = "carry")]
 
