@@ -35,6 +35,7 @@ run() {
 
 cd "$RS_DIR"
 export QRF_PY_DIR="$PY_DIR"
+export BT_PY_REPO="$PY_DIR"   # honoured by older tooling
 echo "Rust : $RS_DIR"
 echo "Py   : $PY_DIR"
 echo "Tol  : $TOL"

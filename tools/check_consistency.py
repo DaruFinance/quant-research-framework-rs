@@ -6,8 +6,9 @@ the repo's artifacts. Wired into CI (parity.yml) so the framework's correctness
 *claims* are enforced continuously, not asserted once and left to rot.
 
 Checks BOTH engines: the Rust repo this file lives in, and the Python sibling
-(via BT_PY_REPO, else ../quant-research-framework). The paper (.tex, not in the
-repo) is reconciled separately and is out of CI scope.
+(via QRF_PY_DIR, the variable the parity harnesses use, with BT_PY_REPO still
+honoured for compatibility, else ../quant-research-framework). The paper (.tex,
+not in the repo) is reconciled separately and is out of CI scope.
 
     python tools/check_consistency.py        # exit 0 = consistent, 1 = drift
 """
@@ -17,7 +18,11 @@ import sys
 from pathlib import Path
 
 REPO_RS = Path(__file__).resolve().parent.parent
-REPO_PY = Path(os.environ.get("BT_PY_REPO", REPO_RS.parent / "quant-research-framework"))
+REPO_PY = Path(
+    os.environ.get("QRF_PY_DIR")
+    or os.environ.get("BT_PY_REPO")
+    or REPO_RS.parent / "quant-research-framework"
+)
 
 CANON_LICENSE = "Apache-2.0"
 fails: list[str] = []
