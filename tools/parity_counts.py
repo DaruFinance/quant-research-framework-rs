@@ -17,8 +17,9 @@ from pathlib import Path
 
 FIELD_RE = re.compile(r"^\s+(trades|roi|pf|sharpe|win_rate|exp|max_dd):", re.M)
 HEADER_RE = re.compile(r"Metric comparison \((\d+) tags x (\d+) fields")
-LEDGER_RE = re.compile(r"(\d[\d,]*)\s+matched trades.*?(\d[\d,]*)\s+field", re.S)
-OK_RE = re.compile(r"PARITY OK|LEDGER PARITY OK")
+LEDGER_RE = re.compile(r"all (\d[\d,]*) fields across (\d[\d,]*) common trades")
+COMBO_RE = re.compile(r"COMBO PARITY OK \((\d+) stages x (\d+) fields")
+OK_RE = re.compile(r"PARITY OK|LEDGER PARITY OK|COMBO PARITY OK")
 DIFF_RE = re.compile(r"PARITY DIFF: (\d+)|LEDGER PARITY FAIL: (\d+)")
 
 
@@ -41,6 +42,11 @@ def main() -> int:
                 break
         text = log.read_text(errors="replace")
         passed = bool(OK_RE.search(text))
+        cm = COMBO_RE.search(text)
+        if cm:
+            stages, fields = int(cm.group(1)), int(cm.group(2))
+            metric_rows.append((name, stages, stages * fields, passed))
+            continue
         m = HEADER_RE.search(text)
         if m:
             checks = len(FIELD_RE.findall(text))
@@ -48,7 +54,7 @@ def main() -> int:
             continue
         lm = LEDGER_RE.search(text)
         if lm:
-            ledger_rows.append((name, n(lm.group(1)), n(lm.group(2)), passed))
+            ledger_rows.append((name, n(lm.group(2)), n(lm.group(1)), passed))
             continue
         other.append((name, passed))
 
