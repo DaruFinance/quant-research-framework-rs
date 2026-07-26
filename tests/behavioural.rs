@@ -46,7 +46,7 @@ fn ema_strategy(bars: &[Bar], lb: usize) -> Vec<i8> {
 #[test]
 fn forex_mode_skips_funding_fees() {
     use quant_research_framework_rs::run_with_regime;
-    // Use run_with_regime as a smoke harness — we just need *something*
+    // Use run_with_regime as a smoke harness, we just need *something*
     // to flow signals through the engine. With a bench dataset large
     // enough to span funding bars (00/08/16 UTC), a forex run should
     // produce a different (better-or-equal) ROI than a non-forex run on
@@ -73,7 +73,7 @@ fn forex_mode_skips_funding_fees() {
 
     // We can only access run_backtest via the higher-level wrappers.
     // Instead, drive run_with_regime on the same bars and read the
-    // printed metrics through stdout — but for a test, just assert that
+    // printed metrics through stdout, but for a test, just assert that
     // the *config flag actually flips behaviour* via Config.use_forex
     // being observable to backtest_core (gates funding_mask) and that
     // the field is independently mutable.

@@ -72,7 +72,7 @@ fn ema_regime(close: &[f64], length: usize) -> Vec<u8> {
 }
 
 /// Per-asset detector. Each asset's labels come from its own close
-/// series only — no cross-asset coupling.
+/// series only, no cross-asset coupling.
 pub struct PerAssetRegime {
     pub length: usize,
 }

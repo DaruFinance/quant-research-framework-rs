@@ -37,7 +37,7 @@ pasting into Table 3.
 
 | Script | What changes | Why this is the bug to test |
 |---|---|---|
-| `fee_bias.sh` | `FEE_PCT_DEFAULT` constant | Smooth, monotonic — calibrates the discrimination threshold |
+| `fee_bias.sh` | `FEE_PCT_DEFAULT` constant | Smooth, monotonic, calibrates the discrimination threshold |
 | `fill_off_by_one.sh` | `bars[idx].open` → `bars[(idx+1).min(...)].open` in `backtest_core` | Textbook look-ahead-direction off-by-one; exercises the core temporal contract |
 | `funding_skip.sh` | Comment out `funding_acc += fee_f` | Silent omission of a small recurring cost; exercises the cumulative-bias case |
 

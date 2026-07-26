@@ -1,4 +1,4 @@
-# Robustness Benchmark — leaderboard (spec 1.0.0)
+# Robustness Benchmark: leaderboard (spec 1.0.0)
 
 > Frozen, deterministic, cite-able. Re-running `python tools/benchmark.py`
 > reproduces every number byte-for-byte (pinned image). Each cell is ONE
@@ -7,11 +7,11 @@
 > aggregate the concatenated OOS windows. The CANONICAL golden is the
 > Rust CSV; Python is the 1e-3 cross-check. See `docs/benchmark.md`.
 
-**Corpus breadth:** 6 strategies x 6 datasets = 36 cells. A strategy evaluated over K walk-forward windows is STILL ONE strategy, not K — windows are in-sample geometry, never multiplied into corpus size (effective-trials discipline).
+**Corpus breadth:** 6 strategies x 6 datasets = 36 cells. A strategy evaluated over K walk-forward windows is STILL ONE strategy, not K, windows are in-sample geometry, never multiplied into corpus size (effective-trials discipline).
 
 **WFO geometry is per-dataset, not uniform.** `win` = number of rolling windows actually executed; on datasets smaller than the OOS span the engine runs fewer/shorter windows, and `OOS-disp` is `n/a` when there is <2 windows. See `windows`/`eff_oos_bars` in the golden CSV.
 
-**NET = realistic frictions** (crypto 0.02% fee / 0.03% slip / 0.01% funding; FX forex-mode). **GROSS = zero-cost / FRICTIONLESS** — a labeled comparison column shown for context ONLY; it is NOT a tradeable result. All metrics are OUT-OF-SAMPLE; ROI/MDD are account-fraction (FX in R-units), MDD on the OOS-only equity. `OOS-disp` is the across-window OOS-Sharpe std (stability). DSR/PBO are computed on the NET stream only. `engine=both` cells are cross-engine parity-checked at 1e-3; `engine=python` cells are Python-only (real numbers, not cross-checked) and flip to cross-engine once item 5 ports the indicator.
+**NET = realistic frictions** (crypto 0.02% fee / 0.03% slip / 0.01% funding; FX forex-mode). **GROSS = zero-cost / FRICTIONLESS**, a labeled comparison column shown for context ONLY; it is NOT a tradeable result. All metrics are OUT-OF-SAMPLE; ROI/MDD are account-fraction (FX in R-units), MDD on the OOS-only equity. `OOS-disp` is the across-window OOS-Sharpe std (stability). DSR/PBO are computed on the NET stream only. `engine=both` cells are cross-engine parity-checked at 1e-3; `engine=python` cells are Python-only (real numbers, not cross-checked) and flip to cross-engine once item 5 ports the indicator.
 
 | Dataset | Strategy | Engine | win | NET ROI | NET Sharpe | NET PF | NET MaxDD | OOS-disp | *GROSS ROI* | *GROSS Sharpe* | *GROSS PF* | DSR |
 |---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|

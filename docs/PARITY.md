@@ -12,7 +12,7 @@ Reproduce all green surfaces at once:
 make parity     # or: python tools/parity_check.py && parity_regime.py && parity_forex.py ...
 ```
 
-## Green — gated in CI (`.github/workflows/parity.yml`)
+## Green: gated in CI (`.github/workflows/parity.yml`)
 
 | Surface | Harness | Result |
 |---|---|---|
@@ -39,12 +39,12 @@ The v0.5.0 multi-asset substrate (panel / pairs / carry) **is** re-verified at
 v0.6.0: those three harnesses run in CI on every push, so the substrate is
 green, not a deferred gap.
 
-## Known divergences — labeled, not gated
+## Known divergences: labeled, not gated
 
 1. **Four-way combo** (`parity_combo.py`: regime + WFO + forex + session, all
    at once). Single-feature parity holds (default, regime+WFO, forex each pass
    independently), but the four layered together still diverge, and the gap is
-   in the **forex/session interaction** — it shows up even on the classic
+   in the **forex/session interaction**, it shows up even on the classic
    `Baseline IS/OOS` line, not in the regime engine. Status: open, the natural
    `paper-v3` milestone. Not a CI gate; the single-feature surfaces are.
 
@@ -55,24 +55,24 @@ green, not a deferred gap.
    the golden; only the cross-engine **gate** skips that one dataset, with the
    reason inline in the manifest. The other 15 core cells gate green.
 
-3. **Monte Carlo percentiles** — *intentional.* Python draws from NumPy's
+3. **Monte Carlo percentiles**: *intentional.* Python draws from NumPy's
    global RNG; Rust uses `StdRng` seeded to 42. Different algorithms, so the
    percentile values differ while the distribution shape matches. Disable Monte
    Carlo and this surface is identical.
 
-4. **`INDICATOR_VARIANCE` robustness overlay** — *intentional.* Both engines
+4. **`INDICATOR_VARIANCE` robustness overlay**: *intentional.* Both engines
    pick the ±1 lookback shift from an unseeded RNG, so the
    `W*_IS+ENT+IND` / `W*_OOS+ENT+IND` lines jitter run-to-run in both. This is
    a property of the reference, reproduced faithfully.
 
-## Python-only — no Rust counterpart, not cross-engine-checked by design
+## Python-only: no Rust counterpart, not cross-engine-checked by design
 
 These ship in the Python reference and have no Rust port, so there is nothing
 to diff. They are research/example surface, not the parity-gated core engine:
 
-- **`backtester/bootstrap.py`** — stationary bootstrap (Politis & Romano 1994)
+- **`backtester/bootstrap.py`**: stationary bootstrap (Politis & Romano 1994)
   for serial-correlated resampling / variance estimation. Python-only utility.
-- **`examples/ml_*`** — ML example strategies (`ml_sklearn`, `ml_regime_kmeans`,
+- **`examples/ml_*`**: ML example strategies (`ml_sklearn`, `ml_regime_kmeans`,
   `ml_callback`, `ml_precomputed`). Illustrate the `create_raw_signals` contract
   with scikit-learn; they are examples, not engine surfaces.
 

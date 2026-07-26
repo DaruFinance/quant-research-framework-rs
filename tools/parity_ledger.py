@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-language parity harness — *trade-ledger* level.
+"""Cross-language parity harness, *trade-ledger* level.
 
 Where ``parity_check.py`` / ``parity_regime.py`` / ``parity_forex.py``
 diff the seven scalar metrics each engine prints to stdout (trades,
@@ -9,7 +9,7 @@ diffs the per-trade ``trade_list.csv`` row-by-row.
 The motivation is a known gap in the metric-only diff: two engines
 could agree on every reported scalar while taking different sets of
 trades that happen to compensate in aggregate. Ledger parity catches
-that — every trade's side, entry price, exit price, and PnL must agree
+that, every trade's side, entry price, exit price, and PnL must agree
 within tolerance.
 
 Both engines write ``trade_list.csv`` to their own working directory
@@ -170,7 +170,7 @@ def _key(t: TradeRow) -> tuple:
 
 
 _BASE_SAMPLES = {"IS", "OOS"}  # Python only writes these; Rust also writes
-                                #  IS-opt/OOS-opt — exclude those for fairness.
+                                #  IS-opt/OOS-opt: exclude those for fairness.
 
 
 def _dedupe(rows: list[TradeRow]) -> dict:

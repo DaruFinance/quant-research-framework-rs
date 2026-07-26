@@ -12,7 +12,7 @@ parity script becomes a thin driver that only specifies:
 - which Rust binary or one-off `examples/*.rs` runner to invoke.
 
 The registry (loaded from ``tools/parity_registry.json``) lists
-metric **families** — each family is a set of tag whitelist entries
+metric **families**, each family is a set of tag whitelist entries
 plus the field list to diff. Default invocations check the ``base``
 family only, preserving the 210-points-at-1e-3 claim today.
 
@@ -150,7 +150,7 @@ def run_python(csv: Path, overrides: Optional[Dict[str, str]] = None,
     """Invoke ``bt.main()`` in a subprocess with optional config overrides.
 
     ``overrides`` maps ``bt.X = Y`` constants to assign before
-    ``bt.main()``. ``extra_setup`` is appended verbatim — useful for
+    ``bt.main()``. ``extra_setup`` is appended verbatim, useful for
     derived assignments like ``bt.SL_PERCENTAGE *= bt.PIP_SIZE``.
     """
     env = os.environ.copy()

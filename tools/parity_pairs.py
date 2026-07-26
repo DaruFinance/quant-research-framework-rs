@@ -7,9 +7,9 @@ on the DS-PAIR-BTCETH fixture (1500 1h bars).
 
 Cross-language tolerances:
   * `ols_slope_intercept`, `kalman_beta_spread`, `ols_resid`,
-    `half_life_ou`, `distance_ssd` — closed-form OLS / deterministic
+    `half_life_ou`, `distance_ssd`, closed-form OLS / deterministic
     float math => 1e-9.
-  * `engle_granger` ADF tau — matches Python `adfuller(resid,
+  * `engle_granger` ADF tau: matches Python `adfuller(resid,
     regression='n', maxlag=0, autolag=None)` to f64 noise (~1e-12
     in practice).  The production Python `engle_granger` uses
     statsmodels' default autolag='AIC' (lag selected adaptively),
@@ -119,7 +119,7 @@ fn main() {
         println!("kalman_beta_{}={:.12}", i, beta_traj[*p]);
     }
 
-    // log_ratio at the probes (sanity check — should be exact).
+    // log_ratio at the probes (sanity check, should be exact).
     let lr = log_ratio(&panel, "BTC", "ETH", t_idx).unwrap();
     for (i, p) in probes.iter().enumerate() {
         println!("log_ratio_{}={:.12}", i, lr.spread[*p]);

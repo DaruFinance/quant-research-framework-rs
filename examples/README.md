@@ -1,7 +1,7 @@
 # Examples: adding your own strategy
 
-The whole backtester — IS/OOS split, optimiser, walk-forward, robustness,
-MC, trade export — lives in `src/lib.rs`. A **strategy** is the one function
+The whole backtester, IS/OOS split, optimiser, walk-forward, robustness,
+MC, trade export, lives in `src/lib.rs`. A **strategy** is the one function
 that takes OHLC bars and returns raw long/short intents. Everything else is
 shared.
 
@@ -18,8 +18,8 @@ Your function returns a `Vec<i8>` the same length as `bars`, where:
 
 | Value | Meaning |
 |------:|---------|
-| `+1`  | **Long intent** at this bar — open or hold a long |
-| `-1`  | **Short intent** at this bar — open or hold a short |
+| `+1`  | **Long intent** at this bar, open or hold a long |
+| `-1`  | **Short intent** at this bar, open or hold a short |
 |  `0`  | **No intent** at this bar (typically: indicator not warmed up yet, or no crossover this bar) |
 
 The `lb` argument is the look-back length the optimiser is sweeping over
@@ -46,24 +46,24 @@ Two equivalent ways to express a crossover strategy:
    at a cross-down, `0` in between. This is what the proprietary
    `run_strategies.py` does and what the ATR example here does.
 
-Both produce the same trades — `parse_signals` detects the first `+1`/`-1`
-after a position change — but the sparse form is tidier when you want to
+Both produce the same trades, `parse_signals` detects the first `+1`/`-1`
+after a position change, but the sparse form is tidier when you want to
 stack a confluence filter on top.
 
 ### Adding a confluence
 
 A "confluence" is just a boolean filter you multiply your signal by before
-returning. Any extra indicator you'd like — RSI threshold, volatility
-floor, higher-timeframe agreement — is a line of code in your strategy
+returning. Any extra indicator you'd like, RSI threshold, volatility
+floor, higher-timeframe agreement, is a line of code in your strategy
 function. See `atr_cross.rs` for an RSI≥50 example.
 
 ## Running
 
 ```bash
-# Reference strategy (EMA crossover) — this is `src/main.rs`
+# Reference strategy (EMA crossover): this is `src/main.rs`
 cargo run --release
 
-# ATR-cross with RSI confluence — this is `examples/atr_cross.rs`
+# ATR-cross with RSI confluence: this is `examples/atr_cross.rs`
 cargo run --release --example atr_cross
 
 # Point either one at a different CSV
@@ -84,7 +84,7 @@ Carlo, WFO summary) and emits the same `trade_list.csv` format.
    `run_with_csv("data/your.csv", "my-strategy", my_strategy);`
 4. `cargo run --release --example my_strategy`
 
-If you need an indicator that isn't in `src/lib.rs`, just write it inline —
+If you need an indicator that isn't in `src/lib.rs`, just write it inline ,
 the ATR, SMA, EWM, and RSI helpers in `atr_cross.rs` are ~80 lines total
 and are mirror-images of the Python equivalents in `indicators_tradingview.py`
 in the sibling Python repo.

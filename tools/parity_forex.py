@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Forex-mode parity check — runs both engines with FOREX_MODE=True on
+"""Forex-mode parity check, runs both engines with FOREX_MODE=True on
 the bundled EURUSD 1h dataset. Validates pip-aware sizing, funding-skip
 semantics, and R-unit PnL math under the standard tag set.
 

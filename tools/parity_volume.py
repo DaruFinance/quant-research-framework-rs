@@ -250,7 +250,7 @@ def main() -> int:
     if not FIXTURE.exists():
         # The fixture is deterministic and untracked; auto-generate it so this
         # harness is self-contained on a fresh checkout / in CI / under make repro.
-        sys.stderr.write(f"fixture missing: {FIXTURE} — generating via "
+        sys.stderr.write(f"fixture missing: {FIXTURE}, generating via "
                          f"tools/make_volume_fixture.py ...\n")
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import make_volume_fixture

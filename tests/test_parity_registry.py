@@ -131,7 +131,7 @@ def test_placeholder_families_are_empty():
     """The forward-looking families are placeholders until their items
     land. If one of them gains tags without the corresponding item
     landing, parity scripts using --include would silently start
-    checking those tags — surface that as a test failure here so the
+    checking those tags, surface that as a test failure here so the
     intent (#1, etc.) is explicit."""
     reg = pc.MetricRegistry.load()
     for name in ("costs", "sortino", "panel", "pairs", "carry", "multi-leg", "forex"):

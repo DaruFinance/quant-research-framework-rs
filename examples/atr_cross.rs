@@ -6,7 +6,7 @@
 //! Confluence filter: RSI(14) on the previous bar ≥ 50, else drop the signal.
 //!
 //! This mirrors the proprietary `ATR_x_EMA50_RSIge50` spec in the sibling
-//! run_strategies.py — but written the way an end-user would: one file,
+//! run_strategies.py, but written the way an end-user would: one file,
 //! indicators inlined, no framework metadata. The whole strategy is the
 //! `atr_cross_rsi` function; the library (src/lib.rs) handles everything
 //! else (IS/OOS split, optimiser, walk-forward, robustness, MC, exports).
@@ -23,7 +23,7 @@ use quant_research_framework_rs::{run_with_csv, Bar};
 
 /// Pandas-style adjusted EWM with `min_periods`. Matches
 /// `series.ewm(alpha=alpha, min_periods=mp).mean()` (default `adjust=True`,
-/// `ignore_na=False` — NaN entries decay the weight but don't contribute a
+/// `ignore_na=False`, NaN entries decay the weight but don't contribute a
 /// value). Used as the building block for both compute_atr and compute_rsi
 /// so the indicators here track their pandas counterparts in
 /// indicators_tradingview.py.

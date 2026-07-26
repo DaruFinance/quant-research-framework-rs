@@ -4,14 +4,14 @@
 //! default runs never touch this module and stay byte-identical.
 //!
 //! Re-implements the optimiser's per-cell evaluate math (src/lib.rs:942-1014
-//! classic; :1738-1836 regime) verbatim — same RRR probe, same re-run at the
-//! chosen RRR, same metric capture — but over the DENSE lookback range (and an
+//! classic; :1738-1836 regime) verbatim, same RRR probe, same re-run at the
+//! chosen RRR, same metric capture, but over the DENSE lookback range (and an
 //! optional SL grid) instead of the sparse coarse+fine subset, keeping every
 //! cell. Never calls `optimiser()`; never mutates its behaviour.
 //!
 //! Schema (identical to backtester/opt_surface.py):
 //!   window_idx,regime,lb,rrr,sl_idx,sl,sharpe_mode,roi,pf,sharpe,mdd,n_trades,split
-//! `split` is always "IS" (the surface is the IS objective landscape only —
+//! `split` is always "IS" (the surface is the IS objective landscape only ,
 //! no OOS bars, no look-ahead). `sl_idx` is the integer SL-grid index used as
 //! the cross-engine parity join key. `sharpe_mode` records the run's Sharpe
 //! convention so a "Sharpe" surface never silently mixes trade/bar.
@@ -171,7 +171,7 @@ pub fn emit_surface_classic(
     write_rows(SURFACE_PATH, &rows, smode, write_header);
 }
 
-/// Regime per-cell metric for one (regime r, lb, sl) triple — mirror of
+/// Regime per-cell metric for one (regime r, lb, sl) triple, mirror of
 /// optimize_regimes_sequential_rs::evaluate (src/lib.rs:1755-1836): RRR cap
 /// 5.0 / range 1..=5, in-regime trade filter on entry index, slippage-adjusted
 /// entry/exit trade prices. `best_lbs` holds the FINAL optimised LBs for the

@@ -26,7 +26,7 @@ Usage:
         --bin target/aarch64-unknown-linux-gnu/release/backtester \
         --runner qemu-aarch64-static
 
-    # check a native build (CI on an ARM runner — no runner prefix):
+    # check a native build (CI on an ARM runner: no runner prefix):
     python tools/parity_arch.py --bin target/release/backtester
 
 Exit 0 = byte-identical on every dataset, 1 = a diff, 2 = setup failure.

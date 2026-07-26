@@ -58,7 +58,7 @@ for name, repo in (("rust", REPO_RS), ("python", REPO_PY)):
         if "**this**" in line and "(Python" in line:  # the self-row of the comparison matrix
             must("MIT" not in line and "Apache" in line,
                  f"[license] {name} README comparison self-row not Apache: {line.strip()[:70]}")
-        if re.search(r'(?i)^\s*(license[: ]+)?MIT\b.*\bLICENSE\b', line):  # "MIT — see LICENSE" footer
+        if re.search(r'(?i)^\s*(license[: ]+)?MIT\b.*\bLICENSE\b', line):  # "MIT, see LICENSE" footer
             fails.append(f"[license] {name} README footer still says MIT: {line.strip()[:70]}")
 
 # ---- 4. version synced across Cargo / pyproject / __version__ / both CHANGELOG tops ----
@@ -103,4 +103,4 @@ if fails:
         print("  ✗", f)
     print(f"\n{len(fails)} inconsistency(ies).")
     sys.exit(1)
-print("CONSISTENCY GUARD: OK — license / version / speed claims consistent across all repo artifacts.")
+print("CONSISTENCY GUARD: OK, license / version / speed claims consistent across all repo artifacts.")

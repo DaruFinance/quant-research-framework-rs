@@ -157,8 +157,8 @@ def run_python(fixture: Path) -> Dict[str, float]:
 
 
 # The Rust parity driver. examples/_parity_*.rs is gitignored (auto-generated
-# scaffolding), so we write it here before building — matching parity_carry.py.
-RUST_DRIVER = r'''//! Cross-language parity harness binary (roadmap item 09 — DSR).
+# scaffolding), so we write it here before building: matching parity_carry.py.
+RUST_DRIVER = r'''//! Cross-language parity harness binary (roadmap item 09, DSR).
 //! Generated at runtime by tools/parity_dsr.py.
 //!
 //! Reads a fixture file (path = argv[1]) of pipe-delimited cases and emits

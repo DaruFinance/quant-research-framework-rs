@@ -46,7 +46,7 @@ use quant_research_framework_rs::{
 // runner. All are read-only / new opt-in surface (no behavior change to existing
 // callers). See the engine-surface table in the package and src/lib.rs hunks in
 // §(f). `compute_metrics_for` is also made pub (used INSIDE walk_forward_collect)
-// but is NOT imported here — the runner reads the pre-aggregated WfoOut.agg.
+// but is NOT imported here, the runner reads the pre-aggregated WfoOut.agg.
 
 // ---- signal library: ONLY the cross-engine-identical signals --------------
 fn shifted(sig: Vec<i8>) -> Vec<i8> {
@@ -87,7 +87,7 @@ fn signal_macd_zero(b: &[Bar], lb: usize) -> Vec<i8> {
 fn sig_for(id: &str) -> Option<RawSignalsFn> {
     match id {
         // engine_ema uses the engine's OWN default signal fn (the parity-
-        // validated path), NOT a hand mirror — so the cross-engine assert and
+        // validated path), NOT a hand mirror, so the cross-engine assert and
         // the golden exercise the harness-proven signal.
         "engine_ema" => Some(default_ema_signal as RawSignalsFn),
         "ema_cross"  => Some(signal_ema_cross as RawSignalsFn),

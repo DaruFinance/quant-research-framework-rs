@@ -1,4 +1,4 @@
-//! Shared TradingView/pandas-style indicators (roadmap item 5 — indicator
+//! Shared TradingView/pandas-style indicators (roadmap item 5, indicator
 //! parity). Single source of truth for the example strategies so they stop
 //! re-deriving indicators inline and drifting from the Python reference.
 //!
@@ -8,7 +8,7 @@
 //! dedicated `tools/parity_indicators.py` harness (1e-3 gate on a
 //! real-shaped OHLC fixture that forces the RSI zero, Stochastic inf,
 //! Stochastic NaN-window, and indicator-of-indicator branches), NOT the
-//! stdout-metric parity surface — none of these are on the default
+//! stdout-metric parity surface, none of these are on the default
 //! EMA-cross parity path.
 //!
 //! Gated behind the `indicators` Cargo feature so it never touches the
@@ -18,7 +18,7 @@
 //! Provenance: `ewm_adjusted`, `compute_sma`, `ema`, `compute_atr` are lifted
 //! (arithmetic identical; re-signatured from `&[Bar]` to `&[f64]` slice args)
 //! from the already-correct `examples/atr_cross.rs`. `compute_rsi` is lifted
-//! the same way but DROPS the `avg_loss==0 -> 100` guard that file carried —
+//! the same way but DROPS the `avg_loss==0 -> 100` guard that file carried ,
 //! pandas has no such guard, so the guard diverged on flat data (pandas:
 //! 0/0 -> NaN). `compute_ema`, `compute_macd`, `compute_stoch` are added here
 //! to round out the shared surface against `backtester/indicators.py`.
@@ -102,7 +102,7 @@ pub fn ema(series: &[f64], span: usize) -> Vec<f64> {
 /// EMA on a CLEAN (NaN-free) close series. Matches
 /// `data['close'].ewm(span=length, adjust=False).mean()` and is byte-identical
 /// to `crate::compute_ema` (`src/lib.rs:388`, same `out[0]=close[0]` seed).
-/// PRECONDITION: `close` has no leading NaN — a leading NaN would poison the
+/// PRECONDITION: `close` has no leading NaN, a leading NaN would poison the
 /// whole output (debug_assert below); for warmup'd inputs use `ema` instead.
 pub fn compute_ema(close: &[f64], span: usize) -> Vec<f64> {
     debug_assert!(
@@ -184,10 +184,10 @@ pub fn compute_atr_bars(bars: &[Bar], length: usize) -> Vec<f64> {
 /// flat/saturated edge cases:
 ///   delta[0] = NaN => gain[0] = loss[0] = 0 (NaN>0 and NaN<0 are both False);
 ///   NaN for indices 0..length-1 (warmup);
-///   NO zero-guard — `rs = avg_gain/avg_loss` is computed directly, so:
+///   NO zero-guard, `rs = avg_gain/avg_loss` is computed directly, so:
 ///     avg_gain==0 && avg_loss==0 (flat)        => rs = 0/0 = NaN  => RSI = NaN
 ///     avg_gain>0  && avg_loss==0 (monotone-up) => rs = x/0 = inf  => RSI = 100
-///   These arise from IEEE-754 division identically on both sides — verified
+///   These arise from IEEE-754 division identically on both sides, verified
 ///   against pandas. (The old `atr_cross.rs` port hard-coded
 ///   `if avg_loss==0 {100}`, which returns 100 on the FLAT case where pandas
 ///   returns NaN; that guard is intentionally REMOVED here.)

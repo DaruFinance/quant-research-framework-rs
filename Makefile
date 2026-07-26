@@ -1,12 +1,12 @@
 # Convenience targets for the Rust port.
 #
-#   make repro   — the <5-minute reproduction: build, cross-language parity
+#   make repro  : the <5-minute reproduction: build, cross-language parity
 #                  suite, and the no-look-ahead leak guard. This is what the
 #                  README and CI run.
-#   make parity  — just the three published parity surfaces
-#   make leak    — just the look-ahead leak demo
-#   make bench   — the frozen robustness benchmark, golden drift-guarded
-#   make test    — cargo test (behavioural + invariant)
+#   make parity : just the three published parity surfaces
+#   make leak   : just the look-ahead leak demo
+#   make bench  : the frozen robustness benchmark, golden drift-guarded
+#   make test   : cargo test (behavioural + invariant)
 #
 # The parity/leak targets drive BOTH engines, so they need the Python
 # reference checkout. It defaults to a sibling directory; override with:
@@ -38,5 +38,5 @@ test: build
 
 repro: parity leak
 	@echo
-	@echo "repro OK — both engines agree within 1e-3 on every parity surface,"
+	@echo "repro OK, both engines agree within 1e-3 on every parity surface,"
 	@echo "and the no-look-ahead guard caught the planted forward-peek bug."

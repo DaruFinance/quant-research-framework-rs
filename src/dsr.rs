@@ -1,4 +1,4 @@
-//! Deflated Sharpe Ratio (Bailey & López de Prado, 2014) — Rust mirror.
+//! Deflated Sharpe Ratio (Bailey & López de Prado, 2014), Rust mirror.
 //!
 //! 1:1 port of `backtester/dsr.py`. Selection-bias correction for an
 //! in-sample maximised Sharpe ratio: when a strategy parameter is chosen
@@ -19,7 +19,7 @@
 //! where `g_4` is the *raw* fourth standardised moment (= 3 for a Normal,
 //! NOT excess kurtosis); see the comment block in `deflated_sharpe_ratio`.
 //!
-//! Like the Python module this is a *post-processing* utility — it does
+//! Like the Python module this is a *post-processing* utility, it does
 //! not run inside the engine and does not affect the engine's stdout
 //! metric block. The cross-language guarantee for this module is the
 //! dedicated `tools/parity_dsr.py` scalar harness, NOT the stdout-metric
@@ -55,7 +55,7 @@ fn sample_var_ddof1(xs: &[f64]) -> f64 {
     ss / (n - 1.0)
 }
 
-/// `E[max SR_n]` under the null that the true SR is zero — the `SR_0`
+/// `E[max SR_n]` under the null that the true SR is zero, the `SR_0`
 /// quantity of Bailey & López de Prado 2014 §3.
 ///
 /// Mirrors `expected_max_sharpe_under_null`: non-finite trials are

@@ -4,7 +4,7 @@
 Runs the Rust binary and the Python backtester on the same OHLC CSV
 across several dataset sizes, reports min wall-clock and peak RSS.
 Default config (USE_WFO=true, OPTIMIZE_RRR=true, USE_MONTE_CARLO=true,
-no regime/forex/session) on both sides — same code path either engine
+no regime/forex/session) on both sides, same code path either engine
 hits when you `cargo run --release` / `python backtester.py`.
 
 Usage:

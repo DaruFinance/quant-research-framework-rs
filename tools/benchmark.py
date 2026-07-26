@@ -330,7 +330,7 @@ def run_cells(m):
                 "net_roi": agg_net["roi"], "net_sharpe": agg_net["sharpe"],
                 "net_pf": agg_net["pf"], "net_mdd": agg_net["mdd"],
                 "net_oos_disp": disp_net,
-                # GROSS (frictionless) block — labeled, never the headline
+                # GROSS (frictionless) block: labeled, never the headline
                 "gross_roi": agg_g["roi"], "gross_sharpe": agg_g["sharpe"],
                 "gross_pf": agg_g["pf"], "gross_mdd": agg_g["mdd"],
                 # filled after the dataset loop (need cross-strategy trials)
@@ -345,7 +345,7 @@ def run_cells(m):
 def _fill_dsr(rows, sharpe_by_dataset, rets_by_cell):
     """DSR per cell off the NET WFO OOS stream. trial_sharpes = the
     distinct-strategy NET OOS Sharpes on that dataset (trials = STRATEGIES, not
-    windows — effective-trials discipline, constraint #6). returns = the cell's
+    windows, effective-trials discipline, constraint #6). returns = the cell's
     concatenated WFO OOS per-trade stream (OOS-only -> no look-ahead).
     Degrades to None if backtester.dsr is absent or inputs are degenerate.
     """
@@ -431,7 +431,7 @@ def render_markdown(rows, pbo_by_ds, spec_version) -> str:
     n_strats = len({r["strategy"] for r in rows})
     n_dsets  = len({r["dataset"] for r in rows})
     lines = [
-        f"# Robustness Benchmark — leaderboard (spec {spec_version})",
+        f"# Robustness Benchmark, leaderboard (spec {spec_version})",
         "",
         "> Frozen, deterministic, cite-able. Re-running `python tools/benchmark.py`",
         "> reproduces every number byte-for-byte (pinned image). Each cell is ONE",
@@ -442,7 +442,7 @@ def render_markdown(rows, pbo_by_ds, spec_version) -> str:
         "",
         f"**Corpus breadth:** {n_strats} strategies x {n_dsets} datasets = "
         f"{len(rows)} cells. A strategy evaluated over K walk-forward windows is "
-        "STILL ONE strategy, not K — windows are in-sample geometry, never "
+        "STILL ONE strategy, not K, windows are in-sample geometry, never "
         "multiplied into corpus size (effective-trials discipline).",
         "",
         "**WFO geometry is per-dataset, not uniform.** `win` = number of rolling "
@@ -451,7 +451,7 @@ def render_markdown(rows, pbo_by_ds, spec_version) -> str:
         "is <2 windows. See `windows`/`eff_oos_bars` in the golden CSV.",
         "",
         "**NET = realistic frictions** (crypto 0.02% fee / 0.03% slip / 0.01% "
-        "funding; FX forex-mode). **GROSS = zero-cost / FRICTIONLESS** — a "
+        "funding; FX forex-mode). **GROSS = zero-cost / FRICTIONLESS**, a "
         "labeled comparison column shown for context ONLY; it is NOT a tradeable "
         "result. All metrics are OUT-OF-SAMPLE; ROI/MDD are account-fraction "
         "(FX in R-units), MDD on the OOS-only equity. `OOS-disp` is the "
@@ -603,7 +603,7 @@ def _cross_engine(rows, rust_csv, tol) -> int:
                 bad += 1
     if compared == 0:
         print("  FAIL: zero core cells compared (header/column mismatch or empty "
-              "Rust CSV) — refusing to report a vacuous pass", file=sys.stderr)
+              "Rust CSV), refusing to report a vacuous pass", file=sys.stderr)
         return 1
     status = "OK" if bad == 0 else "FAIL"
     print(f"\nbenchmark cross-engine: {len(py)} core cells, {compared} comparisons, "

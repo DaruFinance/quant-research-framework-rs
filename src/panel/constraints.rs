@@ -65,7 +65,7 @@ fn cap_single_asset(w: &[f64], cap: f64) -> Vec<f64> {
         if over_count == 0 {
             break;
         }
-        // Strictly-under legs only — avoids oscillation when legs at
+        // Strictly-under legs only, avoids oscillation when legs at
         // cap absorb residual and re-cross.
         let mut under_sum = 0.0;
         let mut under_idx: Vec<usize> = Vec::new();

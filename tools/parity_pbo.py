@@ -9,7 +9,7 @@ pattern: a ``%.17g`` fixture is the single source of truth; the Rust
 example is generated at runtime.
 
 Cases include a NON-power-of-two S (S=14, T not divisible by S) so the
-fold-edge logic is actually exercised — without it the harness only ever
+fold-edge logic is actually exercised, without it the harness only ever
 hits the clean S in {8,16} path and a fold-edge bug ships latent
 (Lens C D6 / Lens B D1).
 
@@ -113,7 +113,7 @@ def run_python(fixture: Path) -> Dict[str, float]:
     return out
 
 
-RUST_DRIVER = r'''//! Cross-language parity harness binary (item #3 — PBO/CSCV).
+RUST_DRIVER = r'''//! Cross-language parity harness binary (item #3, PBO/CSCV).
 //! Generated at runtime by tools/parity_pbo.py.
 #![cfg(feature = "overfit")]
 

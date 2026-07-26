@@ -1,23 +1,23 @@
 // Crate-wide clippy carve-outs. Each is intentional and reviewed; collected
 // here so CI can run `clippy -- -D warnings` without spurious failures.
 //
-// * `needless_range_loop` — the WFO/regime/news-injection inner loops use
+// * `needless_range_loop`, the WFO/regime/news-injection inner loops use
 //   index arithmetic deliberately (parity with the Python numba kernels,
 //   which are also index-based). Iterator rewrites change locality and
 //   make the parity diff harder to read.
-// * `too_many_arguments` — `run_wfo_window` mirrors the Python
+// * `too_many_arguments`, `run_wfo_window` mirrors the Python
 //   `_run_wfo_window` signature 1:1; refactoring to a struct would diverge
 //   from the reference.
-// * `manual_rem_euclid` / `manual_is_multiple_of` — the manual forms are
+// * `manual_rem_euclid` / `manual_is_multiple_of`, the manual forms are
 //   identical to what the Python source does and the lints flag stylistic
 //   modernisation that would only obscure parity.
-// * `field_reassign_with_default` — the `Metrics { pf: INFINITY, .. }`
+// * `field_reassign_with_default`, the `Metrics { pf: INFINITY, .. }`
 //   builder used in `compute_metrics_for` is post-hoc on the empty branch
 //   and not worth a struct-update rewrite.
-// * `neg_cmp_op_on_partial_ord` — the regime detector explicitly uses
+// * `neg_cmp_op_on_partial_ord`, the regime detector explicitly uses
 //   `!(a > b)` semantics; NaN guards are inserted ahead of the comparison
 //   so the negation is intentional. See comment at the call site.
-// * `new_without_default` — `Config::new()` is the public constructor that
+// * `new_without_default`, `Config::new()` is the public constructor that
 //   reads the engine's compile-time constants; a `Default::default()` would
 //   look like it could be reassigned to "all zeros" and is confusing here.
 #![allow(clippy::needless_range_loop)]
@@ -45,7 +45,7 @@ use chrono::{TimeZone, Timelike};
 use chrono_tz::America::New_York;
 
 // ============================================================================
-// CONFIGURATION — mirrors backtester.py constants
+// CONFIGURATION, mirrors backtester.py constants
 // ============================================================================
 // CSV path is taken from $BT_CSV at runtime (see src/main.rs); there is
 // no compile-time constant for it.
@@ -149,13 +149,13 @@ pub mod pairs;
 #[cfg(feature = "carry")]
 pub mod carry;
 
-// Deflated Sharpe Ratio post-processing (roadmap item 09 — Rust mirror of
+// Deflated Sharpe Ratio post-processing (roadmap item 09, Rust mirror of
 // `backtester/dsr.py`). Standalone scalar utility gated behind its own
 // lightweight `dsr` feature so it does not drag in the panel/pairs stack.
 #[cfg(feature = "dsr")]
 pub mod dsr;
 
-// Shared TradingView/pandas-style indicators (roadmap item 5 — indicator
+// Shared TradingView/pandas-style indicators (roadmap item 5, indicator
 // parity). Single source of truth for the example strategies; gated behind
 // the `indicators` feature so it never touches the default build or the
 // default EMA-cross parity surface. Guarded by tools/parity_indicators.py.
@@ -270,7 +270,7 @@ pub struct Config {
     pub session_end_hour: u32,
     pub use_oos2: bool,
     /// When true, the backtest core skips the first 200 bars of each
-    /// segment (warm-up) — mirrors Python's `use_regime` flag passed to
+    /// segment (warm-up), mirrors Python's `use_regime` flag passed to
     /// `_backtest_numba_core`. Set true automatically by the
     /// `run_with_regime` / `run_with_regime_cfg` entrypoints; otherwise
     /// stays false and the warmup does not fire. Affects every backtest
@@ -450,15 +450,15 @@ pub fn compute_ema(close: &[f64], span: usize) -> Vec<f64> {
 }
 
 // ============================================================================
-// 3. RAW SIGNALS — provided by the caller. See src/main.rs for the reference
+// 3. RAW SIGNALS, provided by the caller. See src/main.rs for the reference
 // EMA-crossover implementation and examples/atr_cross.rs for an ATR variant.
 // ============================================================================
 pub type RawSignalsFn = fn(&[Bar], usize) -> Vec<i8>;
 
-/// Pluggable regime-detector contract — mirrors Python's `detect_regimes`.
+/// Pluggable regime-detector contract, mirrors Python's `detect_regimes`.
 /// Returns one label per bar drawn from `REGIME_LABELS` (encoded as a u8
 /// index into that slice). Length must match `bars`. Detectors must be free
-/// of look-ahead — only data from bars `0..i` may inform the label at bar `i`.
+/// of look-ahead, only data from bars `0..i` may inform the label at bar `i`.
 ///
 /// Plug a custom detector through `RegimeConfig::new(labels, detector)` and
 /// run via `run_with_regime` / `run_with_regime_cfg`. The engine handles
@@ -541,7 +541,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let rrr_fx = if cfg.use_forex && sl_perc > 0.0 { tp_perc / sl_perc } else { 1.0 };
     let stop_pips_fx = if cfg.use_forex { sl_perc / pip_size } else { 1.0 };
 
-    // Closure to compute exit PnL — forex uses pip-based capped R units;
+    // Closure to compute exit PnL, forex uses pip-based capped R units;
     // crypto uses dollar qty * price diff. Both deduct entry+exit fees and
     // (crypto only) any accumulated funding.
     let pnl_for = |side: i8, entry_p: f64, exit_p: f64,
@@ -605,7 +605,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let mut fee_entry = 0.0f64;
 
     for idx in 0..n {
-        // Match Python's `for idx in session_idxs:` behaviour — out-of-session
+        // Match Python's `for idx in session_idxs:` behaviour, out-of-session
         // bars are skipped entirely so neither funding, SL/TP, nor entries fire.
         if cfg.use_sessions && !in_session[idx] { continue; }
 
@@ -622,7 +622,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         // use; otherwise this is a no-op. See `Config::use_regime_seg`.
         if cfg.use_regime_seg && idx < 200 { continue; }
 
-        // Session-end handling (roadmap item 08 — match Python
+        // Session-end handling (roadmap item 08, match Python
         // `_backtest_numba_core` exactly). On the last in-session bar of the
         // NY day: force-close any open position (exit at open) and NEVER
         // open or flip. Python sets `code = 2/4` UNCONDITIONALLY when a
@@ -631,14 +631,14 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         // end_bar_flag: code = 0`, which blocks a new entry). The prior Rust
         // guards (`code != 3` / `code != 1`) let an opposite-flip entry slip
         // through, and there was no flat-entry block at all, so Rust opened
-        // positions on the closing bar that Python suppresses — inflating the
+        // positions on the closing bar that Python suppresses, inflating the
         // trade count under the forex+session combo.
         let end_bar_flag = cfg.use_sessions && session_end_bar[idx];
         if end_bar_flag {
             code = if open_pos == 1 { 2 } else if open_pos == -1 { 4 } else { 0 };
         } else if cfg.max_hold_bars > 0 && open_pos != 0 && code != 2 && code != 4 {
             // hold-period force-close (only when not a session-end
-            // bar — session-end takes precedence, matching Python's elif).
+            // bar, session-end takes precedence, matching Python's elif).
             let held = (idx as i64) - (ent_bar as i64);
             if held >= cfg.max_hold_bars as i64 {
                 code = if open_pos == 1 { 2 } else { 4 };
@@ -646,7 +646,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         }
         let price_open = bars[idx].open;
 
-        // SL/TP check — additive in forex (sl_perc/tp_perc are pre-converted
+        // SL/TP check, additive in forex (sl_perc/tp_perc are pre-converted
         // to pip-distance fractions when use_forex), multiplicative in crypto.
         // Skipped on session-end bars (Python's `not end_bar_flag`): the
         // force-close above already exits the position there.
@@ -676,7 +676,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 // For intrabar SL/TP hits in forex mode Python hard-codes
                 // pnl to -1 (SL) or +RRR (TP) in R-units rather than running
                 // the trade_res formula on the slippage-adjusted exit price.
-                // Match that exactly — otherwise Rust's formula-based exit
+                // Match that exactly, otherwise Rust's formula-based exit
                 // accumulates a small slippage-floor bias across many trades.
                 let pnl = if cfg.use_forex {
                     let r_unit = if sl_hit { -1.0 } else { rrr_fx };
@@ -793,7 +793,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         }
     }
 
-    // Force-close open trade at end of data — restored to match v1 framework
+    // Force-close open trade at end of data, restored to match v1 framework
     // and Python wrapper semantics (which both force-close on the last bar's
     // open ± slip). The earlier no-force-close behavior gave better live/batch
     // parity but broke 3-way parity with v1 Rust + Python framework on USDJPY
@@ -1029,7 +1029,7 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
                 let risk = ep * sl_for_risk / 100.0;
                 if risk == 0.0 { continue; }
                 // RRR-probe side branching. Pre-v0.2.5 the engine used
-                // `side == 'long'` (str compared to int8 — always false), so
+                // `side == 'long'` (str compared to int8, always false), so
                 // ALL trades took the short branch. Default now is the
                 // corrected `side == 1` test; cfg.legacy_side_bug = true
                 // reverts to the buggy code path for bit-equality with prior
@@ -1666,7 +1666,7 @@ pub fn walk_forward_collect(
 }
 
 /// The engine's built-in default raw-signal function (EMA(FAST_EMA_SPAN) x
-/// EMA(lb)) — the signal the parity harness validates (mirror of
+/// EMA(lb)), the signal the parity harness validates (mirror of
 /// src/main.rs::ema_crossover). Exposed read-only so the benchmark runner
 /// exercises the real default path on `engine_ema`, not a hand copy.
 pub fn default_ema_signal(bars: &[Bar], lb: usize) -> Vec<i8> {
@@ -1909,7 +1909,7 @@ fn create_regime_signals_internal(
 /// pick RRR ∈ {1..5} maximising sum-of-R), exactly mirroring Python's
 /// `optimize_regimes_sequential::_evaluate` (peak cap 5.0, range 1..=5,
 /// in-regime trade filter on the entry index). Note: the regime-path
-/// caps/ranges differ from the classic optimiser (3.0 / 1..=3) — that's
+/// caps/ranges differ from the classic optimiser (3.0 / 1..=3), that's
 /// the Python reference's own choice, faithfully preserved here.
 fn optimize_regimes_sequential_rs(
     bars: &[Bar], regimes: &[u8], n_regimes: usize, cfg: &Config,
@@ -1950,7 +1950,7 @@ fn optimize_regimes_sequential_rs(
 
             let mut peak_rs: Vec<f64> = Vec::new();
             let mut close_rs_vec: Vec<f64> = Vec::new();
-            // Forex pip-scaling for the SL_PERCENTAGE constant — Python's
+            // Forex pip-scaling for the SL_PERCENTAGE constant, Python's
             // module-level scaling pre-multiplies it by PIP_SIZE in forex mode.
             let sl_for_risk = if cfg.use_forex { SL_PERCENTAGE * cfg.pip_size } else { SL_PERCENTAGE };
             for t in &probe_trades {
@@ -1961,7 +1961,7 @@ fn optimize_regimes_sequential_rs(
                 // Python's regime optimiser uses the trade's slippage-adjusted
                 // entry / exit prices (`entry`, `exit_p` from the tuple), not
                 // raw close[idx]. Classic optimiser uses close[idx] in both
-                // engines — that's a separate code path.
+                // engines, that's a separate code path.
                 let ep = t.entry_price;
                 let xp = t.exit_price;
                 let risk = ep * sl_for_risk / 100.0;
@@ -2178,7 +2178,7 @@ fn walk_forward_regime(
             let oos_close_rb: Vec<f64> = oos_w.iter().map(|b| b.close).collect();
             let oos_ema20_rb = compute_ema(&oos_close_rb, 20);
             // Renamed from raw_is_rb (was reusing the IS-named variable for the
-            // OOS phase — confusing, behaviour unchanged).
+            // OOS phase, confusing, behaviour unchanged).
             let raw_oos_rb = create_regime_signals_internal(&oos_close_rb, &oos_ema20_rb, &lbs_rb, regimes_oos);
             let mut sig_oos_rb = parse_signals_for(&raw_oos_rb, oos_w, &cfg_rb);
             if opts.drift_on { sig_oos_rb = drift_entries(&sig_oos_rb); }

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cross-language parity harness for the shared TradingView/pandas indicators
-(roadmap item 5 — indicator parity).
+(roadmap item 5, indicator parity).
 
 Locks EVERY shared indicator Python-vs-Rust on a real-shaped OHLC fixture so
 the framework's "match on everything" brand claim is ENFORCED, not merely
@@ -241,8 +241,8 @@ def run_python(fixture: Path) -> Dict[str, float]:
 
 
 # The Rust parity driver. examples/_parity_*.rs is gitignored (auto-generated
-# scaffolding), so we write it here before building — matching parity_dsr.py.
-RUST_DRIVER = r'''//! Cross-language parity harness binary (roadmap item 5 — indicators).
+# scaffolding), so we write it here before building: matching parity_dsr.py.
+RUST_DRIVER = r'''//! Cross-language parity harness binary (roadmap item 5, indicators).
 //! Generated at runtime by tools/parity_indicators.py.
 //!
 //! Reads a fixture file (path = argv[1]): a single data line
@@ -426,7 +426,7 @@ def main() -> int:
             if a_nan and b_nan:
                 n_ok += 1
             else:
-                print(f"  DIFF {k}: py={a!r} rs={b!r} (NaN mismatch — warmup/guard)")
+                print(f"  DIFF {k}: py={a!r} rs={b!r} (NaN mismatch, warmup/guard)")
                 n_bad += 1
                 fam_bad[fam(k)] = fam_bad.get(fam(k), 0) + 1
             continue

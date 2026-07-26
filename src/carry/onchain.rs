@@ -4,7 +4,7 @@
 //! pulls hashlib for free; the Rust side would need a `sha2` crate
 //! and the metadata isn't load-bearing for parity since it's
 //! ingestion-time provenance).  Consumers that need a snapshot ID
-//! can add the dep later — the parity scripts compare values, not
+//! can add the dep later, the parity scripts compare values, not
 //! provenance hashes.
 
 #![cfg(feature = "carry")]

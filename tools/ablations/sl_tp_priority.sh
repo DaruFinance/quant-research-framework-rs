@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SL-vs-TP priority inversion ablation. The engine's intrabar tie-break
 # (when both stop-loss and take-profit are touched on the same bar) is
-# encoded at lib.rs:471 as `if hit_sl && hit_tp { hit_tp = false; }` —
+# encoded at lib.rs:471 as `if hit_sl && hit_tp { hit_tp = false; }` :
 # i.e. SL wins. This script inverts the rule (TP wins on a tie) and
 # checks whether parity_check + parity_ledger catch the change.
 

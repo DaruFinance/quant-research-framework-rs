@@ -15,7 +15,7 @@ jobs:
       - name: Skip-not-fail if CRATES_IO_TOKEN is missing
         id: check
         env:
-          # Expose secret as env var — GitHub Actions doesn't let `if:`
+          # Expose secret as env var: GitHub Actions doesn't let `if:`
           # expressions read `secrets.X` directly for security reasons.
           TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
