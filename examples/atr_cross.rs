@@ -5,8 +5,8 @@
 //!   - cross down → go short
 //! Confluence filter: RSI(14) on the previous bar ≥ 50, else drop the signal.
 //!
-//! This mirrors the proprietary `ATR_x_EMA50_RSIge50` spec in the sibling
-//! run_strategies.py, but written the way an end-user would: one file,
+//! An ATR-cross with an EMA-50 and RSI >= 50 confluence, written the way
+//! an end-user would: one file,
 //! indicators inlined, no framework metadata. The whole strategy is the
 //! `atr_cross_rsi` function; the library (src/lib.rs) handles everything
 //! else (IS/OOS split, optimiser, walk-forward, robustness, MC, exports).

@@ -92,7 +92,7 @@ Three ways, in order of effort:
 
 - **`src/lib.rs`**: Backtester engine. Pub types (`Bar`, `Trade`, `Metrics`, `Config`), indicator and metric primitives, the IS/OOS pipeline, smart-optimised look-back search with auto-RRR, candle- or trade-triggered walk-forward, robustness overlays (entry drift, fee shock, slippage shock, indicator variance), Monte Carlo diagnostics, and trade export. 1-to-1 port of `backtester.py`.
 - **`src/main.rs`**: Reference strategy binary: EMA(20) vs EMA(lb) crossover, ~40 lines. This is the default you get from `cargo run --release`.
-- **`examples/atr_cross.rs`**: Second strategy: ATR-cross with RSI≥50 confluence, matching the proprietary `ATR_x_EMA50_RSIge50` spec. Run with `cargo run --release --example atr_cross`.
+- **`examples/atr_cross.rs`**: Second strategy: ATR-cross with an EMA-50 and RSI≥50 confluence. Run with `cargo run --release --example atr_cross`.
 - **`examples/gen_synthetic.rs`**: Synthetic OHLC generator (GBM, no network). Run with `cargo run --release --example gen_synthetic`.
 - **`examples/README.md`**: Short tutorial on how to write your own strategy against the `RawSignalsFn` contract.
 - **`data/SOLUSDT_1h.csv`**: Sample OHLC dataset (SOL/USDT, 1h candles) so both binaries run out-of-the-box.

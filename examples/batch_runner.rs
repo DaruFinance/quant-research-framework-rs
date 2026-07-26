@@ -13,7 +13,7 @@
 //! machine is ~2.5 seconds.
 //!
 //! Strategies registered here use only the engine's documented public
-//! indicator surface (no proprietary signals).
+//! indicator surface.
 //!
 //! Run with:
 //!     cargo run --release --example batch_runner
