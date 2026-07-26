@@ -5,7 +5,7 @@
 [![parity](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/parity.yml/badge.svg)](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/parity.yml)
 [![docs](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml/badge.svg)](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml)
 [![crates.io](https://img.shields.io/crates/v/quant-research-framework-rs.svg)](https://crates.io/crates/quant-research-framework-rs)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19798592.svg)](https://doi.org/10.5281/zenodo.19798592)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19798591.svg)](https://doi.org/10.5281/zenodo.19798591)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 **A walk-forward backtester written twice (a Python reference and a Rust port) that proves in CI the two produce the same numbers.** Walk-forward optimization (WFO), robustness stress tests, realism controls (fees, slippage, funding, SL/TP), and strict no-look-ahead enforced at the ledger level.

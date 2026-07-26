@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-07-26
+
+### Fixed
+- **Forex pip size is resolved by the engine, not by the parity harness.** The
+  Python reference resolves `PIP_SIZE` from the dataset path: a `BT_PIP_SIZE`
+  override wins, otherwise a path containing "JPY" resolves to the two-decimal
+  pip of JPY-quoted crosses, otherwise 0.0001. The Rust port hard-coded 0.0001,
+  so any caller using `with_forex_defaults()` on a JPY pair sized every trade
+  100x wrong, rescaling the pip-distance SL/TP levels and flipping P&L signs
+  while leaving entry bars untouched. `tools/parity_forex.py` had been
+  compensating with its own inline JPY case, so the gate was testing the harness
+  rather than the engine. New `resolve_pip_size()` and
+  `Config::with_pip_size_for()` mirror the Python rule, warning included, and
+  the harness workaround is gone. `parity_forex` on USDJPY 1h passes 56/56.
+- **Identical non-finite metrics are no longer reported as divergences.** A
+  stage with zero trades reports profit factor as `inf` in both engines. The
+  relative deviation computed `inf - inf = nan`, and `nan <= tol` is false, so a
+  surface on which the engines agreed exactly was failed. Non-finite values are
+  compared for equality before the ratio is taken; a one-sided `inf` or `nan`
+  is still a real divergence and still fails.
+
+### Added
+- **`tools/ablations/fee_common_mode.sh`**, the negative control for the parity
+  oracle: the same fee bias in both ports, which the diff cannot see at any
+  tolerance because it only compares the engines against each other.
+- **`tools/ablations/rolling_materialized.sh`** and a `QRF_ROLLING` hook in
+  `compute_ema` that recomputes the EMA the materialised O(n*w) way,
+  numerically equivalent to the shipped O(n) recursion, separating a
+  constant-factor explanation of the cross-engine gap from an algorithmic one.
+  The default path is unchanged.
+- **`make sweep`** (`tools/sweep_all.sh`): every parity surface on every dataset
+  it supports, both test suites, the consistency guard, the benchmark drift
+  check and the cross-architecture goldens, with one pass/fail summary.
+
+### Changed
+- Internal planning artefacts removed from the public tree: per-item
+  verification logs, the docs TODO, absolute developer paths in the frozen
+  baseline captures, and internal tracker numbers in module headers.
+- Em dashes replaced with plain punctuation throughout.
+- The comparison table's cross-language column no longer reads "byte-parity".
+  Cross-language parity is tolerance-bounded at 1e-3; cross-architecture parity
+  is byte-identical and is now documented with its harness, golden counts and
+  CI gate.
+- Example strategies describe themselves instead of referencing private work.
+
 ## [0.6.0] - 2026-06-12
 
 ### Added
