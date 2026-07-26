@@ -4,7 +4,7 @@
 The overfit report's safety rests on a single invariant: none of its lines
 carry the `| Trades: ... ROI: ... PF: ... Shp: ... Win: ...% Exp: ...
 MaxDD:` metric body that LINE_RE matches (the leading indent does NOT
-protect them — LINE_RE starts with ^\\s*). This converts that fragile,
+protect them, LINE_RE starts with ^\\s*). This converts that fragile,
 prose-asserted invariant into an enforced gate: a future edit that adds a
 Trades: field to an overfit line is caught here, before it can perturb the
 existing parity harnesses.

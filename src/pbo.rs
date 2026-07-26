@@ -1,5 +1,5 @@
 //! Combinatorial-Symmetric Cross-Validation (CSCV) and Probability of
-//! Backtest Overfitting (PBO) — Rust mirror of `backtester/pbo.py`.
+//! Backtest Overfitting (PBO), Rust mirror of `backtester/pbo.py`.
 //!
 //! Bailey, Borwein, López de Prado & Zhu (2014), "Pseudo-Mathematics and
 //! Financial Charlatanism", Notices of the AMS 61(5):458--471.
@@ -54,7 +54,7 @@ fn sharpe(returns: &[f64]) -> f64 {
 /// Fold edges reproducing `np.linspace(0, T, S+1, dtype=int)`. Interior
 /// edges are `(k*step) as usize` with a single `step = T/S` division; the
 /// final edge is forced to exactly `T` (numpy's endpoint override). This
-/// is the corrected version — `(k*T/S) as usize` alone diverges from numpy
+/// is the corrected version, `(k*T/S) as usize` alone diverges from numpy
 /// for non-power-of-two S (Lens C D6).
 fn fold_edges(t: usize, s: usize) -> Vec<usize> {
     let step = (t as f64) / (s as f64);

@@ -1,4 +1,4 @@
-//! Panel-level strategy primitives (item #8 Rust mirror).
+//! Panel-level strategy primitives (Rust mirror).
 
 #![cfg(feature = "panel")]
 

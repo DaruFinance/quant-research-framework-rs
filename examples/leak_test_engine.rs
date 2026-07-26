@@ -6,7 +6,7 @@
 //! const `BACKTEST_CANDLES`) by setting `cfg.oos_candles = N - 10_000`
 //! at every call. This guarantees that live's optimizer-picked LB is
 //! identical to batch's (the IS slice is byte-identical), so any
-//! divergence in the OOS trade list is a real causality leak — not a
+//! divergence in the OOS trade list is a real causality leak, not a
 //! window-sliding artifact.
 //!
 //! Usage:
@@ -59,7 +59,7 @@ fn signal_sma_cross(bars: &[Bar], lb: usize) -> Vec<i8> {
     // to push by one bar; we do NOT shift here because the engine's
     // `parse_signals_for` + `drift_entries` already handle entry-bar
     // alignment. Whichever convention is used, it must be IDENTICAL in
-    // batch and live calls — they call this same function via the same
+    // batch and live calls, they call this same function via the same
     // binary, so consistency is guaranteed by construction.
     sig
 }
@@ -107,7 +107,7 @@ fn main() {
 
     // Pin IS to first 10_000 bars: cfg.oos_candles = N - 10_000.
     // Engine const BACKTEST_CANDLES = 10_000 (not configurable per-call).
-    // If N <= 10_000, IS would be empty and the engine emits no trades —
+    // If N <= 10_000, IS would be empty and the engine emits no trades ,
     // write a header-only file and exit cleanly so the live driver can
     // proceed.
     const IS_SIZE: usize = 10_000;

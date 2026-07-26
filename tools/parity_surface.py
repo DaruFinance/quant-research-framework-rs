@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Cross-language parity harness for the IS parameter-robustness isosurface
-(item #1). Proves Python and Rust dense IS objective grids agree cell-by-cell
+"""Cross-language parity harness for the IS parameter-robustness isosurface.
+
+Proves Python and Rust dense IS objective grids agree cell-by-cell
 within rel-tol 1e-3 + abs floor on seeded fixtures.
 
 Mirrors tools/parity_dsr.py: write fixture -> Python emit -> generate
@@ -14,8 +15,8 @@ CSV/f64 with zero new crates, unlike _parity_dsr (which needs statrs via `dsr`).
 Forces CSV on both sides (no Rust parquet reader). Single-threaded.
 
 Fixtures:
-  * uniform crypto (default)        — base case
-  * irregular-spacing crypto (--irregular) — exercises bar-Sharpe ppy parity
+  * uniform crypto (default)       : base case
+  * irregular-spacing crypto (--irregular): exercises bar-Sharpe ppy parity
 The Sharpe convention is pinned on BOTH engines from --sharpe {trade,bar}.
 
 Usage:
@@ -85,7 +86,7 @@ def run_python(fixture: Path, workdir: Path, sl3: bool, sharpe: str) -> Dict[Tup
     return _read_grid(workdir / "opt_surface.csv")
 
 
-RUST_DRIVER = r'''//! Cross-language parity harness binary (item #1 — IS surface).
+RUST_DRIVER = r'''//! Cross-language parity harness binary (IS surface).
 //! Generated at runtime by tools/parity_surface.py. Emits the dense classic IS
 //! objective grid for the whole fixture as window_idx "0".
 use quant_research_framework_rs::{load_ohlc, Bar, Config, compute_ema};

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Forex-mode parity check — runs both engines with FOREX_MODE=True on
+"""Forex-mode parity check, runs both engines with FOREX_MODE=True on
 the bundled EURUSD 1h dataset. Validates pip-aware sizing, funding-skip
 semantics, and R-unit PnL math under the standard tag set.
 
@@ -11,7 +11,7 @@ Usage
     python tools/parity_forex.py --tol 0.001
     python tools/parity_forex.py --include costs sortino
 
-Item #15 refactor: shares regex / subprocess / comparison logic via
+refactor: shares regex / subprocess / comparison logic via
 ``parity_common.py`` and ``parity_registry.json``. Behaviour unchanged
 when invoked without ``--include``.
 """
@@ -44,12 +44,10 @@ fn main() {
     let csv = std::env::args().nth(1).unwrap_or_else(|| "data/EURUSD_1h.csv".into());
     let bars = load_ohlc(&csv);
     println!("Loaded {} bars from {}", bars.len(), csv);
-    let mut cfg = Config::new().with_forex_defaults();
-    // JPY pairs use pip_size=0.01; everything else stays at the 0.0001 default.
-    // Mirrors `bt.PIP_SIZE = 0.01 if "JPY" in bt.CSV_FILE else 0.0001` on the
-    // Python side. Without this, JPY datasets parity-fail by ~50% on roi/sharpe
-    // because the Rust side runs with EUR-scale stops on a JPY-scale series.
-    if csv.to_uppercase().contains("JPY") { cfg.pip_size = 0.01; }
+    // Pip size comes from the engine, which mirrors the Python reference's
+    // import-time resolution. The harness deliberately does not special-case
+    // JPY itself: doing so would test the harness rather than the engine.
+    let cfg = Config::new().with_forex_defaults().with_pip_size_for(&csv);
     run_cfg(&bars, "EMA-crossover", ema_strategy, cfg);
 }
 """

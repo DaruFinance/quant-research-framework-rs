@@ -1,4 +1,4 @@
-//! Volume-confirmed EMA cross (item #2). Take the EMA(fast)/EMA(slow) cross
+//! Volume-confirmed EMA cross. Take the EMA(fast)/EMA(slow) cross
 //! only when current volume exceeds k * volume_sma(N).
 //!
 //! No look-ahead: raw[i] uses EMAs and the volume confirmation evaluated at

@@ -1,10 +1,10 @@
 # ============================================================================
-# FROZEN ROBUSTNESS BENCHMARK MANIFEST — DaruFinance quant-research-framework
+# FROZEN ROBUSTNESS BENCHMARK MANIFEST: DaruFinance quant-research-framework
 # ----------------------------------------------------------------------------
 # Cite-able specification. FROZEN: changing any strategy, dataset, or pinned
 # knob below breaks byte-reproducibility and invalidates every published
 # number. Treat edits as a NEW benchmark version: bump `spec_version`, re-emit
-# a NEW versioned golden (benchmark_results.v<spec_version>.csv — old goldens
+# a NEW versioned golden (benchmark_results.v<spec_version>.csv: old goldens
 # stay addressable), and record it in docs/benchmark.md "Maintenance commitment".
 #
 # HARVEST PATH (v2): each cell is ONE strategy x ONE dataset run through the
@@ -66,7 +66,7 @@ wfo_trigger_mode = "candles"     #                             RUST-CONST src/li
 # ----------------------------------------------------------------------------
 # DUAL COST REGIMES (constraint #3 + Daniel decision C). Every cell is run
 # TWICE: NET (realistic-but-not-strict engine defaults) and GROSS (zero-cost,
-# frictionless). The GROSS block is an EXPLICITLY LABELED comparison column —
+# frictionless). The GROSS block is an EXPLICITLY LABELED comparison column :
 # it is NEVER the realistic result. Both are reproducible / golden-guarded.
 #
 # NET crypto values are the engine-compiled defaults so NET is consistent with
@@ -75,7 +75,7 @@ wfo_trigger_mode = "candles"     #                             RUST-CONST src/li
 # a Config field (__init__.py:232); Rust funding is a RUST-CONST today and the
 # GROSS run requires the opt-in `Config.funding_fee` field (default=const,
 # assert-guarded). That field is NON-OPTIONAL for cross-engine-checking GROSS
-# crypto — see docs/benchmark.md risks.
+# crypto: see docs/benchmark.md risks.
 # ----------------------------------------------------------------------------
 [frictions.net.crypto]
 fee_pct      = 0.02              # FEE_PCT_DEFAULT       Config field ; src/lib.rs:55

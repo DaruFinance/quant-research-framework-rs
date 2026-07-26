@@ -1,4 +1,4 @@
-"""Tests for the parity-metric registry (item #15).
+"""Tests for the parity-metric registry.
 
 The registry under ``tools/parity_registry.json`` is the single source
 of truth for which metric tags and fields the parity scripts diff per
@@ -131,8 +131,8 @@ def test_placeholder_families_are_empty():
     """The forward-looking families are placeholders until their items
     land. If one of them gains tags without the corresponding item
     landing, parity scripts using --include would silently start
-    checking those tags — surface that as a test failure here so the
-    intent (item #44, #1, etc.) is explicit."""
+    checking those tags, surface that as a test failure here so the
+    intent (#1, etc.) is explicit."""
     reg = pc.MetricRegistry.load()
     for name in ("costs", "sortino", "panel", "pairs", "carry", "multi-leg", "forex"):
         fam = reg.family(name)

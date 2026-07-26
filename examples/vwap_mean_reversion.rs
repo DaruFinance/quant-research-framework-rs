@@ -1,4 +1,4 @@
-//! VWAP mean-reversion (item #2). Fade deviations from session-anchored VWAP.
+//! VWAP mean-reversion. Fade deviations from session-anchored VWAP.
 //!
 //! No look-ahead: raw[i] uses close[i-1] and vwap[i-1] only. Session resets
 //! come from the NY-tz wall clock (ny_session_resets), the same boundary the

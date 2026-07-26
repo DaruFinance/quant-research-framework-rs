@@ -3,7 +3,7 @@
 //! Pattern: train your model offline, attach its score for each bar to a
 //! sidecar slice (here: a deterministic stand-in derived from price), and
 //! threshold it inside the strategy function. The library never sees your
-//! model — it only consumes the resulting `Vec<i8>` of long/short intents.
+//! model, it only consumes the resulting `Vec<i8>` of long/short intents.
 //!
 //! This is the recommended path for any model you can train ahead of time
 //! (sklearn, lightgbm, torch via ONNX export, even an R model exported as
@@ -11,7 +11,7 @@
 //! inference inside the inner loop.
 //!
 //! Look-ahead discipline: the score for bar `i` must only use information
-//! available at bar `i-1` or earlier — exactly the same rule as for any
+//! available at bar `i-1` or earlier, exactly the same rule as for any
 //! other strategy. The example below uses `.windows(...)` on the closes up
 //! to (but not including) bar `i` to keep that explicit.
 //!
@@ -24,7 +24,7 @@ use quant_research_framework_rs::{run_with_csv, Bar};
 const LONG_THRESH: f64 = 0.55;
 const SHORT_THRESH: f64 = 0.45;
 
-/// Stand-in "model score" — replace with your loaded predictions. Inputs
+/// Stand-in "model score", replace with your loaded predictions. Inputs
 /// must already respect look-ahead (the helper only reads bars `0..i`).
 fn precomputed_scores(bars: &[Bar]) -> Vec<f64> {
     let n = bars.len();

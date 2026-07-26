@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cross-language parity harness for the volume indicators + one volume
-strategy (item #2, v0.6.0). Mirrors tools/parity_dsr.py.
+strategy (v0.6.0). Mirrors tools/parity_dsr.py.
 
 Compares Python `backtester.volume_indicators` against the Rust
 `quant_research_framework_rs::volume` mirror, one full volume strategy
@@ -118,7 +118,7 @@ def _py_vol_ema_cross(df: pd.DataFrame) -> np.ndarray:
 
 
 # Rust parity driver. examples/_parity_volume.rs is gitignored (auto-generated).
-RUST_DRIVER = r'''//! Volume parity driver (item #2). Generated at runtime by
+RUST_DRIVER = r'''//! Volume parity driver. Generated at runtime by
 //! tools/parity_volume.py. argv[1] = OHLCV csv, argv[2] = injected reset-flags
 //! file (one 0/1 per bar). Emits `key=value` lines, floats as {:.17e}.
 
@@ -250,7 +250,7 @@ def main() -> int:
     if not FIXTURE.exists():
         # The fixture is deterministic and untracked; auto-generate it so this
         # harness is self-contained on a fresh checkout / in CI / under make repro.
-        sys.stderr.write(f"fixture missing: {FIXTURE} — generating via "
+        sys.stderr.write(f"fixture missing: {FIXTURE}, generating via "
                          f"tools/make_volume_fixture.py ...\n")
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import make_volume_fixture

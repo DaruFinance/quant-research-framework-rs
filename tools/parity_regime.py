@@ -10,7 +10,7 @@ Usage
     python tools/parity_regime.py --tol 0.001    # strict 0.1%
     python tools/parity_regime.py --include costs sortino  # forward families
 
-Item #15 refactor: shares regex / subprocess / comparison logic via
+refactor: shares regex / subprocess / comparison logic via
 ``parity_common.py`` and ``parity_registry.json``. Behaviour unchanged
 when invoked without ``--include``: the gate covers ``base`` + the
 regime-extra WFO windows.

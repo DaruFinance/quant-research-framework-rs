@@ -5,6 +5,10 @@
 # lock makes `cargo build` / CI / the benchmark byte-reproducible. (Library
 # consumers ignore our lock, so committing it costs them nothing.)
 
+# Python bytecode from the tools/ harnesses
+__pycache__/
+*.py[cod]
+
 # Editor / OS
 .vscode/
 .idea/
@@ -24,6 +28,9 @@ data/SYNTHETIC.csv
 
 # Auto-generated parity-harness scaffolding (written by tools/parity_*.py)
 examples/_parity_*.rs
+
+# Full-sweep transcripts (written by tools/sweep_all.sh)
+.sweep/
 
 # Bench harness output (written by tools/bench.py --out)
 tools/bench_results.md

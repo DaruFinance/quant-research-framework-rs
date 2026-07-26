@@ -1,4 +1,4 @@
-//! Walk-forward orchestrator dispatch (item #5, Rust mirror).
+//! Walk-forward orchestrator dispatch (Rust mirror).
 //!
 //! The Python framework's dispatch uses a 5-bool ``RouteKey`` dict; the
 //! Rust port mirrors the same concept via an `OrchestratorMode` enum
@@ -50,7 +50,7 @@ pub enum OrchestratorMode {
 pub fn dispatch(key: RouteKey) -> Result<OrchestratorMode, RouteError> {
     if key.multi_asset {
         return Err(RouteError::NotYetSupported(
-            "multi_asset routes ship in Phase 2 (item #5 iter, item #1)"
+            "multi_asset routes ship with the panel plugin"
                 .to_string(),
         ));
     }
@@ -94,10 +94,10 @@ mod tests {
     }
 
     #[test]
-    fn multi_asset_flag_errors_pending_phase2() {
+    fn multi_asset_flag_errors_until_the_panel_plugin_lands() {
         let key = RouteKey { multi_asset: true, ..Default::default() };
         let err = dispatch(key).unwrap_err();
-        assert!(format!("{}", err).contains("Phase 2"));
+        assert!(format!("{}", err).contains("panel plugin"));
     }
 
     #[test]

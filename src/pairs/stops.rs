@@ -1,4 +1,4 @@
-//! Spread-aware stop-loss families (item #12, Rust mirror).
+//! Spread-aware stop-loss families (Rust mirror).
 
 #![cfg(feature = "pairs")]
 

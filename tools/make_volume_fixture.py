@@ -2,7 +2,7 @@
 """Generate data/volume_fixture.csv (6-col OHLCV) for the volume strategy
 family and tools/parity_volume.py. Deterministic random walk on a 1h grid,
 strictly increasing timestamps (load_ohlc's sort is then a no-op, so the
-Python reset-flag order matches the Rust file order — see parity_volume.py
+Python reset-flag order matches the Rust file order, see parity_volume.py
 monotonicity assert). Volume is positive lognormal with periodic spikes so
 relative-volume / z-score / MFI have signal. EVERY volume cell is populated
 (no empty cells), keeping the lenient empty->0.0 parse off the parity surface.

@@ -4,7 +4,7 @@
 # families: the same Rust source compiled for aarch64 must reproduce every
 # printed metric digit BYTE-FOR-BYTE versus the committed x86_64 goldens
 # in data/golden/. This is a stronger assertion than the cross-language
-# parity.yml (Python vs Rust at 1e-3) — here it is exact string equality of
+# parity.yml (Python vs Rust at 1e-3): here it is exact string equality of
 # the metric block across architectures.
 #
 # Two jobs:
@@ -41,7 +41,7 @@ jobs:
         run: |
           python tools/parity_arch.py --emit-golden --bin target/release/backtester
           git diff --exit-code data/golden/ \
-            || (echo "::error::x86_64 goldens drifted — a metric-affecting change must update data/golden/ deliberately" && exit 1)
+            || (echo "::error::x86_64 goldens drifted, a metric-affecting change must update data/golden/ deliberately" && exit 1)
 
   qemu-aarch64:
     runs-on: ubuntu-latest

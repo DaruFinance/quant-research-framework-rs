@@ -5,7 +5,7 @@ Runs every panel primitive (equal_weights, ERC, neutralizations,
 basket positions, constraints, Sortino/turnover, multi-term score)
 in Python and in Rust on the same fixture (DS-PANEL-3 at t=500), and
 diffs the outputs at a tolerance appropriate for each (closed-form
-math at 1e-9, iterative ERC at 1e-3 relative — different solvers
+math at 1e-9, iterative ERC at 1e-3 relative, different solvers
 across the language boundary).
 
 Usage:

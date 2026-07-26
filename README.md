@@ -1,20 +1,20 @@
-# Quant Research Backtester — Rust port
+# Quant Research Backtester: Rust port
 
 > Rust port of the backtester Daniel Gatto uses for the studies on [daru.finance/research/quant-framework](https://daru.finance/research/quant-framework).
 
 [![parity](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/parity.yml/badge.svg)](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/parity.yml)
 [![docs](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml/badge.svg)](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml)
 [![crates.io](https://img.shields.io/crates/v/quant-research-framework-rs.svg)](https://crates.io/crates/quant-research-framework-rs)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19798592.svg)](https://doi.org/10.5281/zenodo.19798592)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19798591.svg)](https://doi.org/10.5281/zenodo.19798591)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-**A walk-forward backtester written twice — a Python reference and a Rust port — that proves in CI the two produce the same numbers.** Walk-forward optimization (WFO), robustness stress tests, realism controls (fees, slippage, funding, SL/TP), and strict no-look-ahead enforced at the ledger level.
+**A walk-forward backtester written twice (a Python reference and a Rust port) that proves in CI the two produce the same numbers.** Walk-forward optimization (WFO), robustness stress tests, realism controls (fees, slippage, funding, SL/TP), and strict no-look-ahead enforced at the ledger level.
 
 It answers one question: *does an apparent edge survive out-of-sample evaluation under realistic frictions, or is it just fitting the past?* The Rust port answers it **23.8–57× faster** and in **33–65× less memory** than the Python reference ([benchmarks](#performance)), and a parity harness checks both engines agree within `1e-3` on every push.
 
 ## Why two engines
 
-Most backtesters ask you to trust one implementation. This one is written twice and diffed: the Python reference is the readable spec, the Rust port is the fast spec, and a parity oracle runs both on identical input and asserts the metrics match. If the port drifts from the reference, CI goes red — the correctness claim is *enforced, not asserted*.
+Most backtesters ask you to trust one implementation. This one is written twice and diffed: the Python reference is the readable spec, the Rust port is the fast spec, and a parity oracle runs both on identical input and asserts the metrics match. If the port drifts from the reference, CI goes red: the correctness claim is *enforced, not asserted*.
 
 ```
                 ┌────────────────────────────────────────────────┐
@@ -62,9 +62,9 @@ Run any piece on its own with `make parity`, `make leak`, or `make bench`. The l
 
 **It isn't:**
 - **Not alpha.** The bundled strategies (EMA-cross, ATR-cross, …) are plumbing to exercise the engine, not trade signals. There is no edge here to deploy.
-- **Not live trading.** No broker connectivity, order management, or execution — it evaluates strategies on historical bars.
+- **Not live trading.** No broker connectivity, order management, or execution: it evaluates strategies on historical bars.
 - **Tested on crypto, FX, and synthetic GBM only.** SOL/BTC/DOGE-USDT, EUR/USD, USD/JPY, and a GBM generator. Equities, futures, and options are untried.
-- **Parity-gated on the core surfaces only.** The stationary-bootstrap module (`backtester/bootstrap.py`) and the `examples/ml_*` strategies are Python-only — no Rust counterpart, no cross-engine check. See [open parity gaps](#what-is-not-yet-jointly-validated).
+- **Parity-gated on the core surfaces only.** The stationary-bootstrap module (`backtester/bootstrap.py`) and the `examples/ml_*` strategies are Python-only: no Rust counterpart, no cross-engine check. See [open parity gaps](#what-is-not-yet-jointly-validated).
 
 ## Quick Start
 
@@ -80,9 +80,9 @@ The CSV must have a header and the columns `time,open,high,low,close` where `tim
 
 Three ways, in order of effort:
 
-1. **Use the bundled sample** — `data/SOLUSDT_1h.csv` ships with the repo (SOL/USDT, 1h, 48 094 bars).
-2. **Generate synthetic data** — `cargo run --release --example gen_synthetic` writes `data/SYNTHETIC.csv` (GBM-based OHLC, no network required). Handy for smoke-tests or reproducible demos.
-3. **Download real data via the Python sibling** — the Rust binary reads the exact CSV format that the sibling project's [`binance_ohlc_downloader.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/binance_ohlc_downloader.py) emits, so you can point it straight at a file you fetched there:
+1. **Use the bundled sample**: `data/SOLUSDT_1h.csv` ships with the repo (SOL/USDT, 1h, 48 094 bars).
+2. **Generate synthetic data**: `cargo run --release --example gen_synthetic` writes `data/SYNTHETIC.csv` (GBM-based OHLC, no network required). Handy for smoke-tests or reproducible demos.
+3. **Download real data via the Python sibling**: the Rust binary reads the exact CSV format that the sibling project's [`binance_ohlc_downloader.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/binance_ohlc_downloader.py) emits, so you can point it straight at a file you fetched there:
    ```bash
    python binance_ohlc_downloader.py --symbol DOGEUSDT --interval 30m --market spot --source api --since 2017-11-01 --until now --out /tmp/DOGEUSDT_30m.csv
    cargo run --release -- /tmp/DOGEUSDT_30m.csv
@@ -90,12 +90,12 @@ Three ways, in order of effort:
 
 ## What's Included
 
-- **`src/lib.rs`** — Backtester engine. Pub types (`Bar`, `Trade`, `Metrics`, `Config`), indicator and metric primitives, the IS/OOS pipeline, smart-optimised look-back search with auto-RRR, candle- or trade-triggered walk-forward, robustness overlays (entry drift, fee shock, slippage shock, indicator variance), Monte Carlo diagnostics, and trade export. 1-to-1 port of `backtester.py`.
-- **`src/main.rs`** — Reference strategy binary: EMA(20) vs EMA(lb) crossover, ~40 lines. This is the default you get from `cargo run --release`.
-- **`examples/atr_cross.rs`** — Second strategy: ATR-cross with RSI≥50 confluence, matching the proprietary `ATR_x_EMA50_RSIge50` spec. Run with `cargo run --release --example atr_cross`.
-- **`examples/gen_synthetic.rs`** — Synthetic OHLC generator (GBM, no network). Run with `cargo run --release --example gen_synthetic`.
-- **`examples/README.md`** — Short tutorial on how to write your own strategy against the `RawSignalsFn` contract.
-- **`data/SOLUSDT_1h.csv`** — Sample OHLC dataset (SOL/USDT, 1h candles) so both binaries run out-of-the-box.
+- **`src/lib.rs`**: Backtester engine. Pub types (`Bar`, `Trade`, `Metrics`, `Config`), indicator and metric primitives, the IS/OOS pipeline, smart-optimised look-back search with auto-RRR, candle- or trade-triggered walk-forward, robustness overlays (entry drift, fee shock, slippage shock, indicator variance), Monte Carlo diagnostics, and trade export. 1-to-1 port of `backtester.py`.
+- **`src/main.rs`**: Reference strategy binary: EMA(20) vs EMA(lb) crossover, ~40 lines. This is the default you get from `cargo run --release`.
+- **`examples/atr_cross.rs`**: Second strategy: ATR-cross with an EMA-50 and RSI≥50 confluence. Run with `cargo run --release --example atr_cross`.
+- **`examples/gen_synthetic.rs`**: Synthetic OHLC generator (GBM, no network). Run with `cargo run --release --example gen_synthetic`.
+- **`examples/README.md`**: Short tutorial on how to write your own strategy against the `RawSignalsFn` contract.
+- **`data/SOLUSDT_1h.csv`**: Sample OHLC dataset (SOL/USDT, 1h candles) so both binaries run out-of-the-box.
 
 ## Adding your own strategy
 
@@ -127,7 +127,7 @@ See [`examples/README.md`](examples/README.md) for the contract in detail and `e
 ### Realism Controls
 - **Fees** and **slippage** applied on entry and exit
 - **Funding fee** at 00:00, 08:00, 16:00 UTC (crypto). Gated by the new
-  `USE_FOREX` toggle in v0.2.0 — set it to `true` and funding is
+  `USE_FOREX` toggle in v0.2.0; set it to `true` and funding is
   skipped, matching FX broker semantics.
 - **Stop-loss / take-profit** with intrabar high/low checks (no look-ahead)
 - **Session mode** (`USE_SESSIONS`): restricts entries to a UTC window
@@ -152,21 +152,21 @@ See [`examples/README.md`](examples/README.md) for the contract in detail and `e
 - The signal contract `RawSignalsFn = fn(&[Bar], usize) -> Vec<i8>` is
   unchanged, so any model that produces per-bar long/short scores plugs
   in. Two patterns shipped:
-  - [`examples/ml_precomputed.rs`](examples/ml_precomputed.rs) — train
+  - [`examples/ml_precomputed.rs`](examples/ml_precomputed.rs): train
     offline, plug a per-bar score slice into the strategy fn, threshold
     it. Fastest path; framework-agnostic.
-  - [`examples/ml_callback.rs`](examples/ml_callback.rs) — keep a model
+  - [`examples/ml_callback.rs`](examples/ml_callback.rs): keep a model
     in memory and call `predict(features)` per bar (online / stateful).
     Hand-coded linear model so the example has zero extra dependencies;
     swap for `linfa`, `smartcore`, `ort`, `tch`, or a Python FFI bridge.
 
 ### Robustness / Stress Tests
 Configurable scenarios run against the optimised baseline and every WFO window:
-- `ENTRY_DRIFT` — shift entries one bar forward
-- `FEE_SHOCK` — 2× fees
-- `SLIPPAGE_SHOCK` — 3× slippage
-- `INDICATOR_VARIANCE` — ±1 perturbation on the selected look-back
-- `NEWS_CANDLES_INJECTION` — synthetic high-vol wicks every 500–1000
+- `ENTRY_DRIFT`: shift entries one bar forward
+- `FEE_SHOCK`: 2× fees
+- `SLIPPAGE_SHOCK`: 3× slippage
+- `INDICATOR_VARIANCE`: ±1 perturbation on the selected look-back
+- `NEWS_CANDLES_INJECTION`: synthetic high-vol wicks every 500–1000
   bars (added in v0.2.0; matches the Python reference's 5-scenario set)
 - Any combination of the above
 
@@ -181,13 +181,27 @@ This repo is a clean-room port of the Python reference at
 [`backtester/__init__.py`](https://github.com/DaruFinance/quant-research-framework/blob/main/backtester/__init__.py).
 Three automated harnesses verify the port produces metrics that agree
 with the reference within `1e-3` relative tolerance on shared input.
-We avoid the term *byte-identical*: parity is tolerance-bounded by
-construction (the maximum observed relative deviation across all
-surfaces is below `5e-5`, the ledger's `%.4f` print precision floor),
-not bit-equality.
+We avoid the term *byte-identical* for the cross-language axis: parity
+there is tolerance-bounded by construction (the maximum observed relative
+deviation across all surfaces is below `5e-5`, the ledger's `%.4f` print
+precision floor), not bit-equality.
+
+**Cross-architecture parity is byte-identical**, which is a separate and
+stronger assertion. The same Rust source compiled for
+`aarch64-unknown-linux-gnu` reproduces every printed metric digit exactly:
+[`tools/parity_arch.py`](tools/parity_arch.py) string-compares the whole
+metric block against committed x86_64 goldens in `data/golden/` across all
+six bundled datasets (196 metric lines each, 1,176 in total). The
+[`parity-arm64`](.github/workflows/parity_arm64.yml) workflow gates it on
+three runners: an x86_64 drift guard, the aarch64 build under
+`qemu-user-static`, and a native ARM runner.
+
+```bash
+python tools/parity_arch.py --bin target/release/backtester   # exit 0 = byte-identical
+```
 
 ### Default-config surface (`tools/parity_check.py`)
-**56/56 metric points agree at 0.001 relative tolerance.** Covers the v0.1.0 feature set — IS/OOS baseline, smart-optimised look-back search with auto-RRR, candle/trade WFO, and the four v0.1.0 robustness scenarios (ENTRY_DRIFT, FEE_SHOCK, SLIPPAGE_SHOCK, INDICATOR_VARIANCE). Every `IS-raw`, `OOS-raw`, `IS-opt`, `OOS-opt`, `Baseline`, `ENT`, `FEE`, `SLI`, and `W01..W18 IS/OOS` line matches in trade count, ROI, PF, Sharpe, win rate, expectancy and max drawdown:
+**56/56 metric points agree at 0.001 relative tolerance.** Covers the v0.1.0 feature set: IS/OOS baseline, smart-optimised look-back search with auto-RRR, candle/trade WFO, and the four v0.1.0 robustness scenarios (ENTRY_DRIFT, FEE_SHOCK, SLIPPAGE_SHOCK, INDICATOR_VARIANCE). Every `IS-raw`, `OOS-raw`, `IS-opt`, `OOS-opt`, `Baseline`, `ENT`, `FEE`, `SLI`, and `W01..W18 IS/OOS` line matches in trade count, ROI, PF, Sharpe, win rate, expectancy and max drawdown:
 
 ```bash
 python tools/parity_check.py --tol 0.001    # exit 0 = parity
@@ -209,16 +223,16 @@ python tools/parity_forex.py --tol 0.001    # exit 0 = parity
 
 ### What is *not* yet jointly validated
 
-The full ledger of every surface — green-and-gated or known-divergence-with-reason — is **[docs/PARITY.md](docs/PARITY.md)**. The short version:
+The full ledger of every surface (green-and-gated or known-divergence-with-reason) is **[docs/PARITY.md](docs/PARITY.md)**. The short version:
 
-- **Four-way combo** (`tools/parity_combo.py`: regime + WFO + forex + session, all at once) still reports diffs — the gap is in the forex/session interaction (it shows up even on the classic `Baseline IS/OOS` line), not in the regime engine. Single-feature parity (default, regime+WFO, forex) is verified; the combo is the `paper-v3` milestone.
+- **Four-way combo** (`tools/parity_combo.py`: regime + WFO + forex + session, all at once) still reports diffs: the gap is in the forex/session interaction (it shows up even on the classic `Baseline IS/OOS` line), not in the regime engine. Single-feature parity (default, regime+WFO, forex) is verified; the combo is the `paper-v3` milestone.
 - **USD/JPY in the frozen benchmark** is excluded from the cross-engine gate (`cross_engine_check = false`): the JPY `pip_size = 0.01` path has a ~1–2% residual `parity_forex` (EUR/USD) does not exercise. NET/GROSS numbers are still reported.
 - **Monte Carlo percentiles** and the **`INDICATOR_VARIANCE`** overlay diverge by design (unseeded / differently-seeded RNGs); see below.
 - **Python-only, no Rust counterpart:** `backtester/bootstrap.py` (stationary bootstrap) and the `examples/ml_*` strategies. Nothing to diff, not gated.
 
 ### Two non-deterministic sections intentionally diverge, by design of the reference
-1. **Monte Carlo percentiles** — Python uses NumPy's global RNG, Rust uses `StdRng` seeded to 42. Different algorithms, so percentiles differ; the distribution shape is the same.
-2. **`INDICATOR_VARIANCE` overlay** — picks a ±1 lookback shift via an unseeded RNG in both implementations, so `W*_IS+ENT+IND` / `W*_OOS+ENT+IND` lines jitter run-to-run in both.
+1. **Monte Carlo percentiles**: Python uses NumPy's global RNG, Rust uses `StdRng` seeded to 42. Different algorithms, so percentiles differ; the distribution shape is the same.
+2. **`INDICATOR_VARIANCE` overlay**: picks a ±1 lookback shift via an unseeded RNG in both implementations, so `W*_IS+ENT+IND` / `W*_OOS+ENT+IND` lines jitter run-to-run in both.
 
 If you disable those two sources of randomness, the outputs are identical down to the last printed decimal on the validated surfaces above.
 
@@ -227,7 +241,7 @@ If you disable those two sources of randomness, the outputs are identical down t
 Both implementations run the same default pipeline (IS/OOS baseline +
 smart-optimiser + WFO + Monte Carlo + robustness overlays) on slices of the
 bundled `SOLUSDT_1h.csv`, single-threaded. The published benchmark is
-`tools/bench_paper.py` — the same harness, numbers, and methodology the
+`tools/bench_paper.py`, the same harness, numbers, and methodology the
 [paper](#citation) reports: **median** warm wall-clock over `n=5` runs after
 one untimed warm-up (which absorbs Python's one-time Numba JIT cost), with a
 separately-reported Python cold run, and peak RSS as the max observed.
@@ -245,8 +259,8 @@ python tools/bench_paper.py --runs 5
 | 48,000 |    5.71 ± 0.10  |    0.24  |  23.8×   |             294 |           8.8 |
 
 So **23.8–57× faster** and **33–65× less memory** across the 15k–48k range.
-†The 5,000-bar row is a measurement-floor artifact — Rust there (0.01 s) sits
-at the `/usr/bin/time` resolution — so the 232× should not be over-interpreted.
+†The 5,000-bar row is a measurement-floor artifact: Rust there (0.01 s) sits
+at the `/usr/bin/time` resolution, so the 232× should not be over-interpreted.
 The steady-state figure is the full 48k-bar row (23.8× faster, 33× less
 memory); the band widens at smaller N as Python's fixed overhead dominates.
 Rust's edge: no pandas, no NumPy, single-threaded with zero allocations in the
@@ -258,7 +272,7 @@ workload; `bench_paper.py` is the citable measurement.)
 What this framework emphasises that mainstream open-source alternatives do
 not (verified against primary docs as of 2026-04):
 
-| Framework              | License                  | Built-in WFO | Per-regime LB optimisation | Strict-LAH property tests | Cross-language byte-parity tests |
+| Framework              | License                  | Built-in WFO | Per-regime LB optimisation | Strict-LAH property tests | Cross-language parity tests |
 |------------------------|--------------------------|:------------:|:--------------------------:|:-------------------------:|:--------------------------------:|
 | **this** (Python + Rust) | Apache-2.0                    | ✓            | ✓                          | ✓                         | ✓                                |
 | [vectorbt][vbt]        | Apache-2.0 + Commons     | ✓ (Splitter) | ✗                          | ✗                         | n/a                              |
@@ -284,7 +298,7 @@ other framework ships the whole bundle.
 
 ## Configuration
 
-Tunables are plain `const`s at the top of `src/main.rs` — edit and `cargo build --release` to apply. Names mirror the Python constants exactly:
+Tunables are plain `const`s at the top of `src/main.rs`; edit and `cargo build --release` to apply. Names mirror the Python constants exactly:
 
 | Const | Default | Notes |
 |---|---|---|
@@ -309,4 +323,4 @@ and citing either implies the other (sibling cross-reference).
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+Apache-2.0, see [LICENSE](LICENSE).

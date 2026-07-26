@@ -1,4 +1,4 @@
-//! Extra metric primitives (item #44 Rust mirror).
+//! Extra metric primitives (Rust mirror).
 //!
 //! Mirrors ``backtester.metrics`` in Python. Sortino and turnover
 //! consume the same per-bar / per-trade return / position arrays the

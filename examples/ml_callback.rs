@@ -8,7 +8,7 @@
 //! The Predictor below is a hand-coded linear model so this example has no
 //! extra dependencies. Swap it for a `linfa`/`smartcore` estimator, an
 //! `ort`-loaded ONNX session, a `tch` Torch model, or even a Python FFI
-//! call — the strategy function only needs `predict(&[f64]) -> f64`.
+//! call, the strategy function only needs `predict(&[f64]) -> f64`.
 //!
 //! Look-ahead discipline: features for bar `i` must be derived from
 //! `bars[..i]` only. The helper `extract_window_features` enforces this.

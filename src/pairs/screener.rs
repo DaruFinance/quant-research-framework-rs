@@ -1,4 +1,4 @@
-//! Pair / spread screener (item #9, Phase 3 T2 — HIGH-RISK Rust mirror).
+//! Pair / spread screener (Phase 3 T2, HIGH-RISK Rust mirror).
 //!
 //! Mirrors `backtester.pairs.screener` with one deliberate deviation:
 //! the Rust `engle_granger` returns the **ADF tau test statistic**
@@ -235,7 +235,7 @@ mod tests {
             log_b[i] = log_b[i - 1] + 0.01;
         }
         // Build AR(1) shock series with deterministic alternating sign
-        // — fast mean-reverting around zero.
+        //, fast mean-reverting around zero.
         let mut e = vec![0.0f64; n];
         for i in 1..n {
             let shock = if i % 2 == 0 { 0.005 } else { -0.005 };

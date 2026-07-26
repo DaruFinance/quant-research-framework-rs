@@ -1,4 +1,4 @@
-//! Panel data loader (item #1, Rust mirror).
+//! Panel data loader (Rust mirror).
 //!
 //! Read N per-asset OHLC[+V] CSVs, inner-join on `time`, return a
 //! `PanelData` whose `data` field is a `(time, asset, field)`

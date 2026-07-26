@@ -1,4 +1,4 @@
-//! Funding-flip / basis-blowout triggers (item #39s, Rust mirror).
+//! Funding-flip / basis-blowout triggers (Rust mirror).
 
 #![cfg(feature = "carry")]
 

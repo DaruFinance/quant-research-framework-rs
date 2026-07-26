@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of truth for parity-script tag whitelists and field sets per metric family (item #15). Loaded by tools/parity_common.py:MetricRegistry.load(). New items add families here when they introduce new metric stdout lines; --include <family> opts those into the gate. Default-config invocations check the 'base' family only.",
+  "_comment": "Single source of truth for parity-script tag whitelists and field sets per metric family. Loaded by tools/parity_common.py:MetricRegistry.load(). New items add families here when they introduce new metric stdout lines; --include <family> opts those into the gate. Default-config invocations check the 'base' family only.",
   "families": [
     {
       "name": "base",
@@ -37,37 +37,37 @@
     },
     {
       "name": "costs",
-      "description": "Item #3 cost decomposition. Currently emits no new stdout lines (decomposition is in the trade ledger only). Reserved for the Config.record_costs flag landing as a stdout exposure of per-run fee/slippage/funding totals.",
+      "description": "Cost decomposition. Currently emits no new stdout lines (decomposition is in the trade ledger only). Reserved for the Config.record_costs flag landing as a stdout exposure of per-run fee/slippage/funding totals.",
       "tags": [],
       "fields": []
     },
     {
       "name": "sortino",
-      "description": "Item #44 multi-term IS objective adds a 'Sortino:' line. Filled when #44 lands; until then this family is empty.",
+      "description": "The multi-term IS objective adds a 'Sortino:' line. Empty until it lands.",
       "tags": [],
       "fields": []
     },
     {
       "name": "panel",
-      "description": "Items #1, #4, #5(iter), #6, #7, #8 emit per-asset metric lines under the panel plugin. Filled in Phase 2.",
+      "description": "Per-asset metric lines emitted under the panel plugin.",
       "tags": [],
       "fields": []
     },
     {
       "name": "pairs",
-      "description": "Items #9-#13 emit screener / spread / cadence metric lines. Filled in Phase 3.",
+      "description": "Screener, spread and cadence metric lines.",
       "tags": [],
       "fields": []
     },
     {
       "name": "carry",
-      "description": "Items #38-#43 emit funding / basis / OI metric lines. Filled in Phase 3.",
+      "description": "Funding, basis and OI metric lines.",
       "tags": [],
       "fields": []
     },
     {
       "name": "multi-leg",
-      "description": "Per-leg trade rows in the trade ledger (item #2). Currently kernel emits one leg per logical trade, so the multi-leg metric surface is identical to base. Reserved for item #28 (hedge engine) and #34 (arb state machine) which will introduce true multi-leg ledgers.",
+      "description": "Per-leg trade rows in the trade ledger. Currently kernel emits one leg per logical trade, so the multi-leg metric surface is identical to base. Reserved for the hedge engine and the arb state machine, which will introduce true multi-leg ledgers.",
       "tags": [],
       "fields": []
     }

@@ -27,7 +27,7 @@ fn ny_hour(unix_ts: i64) -> u32 {
 }
 
 // ----------------------------------------------------------------------------
-// Item #14: lookahead-leak harness self-tests.
+// lookahead-leak harness self-tests.
 // ----------------------------------------------------------------------------
 
 /// The default regime detector consumes only past close values (an
@@ -90,7 +90,7 @@ fn parse_signals_emits_no_flips_on_out_of_session_bars() {
     let in_flags = compute_in_flags(&bars, &cfg);
 
     // Build a dense alternating raw to maximise the chance of flips on
-    // every bar — if the session masking is broken we'll see flip codes
+    // every bar, if the session masking is broken we'll see flip codes
     // pop up on out-of-session bars.
     let raw: Vec<i8> = (0..bars.len()).map(|i| if i % 2 == 0 { 1 } else { -1 }).collect();
     let sig = parse_signals_with_flags(&raw, Some(&in_flags));
@@ -102,7 +102,7 @@ fn parse_signals_emits_no_flips_on_out_of_session_bars() {
         }
     }
     assert!(violations.is_empty(),
-        "Session invariant broken — {} out-of-session bars carry flip codes. \
+        "Session invariant broken, {} out-of-session bars carry flip codes. \
          First few: {:?}", violations.len(), &violations[..violations.len().min(5)]);
 }
 
@@ -157,7 +157,7 @@ fn forex_config_switches_to_pip_semantics() {
 // ----------------------------------------------------------------------------
 // Regime detector: default labels are 0/1/2 (Uptrend/Downtrend/Ranging),
 // no value out of range, length matches bars. Plus the actual labelling
-// must respect look-ahead — bar i must only consume close/EMA200 for
+// must respect look-ahead, bar i must only consume close/EMA200 for
 // indices < i.
 // ----------------------------------------------------------------------------
 #[test]
@@ -189,7 +189,7 @@ fn default_regime_detector_no_lookahead() {
 
     for i in 0..cut {
         assert_eq!(full[i], clean[i],
-            "default detector leaks future data — bar {} differs (full={}, clean={})",
+            "default detector leaks future data, bar {} differs (full={}, clean={})",
             i, full[i], clean[i]);
     }
 }

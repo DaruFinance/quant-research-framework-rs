@@ -1,4 +1,4 @@
-//! Spread re-estimation cadence engine (item #11, HIGH-RISK Rust mirror).
+//! Spread re-estimation cadence engine (HIGH-RISK Rust mirror).
 //!
 //! Drives β refits over a panel.  Three modes mirror the Python side:
 //! `Bars` (every-N), `Trigger` (user-supplied predicate), `OnBreakdown`

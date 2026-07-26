@@ -13,7 +13,7 @@
 //! machine is ~2.5 seconds.
 //!
 //! Strategies registered here use only the engine's documented public
-//! indicator surface (no proprietary signals).
+//! indicator surface.
 //!
 //! Run with:
 //!     cargo run --release --example batch_runner
@@ -29,7 +29,7 @@ use rayon::prelude::*;
 use quant_research_framework_rs::{
     classic_single_run, Bar, Config, Metrics, RawSignalsFn,
 };
-// Shared indicator surface (item 5 — indicator parity). Replaces the
+// Shared indicator surface (item 5, indicator parity). Replaces the
 // inline ATR/RSI/SMA copies below that diverged from the Python engine.
 use quant_research_framework_rs::indicators::{compute_atr, compute_rsi, compute_sma, compute_stoch};
 
@@ -82,7 +82,7 @@ fn signal_atr_cross(bars: &[Bar], lb: usize) -> Vec<i8> {
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
     // Canonical shared indicators (match Python backtester/indicators.py).
     // Replaces the prior inline mean(high-low) ATR + adjust=false RSI that
-    // diverged from the Python engine — see Item-5 indicator-parity package.
+    // diverged from the Python engine, see Item-5 indicator-parity package.
     let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
     let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
     let fast = compute_sma(&close, lb);

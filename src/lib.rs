@@ -1,23 +1,23 @@
 // Crate-wide clippy carve-outs. Each is intentional and reviewed; collected
 // here so CI can run `clippy -- -D warnings` without spurious failures.
 //
-// * `needless_range_loop` — the WFO/regime/news-injection inner loops use
+// * `needless_range_loop`, the WFO/regime/news-injection inner loops use
 //   index arithmetic deliberately (parity with the Python numba kernels,
 //   which are also index-based). Iterator rewrites change locality and
 //   make the parity diff harder to read.
-// * `too_many_arguments` — `run_wfo_window` mirrors the Python
+// * `too_many_arguments`, `run_wfo_window` mirrors the Python
 //   `_run_wfo_window` signature 1:1; refactoring to a struct would diverge
 //   from the reference.
-// * `manual_rem_euclid` / `manual_is_multiple_of` — the manual forms are
+// * `manual_rem_euclid` / `manual_is_multiple_of`, the manual forms are
 //   identical to what the Python source does and the lints flag stylistic
 //   modernisation that would only obscure parity.
-// * `field_reassign_with_default` — the `Metrics { pf: INFINITY, .. }`
+// * `field_reassign_with_default`, the `Metrics { pf: INFINITY, .. }`
 //   builder used in `compute_metrics_for` is post-hoc on the empty branch
 //   and not worth a struct-update rewrite.
-// * `neg_cmp_op_on_partial_ord` — the regime detector explicitly uses
+// * `neg_cmp_op_on_partial_ord`, the regime detector explicitly uses
 //   `!(a > b)` semantics; NaN guards are inserted ahead of the comparison
 //   so the negation is intentional. See comment at the call site.
-// * `new_without_default` — `Config::new()` is the public constructor that
+// * `new_without_default`, `Config::new()` is the public constructor that
 //   reads the engine's compile-time constants; a `Default::default()` would
 //   look like it could be reassigned to "all zeros" and is confusing here.
 #![allow(clippy::needless_range_loop)]
@@ -45,7 +45,7 @@ use chrono::{TimeZone, Timelike};
 use chrono_tz::America::New_York;
 
 // ============================================================================
-// CONFIGURATION — mirrors backtester.py constants
+// CONFIGURATION, mirrors backtester.py constants
 // ============================================================================
 // CSV path is taken from $BT_CSV at runtime (see src/main.rs); there is
 // no compile-time constant for it.
@@ -149,13 +149,13 @@ pub mod pairs;
 #[cfg(feature = "carry")]
 pub mod carry;
 
-// Deflated Sharpe Ratio post-processing (roadmap item 09 — Rust mirror of
+// Deflated Sharpe Ratio post-processing (roadmap item 09, Rust mirror of
 // `backtester/dsr.py`). Standalone scalar utility gated behind its own
 // lightweight `dsr` feature so it does not drag in the panel/pairs stack.
 #[cfg(feature = "dsr")]
 pub mod dsr;
 
-// Shared TradingView/pandas-style indicators (roadmap item 5 — indicator
+// Shared TradingView/pandas-style indicators (roadmap item 5, indicator
 // parity). Single source of truth for the example strategies; gated behind
 // the `indicators` feature so it never touches the default build or the
 // default EMA-cross parity surface. Guarded by tools/parity_indicators.py.
@@ -172,10 +172,10 @@ pub mod multitest;
 #[cfg(feature = "overfit")]
 pub mod haircut;
 
-// Volume indicators (item #2, v0.6.0). UNCONDITIONAL like src/metrics.rs.
+// Volume indicators (v0.6.0). UNCONDITIONAL like src/metrics.rs.
 pub mod volume;
 
-// Item #1 — IS parameter-robustness isosurface emit (pure std + f64).
+// IS parameter-robustness isosurface emit (pure std + f64).
 pub mod opt_surface;
 
 #[derive(Clone)]
@@ -185,12 +185,12 @@ pub struct Bar {
     pub high: f64,
     pub low: f64,
     pub close: f64,
-    /// Item #2 (v0.6.0): per-bar volume; 0.0 when 6th CSV column absent.
+    /// (v0.6.0): per-bar volume; 0.0 when 6th CSV column absent.
     pub volume: f64,
 }
 
 impl Bar {
-    /// Construct a clean OHLC bar with volume defaulted to 0.0 (item #2).
+    /// Construct a clean OHLC bar with volume defaulted to 0.0.
     pub fn ohlc(time_unix: i64, open: f64, high: f64, low: f64, close: f64) -> Self {
         Bar { time_unix, open, high, low, close, volume: 0.0 }
     }
@@ -205,17 +205,17 @@ pub struct Trade {
     pub exit_price: f64,
     pub qty: f64,
     pub pnl: f64,
-    /// Item #2: leg index within a multi-leg trade group. Always 0 in
+    /// leg index within a multi-leg trade group. Always 0 in
     /// single-leg single-asset mode. Set by the backtest core at every
     /// `trades.push(...)` site; aggregation lives downstream.
     pub leg_id: u32,
-    /// Item #2: shared group id across legs of the same logical trade.
+    /// shared group id across legs of the same logical trade.
     /// Single-leg mode emits `trade_group_id == trades.len()` at push
     /// time so every leg row is its own group. The trade ledger CSV
     /// schema stays at 15 columns (these fields are internal); parity
     /// vs Python is preserved.
     pub trade_group_id: u64,
-    /// Item #3: cost decomposition. fee + slippage + funding +
+    /// cost decomposition. fee + slippage + funding +
     /// net_pnl == gross_pnl by construction, satisfying the leg-level
     /// identity to floating-point tolerance. net_pnl == pnl. In forex
     /// mode slippage and funding are 0 (R-unit math folds them in).
@@ -270,7 +270,7 @@ pub struct Config {
     pub session_end_hour: u32,
     pub use_oos2: bool,
     /// When true, the backtest core skips the first 200 bars of each
-    /// segment (warm-up) — mirrors Python's `use_regime` flag passed to
+    /// segment (warm-up), mirrors Python's `use_regime` flag passed to
     /// `_backtest_numba_core`. Set true automatically by the
     /// `run_with_regime` / `run_with_regime_cfg` entrypoints; otherwise
     /// stays false and the warmup does not fire. Affects every backtest
@@ -297,7 +297,7 @@ pub struct Config {
     /// where the optimiser's side comparison always took the short
     /// branch. See CHANGELOG v0.3.1 / Python v0.2.5.
     pub legacy_side_bug: bool,
-    /// Item #46: maximum hold period in bars. 0 = no force-close
+    /// maximum hold period in bars. 0 = no force-close
     /// (engine behaves as pre-#46). When > 0, the kernel emits a code-2
     /// / code-4 close at bar i for any open position with
     /// `(i - ent_bar) >= max_hold_bars`. Priority: news/session >
@@ -311,11 +311,11 @@ pub struct Config {
     /// record a loss larger than 1R or a gain larger than the configured
     /// RRR. No effect when use_forex is true.
     pub clamp_results: bool,
-    // ---- item #1 (IS isosurface emit) ----
+    // ---- IS isosurface emit ----
     pub emit_opt_surface: bool,
     pub emit_opt_surface_sl: bool,
     pub sl_override: Option<f64>,
-    // ---- item #4 (benchmark v2): funding parameterization ----
+    // ---- benchmark v2: funding parameterization ----
     /// Funding rate (% per 8h per leg). Default = FUNDING_FEE so existing
     /// callers and the NET golden are unchanged; set 0.0 for a GROSS run.
     pub funding_fee: f64,
@@ -355,6 +355,14 @@ impl Config {
         self.account_size = 1.0;
         self
     }
+    /// Set `pip_size` from the dataset path, mirroring the Python
+    /// reference's import-time `PIP_SIZE` resolution. Chain after
+    /// `with_forex_defaults` so JPY-quoted pairs size correctly:
+    /// `Config::new().with_forex_defaults().with_pip_size_for(&csv)`.
+    pub fn with_pip_size_for(mut self, csv_path: &str) -> Self {
+        self.pip_size = resolve_pip_size(csv_path);
+        self
+    }
     pub fn with_sessions(mut self, on: bool, start_h: u32, end_h: u32) -> Self {
         self.use_sessions = on; self.session_start_hour = start_h; self.session_end_hour = end_h; self
     }
@@ -365,7 +373,7 @@ impl Config {
     }
     pub fn with_mask_exits(mut self, on: bool) -> Self { self.mask_exits = on; self }
     pub fn with_legacy_side_bug(mut self, on: bool) -> Self { self.legacy_side_bug = on; self }
-    /// Item #46: cap the number of bars a position can be held.
+    /// cap the number of bars a position can be held.
     /// 0 (default) disables; >0 makes the kernel force-close at bar i
     /// when `(i - ent_bar) >= max_hold_bars`. Mirrors Python's
     /// `MAX_HOLD_BARS` module constant.
@@ -405,6 +413,32 @@ fn ny_hour_minute(unix_ts: i64) -> (u32, u32) {
 // ============================================================================
 // 1. LOAD DATA
 // ============================================================================
+/// Resolve the forex pip size for a dataset path.
+///
+/// Mirrors the Python reference's `_resolve_pip_size`: an explicit
+/// `BT_PIP_SIZE` wins, otherwise a path containing "JPY" resolves to the
+/// two-decimal pip of JPY-quoted crosses and anything else to 0.0001.
+/// The substring heuristic is fragile (it fires on a file named
+/// "FUJPYR.csv" too), so it warns, exactly as the Python side does.
+pub fn resolve_pip_size(csv_path: &str) -> f64 {
+    if let Ok(raw) = std::env::var("BT_PIP_SIZE") {
+        match raw.parse::<f64>() {
+            Ok(v) => return v,
+            Err(_) => panic!("BT_PIP_SIZE={:?} is not a valid float", raw),
+        }
+    }
+    if csv_path.to_uppercase().contains("JPY") {
+        eprintln!(
+            "warning: pip_size auto-set to 0.01 because CSV path {:?} contains \
+             'JPY'. This substring heuristic is fragile; set BT_PIP_SIZE \
+             explicitly to silence this warning.",
+            csv_path
+        );
+        return 0.01;
+    }
+    0.0001
+}
+
 pub fn load_ohlc(path: &str) -> Vec<Bar> {
     let file = File::open(path).unwrap_or_else(|_| panic!("CSV file not found: {}", path));
     let reader = BufReader::new(file);
@@ -439,6 +473,15 @@ fn age_dataset(bars: Vec<Bar>, age: usize) -> Vec<Bar> {
 // 2. INDICATORS - EMA matching pandas ewm(span=X, adjust=False)
 // ============================================================================
 pub fn compute_ema(close: &[f64], span: usize) -> Vec<f64> {
+    // Ablation hook for the speed-up decomposition (tools/ablations/
+    // rolling_materialized.sh). With QRF_ROLLING=materialized set, dispatch to
+    // a naive O(n*w) window recompute that is numerically equivalent to the
+    // shipped O(n) recursion below. That isolates the algorithmic term (rolling
+    // statistics materialised the way pandas computes them) from the language
+    // term. With the variable unset this is the shipped path, unchanged.
+    if rolling_is_materialized() {
+        return compute_ema_materialized(close, span);
+    }
     let alpha = 2.0 / (span as f64 + 1.0);
     let mut ema = vec![0.0f64; close.len()];
     if close.is_empty() { return ema; }
@@ -449,16 +492,72 @@ pub fn compute_ema(close: &[f64], span: usize) -> Vec<f64> {
     ema
 }
 
+/// True iff QRF_ROLLING=materialized is set.
+#[inline]
+fn rolling_is_materialized() -> bool {
+    std::env::var("QRF_ROLLING")
+        .map(|v| v == "materialized")
+        .unwrap_or(false)
+}
+
+/// Window multiplier for the materialised EMA. With adjust=False the EMA is an
+/// infinite geometric-weighted sum of past closes with ratio (1-alpha), so a
+/// finite window of W = MULT*span truncates a tail of weight (1-alpha)^W. At
+/// MULT=40 that tail is ~exp(-80) for any span, far inside the 1e-3 parity
+/// tolerance, while the per-bar work is still a genuine O(n*w) recompute.
+const EMA_MAT_WINDOW_MULT: usize = 40;
+
+/// Effective window multiplier; QRF_ROLLING_MULT overrides the default. Dialling
+/// it down tightens the window and shows the apparent algorithmic factor is a
+/// function of the window, not a property of the engines.
+#[inline]
+fn ema_mat_window_mult() -> usize {
+    std::env::var("QRF_ROLLING_MULT")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&m| m >= 1)
+        .unwrap_or(EMA_MAT_WINDOW_MULT)
+}
+
+/// Naive O(n*w) EMA. For every output bar, re-walk a finite window of preceding
+/// closes and accumulate the geometric weights from scratch, mimicking how a
+/// materialised rolling reduction recomputes each window.
+fn compute_ema_materialized(close: &[f64], span: usize) -> Vec<f64> {
+    let n = close.len();
+    let mut ema = vec![0.0f64; n];
+    if n == 0 { return ema; }
+    let alpha = 2.0 / (span as f64 + 1.0);
+    let one_minus = 1.0 - alpha;
+    let window = span.saturating_mul(ema_mat_window_mult()).max(1);
+    ema[0] = close[0];
+    for i in 1..n {
+        let start = i.saturating_sub(window);
+        // Seed on the truncation boundary: below `window` bars of history the
+        // window covers the whole series, so seed with close[0] exactly as the
+        // recursion does; past it, the truncated tail is negligible.
+        let mut acc = if start == 0 {
+            close[0] * one_minus.powi(i as i32)
+        } else {
+            close[start] * one_minus.powi((i - start) as i32)
+        };
+        for k in (start + 1)..=i {
+            acc += alpha * close[k] * one_minus.powi((i - k) as i32);
+        }
+        ema[i] = acc;
+    }
+    ema
+}
+
 // ============================================================================
-// 3. RAW SIGNALS — provided by the caller. See src/main.rs for the reference
+// 3. RAW SIGNALS, provided by the caller. See src/main.rs for the reference
 // EMA-crossover implementation and examples/atr_cross.rs for an ATR variant.
 // ============================================================================
 pub type RawSignalsFn = fn(&[Bar], usize) -> Vec<i8>;
 
-/// Pluggable regime-detector contract — mirrors Python's `detect_regimes`.
+/// Pluggable regime-detector contract, mirrors Python's `detect_regimes`.
 /// Returns one label per bar drawn from `REGIME_LABELS` (encoded as a u8
 /// index into that slice). Length must match `bars`. Detectors must be free
-/// of look-ahead — only data from bars `0..i` may inform the label at bar `i`.
+/// of look-ahead, only data from bars `0..i` may inform the label at bar `i`.
 ///
 /// Plug a custom detector through `RegimeConfig::new(labels, detector)` and
 /// run via `run_with_regime` / `run_with_regime_cfg`. The engine handles
@@ -533,7 +632,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let position_size = if cfg.use_forex { 1.0 } else { cfg.position_size };
     let pip_size = cfg.pip_size;
     let slip = if cfg.use_forex { cfg.slippage_pct * pip_size } else { cfg.slip() };
-    // Item #1: surface SL sweep substitutes a per-cell stop via cfg.sl_override
+    // surface SL sweep substitutes a per-cell stop via cfg.sl_override
     // (always None on default/parity paths, so this is a no-op there).
     let sl_base = cfg.sl_override.unwrap_or(SL_PERCENTAGE);
     let sl_perc = if cfg.use_forex { sl_base * pip_size } else { sl_base };
@@ -541,7 +640,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let rrr_fx = if cfg.use_forex && sl_perc > 0.0 { tp_perc / sl_perc } else { 1.0 };
     let stop_pips_fx = if cfg.use_forex { sl_perc / pip_size } else { 1.0 };
 
-    // Closure to compute exit PnL — forex uses pip-based capped R units;
+    // Closure to compute exit PnL, forex uses pip-based capped R units;
     // crypto uses dollar qty * price diff. Both deduct entry+exit fees and
     // (crypto only) any accumulated funding.
     let pnl_for = |side: i8, entry_p: f64, exit_p: f64,
@@ -605,7 +704,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
     let mut fee_entry = 0.0f64;
 
     for idx in 0..n {
-        // Match Python's `for idx in session_idxs:` behaviour — out-of-session
+        // Match Python's `for idx in session_idxs:` behaviour, out-of-session
         // bars are skipped entirely so neither funding, SL/TP, nor entries fire.
         if cfg.use_sessions && !in_session[idx] { continue; }
 
@@ -622,7 +721,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         // use; otherwise this is a no-op. See `Config::use_regime_seg`.
         if cfg.use_regime_seg && idx < 200 { continue; }
 
-        // Session-end handling (roadmap item 08 — match Python
+        // Session-end handling (roadmap item 08, match Python
         // `_backtest_numba_core` exactly). On the last in-session bar of the
         // NY day: force-close any open position (exit at open) and NEVER
         // open or flip. Python sets `code = 2/4` UNCONDITIONALLY when a
@@ -631,14 +730,14 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         // end_bar_flag: code = 0`, which blocks a new entry). The prior Rust
         // guards (`code != 3` / `code != 1`) let an opposite-flip entry slip
         // through, and there was no flat-entry block at all, so Rust opened
-        // positions on the closing bar that Python suppresses — inflating the
+        // positions on the closing bar that Python suppresses, inflating the
         // trade count under the forex+session combo.
         let end_bar_flag = cfg.use_sessions && session_end_bar[idx];
         if end_bar_flag {
             code = if open_pos == 1 { 2 } else if open_pos == -1 { 4 } else { 0 };
         } else if cfg.max_hold_bars > 0 && open_pos != 0 && code != 2 && code != 4 {
-            // Item #46: hold-period force-close (only when not a session-end
-            // bar — session-end takes precedence, matching Python's elif).
+            // hold-period force-close (only when not a session-end
+            // bar, session-end takes precedence, matching Python's elif).
             let held = (idx as i64) - (ent_bar as i64);
             if held >= cfg.max_hold_bars as i64 {
                 code = if open_pos == 1 { 2 } else { 4 };
@@ -646,7 +745,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         }
         let price_open = bars[idx].open;
 
-        // SL/TP check — additive in forex (sl_perc/tp_perc are pre-converted
+        // SL/TP check, additive in forex (sl_perc/tp_perc are pre-converted
         // to pip-distance fractions when use_forex), multiplicative in crypto.
         // Skipped on session-end bars (Python's `not end_bar_flag`): the
         // force-close above already exits the position there.
@@ -676,7 +775,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 // For intrabar SL/TP hits in forex mode Python hard-codes
                 // pnl to -1 (SL) or +RRR (TP) in R-units rather than running
                 // the trade_res formula on the slippage-adjusted exit price.
-                // Match that exactly — otherwise Rust's formula-based exit
+                // Match that exactly, otherwise Rust's formula-based exit
                 // accumulates a small slippage-floor bias across many trades.
                 let pnl = if cfg.use_forex {
                     let r_unit = if sl_hit { -1.0 } else { rrr_fx };
@@ -684,7 +783,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 } else {
                     pnl_for(open_pos, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc)
                 };
-                // Item #3: cost decomposition (capture funding before reset).
+                // cost decomposition (capture funding before reset).
                 let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
                     open_pos, entry_price, exit_price, qty,
                     fee_entry, fee_exit, funding_acc, slip,
@@ -707,7 +806,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let exit_price = price_open * (1.0 + slip);
                 let fee_exit = qty * exit_price * fee_rate;
                 let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
-                // Item #3: cost decomposition.
+                // cost decomposition.
                 let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
                     -1, entry_price, exit_price, qty,
                     fee_entry, fee_exit, funding_acc, slip,
@@ -733,7 +832,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
                 let exit_price = price_open * (1.0 - slip);
                 let fee_exit = qty * exit_price * fee_rate;
                 let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
-                // Item #3: cost decomposition.
+                // cost decomposition.
                 let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
                     1, entry_price, exit_price, qty,
                     fee_entry, fee_exit, funding_acc, slip,
@@ -758,7 +857,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let exit_price = price_open * (1.0 - slip);
             let fee_exit = qty * exit_price * fee_rate;
             let pnl = pnl_for(1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
-            // Item #3: cost decomposition.
+            // cost decomposition.
             let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
                 1, entry_price, exit_price, qty,
                 fee_entry, fee_exit, funding_acc, slip,
@@ -776,7 +875,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let exit_price = price_open * (1.0 + slip);
             let fee_exit = qty * exit_price * fee_rate;
             let pnl = pnl_for(-1, entry_price, exit_price, qty, fee_entry, fee_exit, funding_acc);
-            // Item #3: cost decomposition.
+            // cost decomposition.
             let (fee_v, slip_v, fund_v, gross_v) = decompose_costs(
                 -1, entry_price, exit_price, qty,
                 fee_entry, fee_exit, funding_acc, slip,
@@ -793,7 +892,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
         }
     }
 
-    // Force-close open trade at end of data — restored to match v1 framework
+    // Force-close open trade at end of data, restored to match v1 framework
     // and Python wrapper semantics (which both force-close on the last bar's
     // open ± slip). The earlier no-force-close behavior gave better live/batch
     // parity but broke 3-way parity with v1 Rust + Python framework on USDJPY
@@ -845,7 +944,7 @@ fn run_backtest(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics,
     backtest_core(bars, sig, cfg)
 }
 
-/// Item #3 cost decomposition for a single trade leg. Returns
+/// cost decomposition for a single trade leg. Returns
 /// `(fee, slippage, funding, gross_pnl)` satisfying
 /// `gross_pnl - fee - slippage - funding == pnl` to fp tolerance.
 /// Crypto recovers raw prices via the inverse slippage adjust:
@@ -1029,7 +1128,7 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
                 let risk = ep * sl_for_risk / 100.0;
                 if risk == 0.0 { continue; }
                 // RRR-probe side branching. Pre-v0.2.5 the engine used
-                // `side == 'long'` (str compared to int8 — always false), so
+                // `side == 'long'` (str compared to int8, always false), so
                 // ALL trades took the short branch. Default now is the
                 // corrected `side == 1` test; cfg.legacy_side_bug = true
                 // reverts to the buggy code path for bit-equality with prior
@@ -1383,7 +1482,7 @@ pub fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, si
     // Optimise
     let (best_lb, met_is_opt) = optimiser(is_bars, cfg, sig_fn);
 
-    // Item #1: emit the baseline IS objective surface (opt-in, default off).
+    // emit the baseline IS objective surface (opt-in, default off).
     if cfg.emit_opt_surface {
         let header = !std::path::Path::new("opt_surface.csv").exists();
         crate::opt_surface::emit_surface_classic(is_bars, "baseline", cfg, sig_fn, header);
@@ -1550,7 +1649,7 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
         let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
         if lb_roll.is_none() { break; }
         let lb = lb_roll.unwrap();
-        // Item #1: emit the per-window IS objective surface (opt-in, default off).
+        // emit the per-window IS objective surface (opt-in, default off).
         if cfg.emit_opt_surface {
             let header = !std::path::Path::new("opt_surface.csv").exists();
             crate::opt_surface::emit_surface_classic(
@@ -1578,14 +1677,14 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
 }
 
 // ============================================================================
-// Item #4 (benchmark v2): read-only WFO-harvest surface + default signal fn.
+// (benchmark v2): read-only WFO-harvest surface + default signal fn.
 // `walk_forward_collect` mirrors `walk_forward` (above) but RETURNS the OOS
 // harvest instead of printing the summary, with an EMPTY scenario set (no
 // robustness overlays). The harvested baseline rets_oos is overlay-independent,
 // so this is harvest-equivalent. No existing caller of `walk_forward` changes.
 // ============================================================================
 
-/// Out-of-sample harvest of one rolling walk-forward run (item #4 benchmark).
+/// Out-of-sample harvest of one rolling walk-forward run (benchmark path).
 /// `all_oos_rets` = concatenated OOS per-trade stream; `eq_wfo_oos_fraction` =
 /// OOS-only equity fraction (1.0 crypto / 0.0 forex, NOT seed-prefixed, so MDD
 /// agrees with the Python runner); `agg` = aggregated Metrics; `per_window_oos`
@@ -1666,7 +1765,7 @@ pub fn walk_forward_collect(
 }
 
 /// The engine's built-in default raw-signal function (EMA(FAST_EMA_SPAN) x
-/// EMA(lb)) — the signal the parity harness validates (mirror of
+/// EMA(lb)), the signal the parity harness validates (mirror of
 /// src/main.rs::ema_crossover). Exposed read-only so the benchmark runner
 /// exercises the real default path on `engine_ema`, not a hand copy.
 pub fn default_ema_signal(bars: &[Bar], lb: usize) -> Vec<i8> {
@@ -1909,7 +2008,7 @@ fn create_regime_signals_internal(
 /// pick RRR ∈ {1..5} maximising sum-of-R), exactly mirroring Python's
 /// `optimize_regimes_sequential::_evaluate` (peak cap 5.0, range 1..=5,
 /// in-regime trade filter on the entry index). Note: the regime-path
-/// caps/ranges differ from the classic optimiser (3.0 / 1..=3) — that's
+/// caps/ranges differ from the classic optimiser (3.0 / 1..=3), that's
 /// the Python reference's own choice, faithfully preserved here.
 fn optimize_regimes_sequential_rs(
     bars: &[Bar], regimes: &[u8], n_regimes: usize, cfg: &Config,
@@ -1950,7 +2049,7 @@ fn optimize_regimes_sequential_rs(
 
             let mut peak_rs: Vec<f64> = Vec::new();
             let mut close_rs_vec: Vec<f64> = Vec::new();
-            // Forex pip-scaling for the SL_PERCENTAGE constant — Python's
+            // Forex pip-scaling for the SL_PERCENTAGE constant, Python's
             // module-level scaling pre-multiplies it by PIP_SIZE in forex mode.
             let sl_for_risk = if cfg.use_forex { SL_PERCENTAGE * cfg.pip_size } else { SL_PERCENTAGE };
             for t in &probe_trades {
@@ -1961,7 +2060,7 @@ fn optimize_regimes_sequential_rs(
                 // Python's regime optimiser uses the trade's slippage-adjusted
                 // entry / exit prices (`entry`, `exit_p` from the tuple), not
                 // raw close[idx]. Classic optimiser uses close[idx] in both
-                // engines — that's a separate code path.
+                // engines, that's a separate code path.
                 let ep = t.entry_price;
                 let xp = t.exit_price;
                 let risk = ep * sl_for_risk / 100.0;
@@ -2119,7 +2218,7 @@ fn walk_forward_regime(
         if best_lbs.iter().all(|x| x.is_none()) { break; }
         let lb_tag = fmt_lb_tag(&best_lbs, &regime_cfg.labels);
 
-        // Item #1: emit the regime IS surface over the labels the engine TRADES
+        // emit the regime IS surface over the labels the engine TRADES
         // (regimes_is), holding non-swept regimes at the FINAL optimised best_lbs.
         if cfg.emit_opt_surface {
             let header = !std::path::Path::new("opt_surface.csv").exists();
@@ -2178,7 +2277,7 @@ fn walk_forward_regime(
             let oos_close_rb: Vec<f64> = oos_w.iter().map(|b| b.close).collect();
             let oos_ema20_rb = compute_ema(&oos_close_rb, 20);
             // Renamed from raw_is_rb (was reusing the IS-named variable for the
-            // OOS phase — confusing, behaviour unchanged).
+            // OOS phase, confusing, behaviour unchanged).
             let raw_oos_rb = create_regime_signals_internal(&oos_close_rb, &oos_ema20_rb, &lbs_rb, regimes_oos);
             let mut sig_oos_rb = parse_signals_for(&raw_oos_rb, oos_w, &cfg_rb);
             if opts.drift_on { sig_oos_rb = drift_entries(&sig_oos_rb); }

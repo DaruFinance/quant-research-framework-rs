@@ -9,7 +9,7 @@ fixtures (funding 200evt / basis 24d / OI 168 1h / onchain 50d).
 Cross-language tolerances: every primitive in T6 is closed-form
 deterministic float math (point-in-time loaders, sign-tracking
 triggers, scheduler integer arithmetic, persistent-sign / momentum /
-oi-cointegration models) — all should hit f64 numerical noise (<1e-12).
+oi-cointegration models), all should hit f64 numerical noise (<1e-12).
 The script applies a 1e-9 closed-form tolerance internally.
 
 Single-threaded by user request.
@@ -105,7 +105,7 @@ fn main() {
     }
 
     // ------------------------------------------------------------------
-    // Triggers — emit count + time of first 5 events.
+    // Triggers, emit count + time of first 5 events.
     // ------------------------------------------------------------------
     let flip = FundingFlipTrigger::new(0.0).run(&funding);
     println!("funding_flip_n={}", flip.len());
@@ -229,7 +229,7 @@ def write_rust_fixtures(base_dir: Path) -> None:
     df["time"] = df["time"].astype("int64")
     df.to_csv(base_dir / "oi.csv", index=False)
 
-    # On-chain: already CSV, with column "nvt" — copy verbatim.
+    # On-chain: already CSV, with column "nvt": copy verbatim.
     src = fix / "onchain_nvt_50d.csv"
     (base_dir / "onchain.csv").write_bytes(src.read_bytes())
 

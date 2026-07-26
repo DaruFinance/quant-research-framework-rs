@@ -1,4 +1,4 @@
-//! Pre-screening eligibility filters (item #13, Rust mirror).
+//! Pre-screening eligibility filters (Rust mirror).
 
 #![cfg(feature = "pairs")]
 
@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn half_life_inf_or_large_on_explosive_series() {
-        // s_t = 1.001 * s_{t-1} — explosive AR(1), slope on the
+        // s_t = 1.001 * s_{t-1}, explosive AR(1), slope on the
         // change-vs-lag regression is positive => half_life = +inf.
         let mut s = vec![1.0f64];
         for _ in 1..200 {

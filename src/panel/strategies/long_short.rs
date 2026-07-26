@@ -1,4 +1,4 @@
-//! Long-short basket primitive (item #8 Rust mirror).
+//! Long-short basket primitive (Rust mirror).
 //!
 //! Mirrors ``backtester.panel.strategies.long_short.LongShortBasket``.
 

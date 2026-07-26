@@ -1,10 +1,10 @@
-//! Multiple-testing corrections — Rust mirror of `backtester/multitest.py`.
+//! Multiple-testing corrections, Rust mirror of `backtester/multitest.py`.
 //!
 //! Closed-form (parity-clean, deterministic):
-//!   * `bonferroni`     — p <= alpha/N                         (Bonferroni)
-//!   * `holm`           — step-down thr = alpha/(N-i)          (Holm 1979)
-//!   * `bh_fdr`         — largest i with p_(i) <= alpha*i/N     (B-H 1995)
-//!   * `sharpe_pvalues` — 1 - Phi(SR_hat) one-sided            (iid-Normal)
+//!   * `bonferroni`    : p <= alpha/N                         (Bonferroni)
+//!   * `holm`          : step-down thr = alpha/(N-i)          (Holm 1979)
+//!   * `bh_fdr`        : largest i with p_(i) <= alpha*i/N     (B-H 1995)
+//!   * `sharpe_pvalues`: 1 - Phi(SR_hat) one-sided            (iid-Normal)
 //!
 //! Bootstrap (`white_reality_check_indexed`, `romano_wolf_indexed`):
 //! NumPy PCG64 != `rand`, so RNG draws cannot match cross-language. These
@@ -189,7 +189,7 @@ pub fn white_reality_check_indexed(r: &[Vec<f64>], index_matrix: &[Vec<usize>]) 
 
 /// Romano-Wolf result: per-strategy mask plus the critical value and
 /// observed t-stats (exposed so the parity harness can compare floats, not
-/// just the brittle boolean mask — Lens C D8).
+/// just the brittle boolean mask, Lens C D8).
 pub struct RwResult {
     pub rejected: Vec<bool>,
     pub crit: f64,

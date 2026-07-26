@@ -6,8 +6,9 @@ the repo's artifacts. Wired into CI (parity.yml) so the framework's correctness
 *claims* are enforced continuously, not asserted once and left to rot.
 
 Checks BOTH engines: the Rust repo this file lives in, and the Python sibling
-(via BT_PY_REPO, else ../quant-research-framework). The paper (.tex, not in the
-repo) is reconciled separately and is out of CI scope.
+(via QRF_PY_DIR, the variable the parity harnesses use, with BT_PY_REPO still
+honoured for compatibility, else ../quant-research-framework). The paper (.tex,
+not in the repo) is reconciled separately and is out of CI scope.
 
     python tools/check_consistency.py        # exit 0 = consistent, 1 = drift
 """
@@ -17,7 +18,11 @@ import sys
 from pathlib import Path
 
 REPO_RS = Path(__file__).resolve().parent.parent
-REPO_PY = Path(os.environ.get("BT_PY_REPO", REPO_RS.parent / "quant-research-framework"))
+REPO_PY = Path(
+    os.environ.get("QRF_PY_DIR")
+    or os.environ.get("BT_PY_REPO")
+    or REPO_RS.parent / "quant-research-framework"
+)
 
 CANON_LICENSE = "Apache-2.0"
 fails: list[str] = []
@@ -58,7 +63,7 @@ for name, repo in (("rust", REPO_RS), ("python", REPO_PY)):
         if "**this**" in line and "(Python" in line:  # the self-row of the comparison matrix
             must("MIT" not in line and "Apache" in line,
                  f"[license] {name} README comparison self-row not Apache: {line.strip()[:70]}")
-        if re.search(r'(?i)^\s*(license[: ]+)?MIT\b.*\bLICENSE\b', line):  # "MIT — see LICENSE" footer
+        if re.search(r'(?i)^\s*(license[: ]+)?MIT\b.*\bLICENSE\b', line):  # "MIT, see LICENSE" footer
             fails.append(f"[license] {name} README footer still says MIT: {line.strip()[:70]}")
 
 # ---- 4. version synced across Cargo / pyproject / __version__ / both CHANGELOG tops ----
@@ -103,4 +108,4 @@ if fails:
         print("  ✗", f)
     print(f"\n{len(fails)} inconsistency(ies).")
     sys.exit(1)
-print("CONSISTENCY GUARD: OK — license / version / speed claims consistent across all repo artifacts.")
+print("CONSISTENCY GUARD: OK, license / version / speed claims consistent across all repo artifacts.")

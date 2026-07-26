@@ -1,4 +1,4 @@
-//! Funding × OI joint-move model (item #43, Rust mirror).
+//! Funding × OI joint-move model (Rust mirror).
 
 #![cfg(feature = "carry")]
 

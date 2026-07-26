@@ -1,4 +1,4 @@
-//! Volume indicators (item #2, v0.6.0). Rust mirror of
+//! Volume indicators (v0.6.0). Rust mirror of
 //! `backtester/volume_indicators.py`. Pure functions; every value at index
 //! `i` uses only bars `0..=i` (no look-ahead). Seeds and session-reset
 //! boundaries are specified IDENTICALLY to the Python module so the two

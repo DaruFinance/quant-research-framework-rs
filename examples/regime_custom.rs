@@ -9,7 +9,7 @@
 //! In v0.2.1 the engine actually consumes both of those: the WFO loop
 //! pre-computes regimes once via your detector, optimises one LB per
 //! label on each IS window, and rotates the active LB bar-by-bar in OOS.
-//! The WFO walk cadence is driven by `WFO_TRIGGER_VAL` — regime flips
+//! The WFO walk cadence is driven by `WFO_TRIGGER_VAL`, regime flips
 //! never re-anchor the IS window.
 //!
 //! Run:

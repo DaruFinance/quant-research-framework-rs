@@ -7,6 +7,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
+# Restore on any exit path. Without this an aborted run leaves src/lib.rs
+# patched or, worse, leaves target/release/backtester built from patched
+# source, silently poisoning every later parity run.
+restore_source() {
+    git checkout -- src/lib.rs 2>/dev/null || true
+    cargo build --release >/dev/null 2>&1 || true
+}
+trap restore_source EXIT
+
 git diff --quiet src/lib.rs || {
     echo "src/lib.rs has uncommitted changes; aborting" >&2
     exit 1
@@ -34,6 +43,6 @@ cargo build --release >/dev/null 2>&1
 if [[ "$out" == *"OK"* ]]; then
     echo "fill_off_by_one, 0, <5e-5, OK"
 else
-    n=$(echo "$out" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+')
+    n=$(echo "$out" | grep -oE 'PARITY DIFF: [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)
     echo "fill_off_by_one, ${n:-?}, <run for max-rel>, FAIL"
 fi

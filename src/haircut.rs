@@ -1,8 +1,8 @@
-//! Haircut Sharpe Ratio (Harvey & Liu 2015) — Rust mirror of
+//! Haircut Sharpe Ratio (Harvey & Liu 2015), Rust mirror of
 //! `backtester/haircut.py`. See the Python module docstring for the
 //! derivation. BHY uses c(N)=sum_{i=1..N} 1/i (NOT plain BH). Only the two
 //! distinct single-statistic closed forms are offered: 0 = bonferroni,
-//! 1 = bhy (Lens B D4 — no degenerate 'holm' that equals Bonferroni).
+//! 1 = bhy (Lens B D4, no degenerate 'holm' that equals Bonferroni).
 //! Phi/Phi^{-1} from `statrs::Normal`. Cross-language guarantee:
 //! `tools/parity_multitest.py`.
 

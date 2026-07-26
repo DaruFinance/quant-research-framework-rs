@@ -5,23 +5,22 @@ This script layers all four features at once (USE_REGIME_SEG + USE_WFO +
 FOREX_MODE + TRADE_SESSIONS) and asserts the two engines agree within 1e-3
 relative tolerance (trade counts exactly), exiting non-zero on any
 mismatch. It is the fourth parity surface, complementing:
-  * tools/parity_check.py   — default config (56/56 metric points)
-  * tools/parity_regime.py  — USE_REGIME_SEG + USE_WFO (98/98 points)
-  * tools/parity_forex.py   — FOREX_MODE on EURUSD 1h (56/56 points)
+  * tools/parity_check.py  : default config (56/56 metric points)
+  * tools/parity_regime.py : USE_REGIME_SEG + USE_WFO (98/98 points)
+  * tools/parity_forex.py  : FOREX_MODE on EURUSD 1h (56/56 points)
 
 Both engines are driven with the SAME selection knobs (MIN_TRADES and
 OPTIMIZE_RRR are compile-time constants on the Rust side, so the Python
-driver keeps the shared defaults rather than overriding them — an earlier
+driver keeps the shared defaults rather than overriding them, an earlier
 override was the dominant cause of the combo divergence).
 
 History (roadmap item 08): the combo was a known-failing diagnostic. Two
-causes were found and fixed — (1) the MIN_TRADES/OPTIMIZE_RRR driver
+causes were found and fixed: (1) the MIN_TRADES/OPTIMIZE_RRR driver
 mismatch above, and (2) three session-end-bar handling divergences in the
 Rust backtest core (it let opposite-flip entries through, never blocked a
 new entry when flat, and ran the SL/TP check on the closing bar, whereas
 Python force-closes unconditionally and skips SL/TP). With both fixed the
-combo is byte-exact on EURUSD 1h across all 14 stages x 7 fields. See
-docs/verification/combo_fourway_item08.md.
+combo is byte-exact on EURUSD 1h across all 14 stages x 7 fields.
 
 Usage:
     python tools/parity_combo.py                       # EURUSD 1h, tol 1e-3

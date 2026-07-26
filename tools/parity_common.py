@@ -1,4 +1,4 @@
-"""Shared parity-script primitives (item #15).
+"""Shared parity-script primitives.
 
 The three default parity scripts (``parity_check.py``,
 ``parity_regime.py``, ``parity_forex.py``) all do essentially the same
@@ -12,13 +12,13 @@ parity script becomes a thin driver that only specifies:
 - which Rust binary or one-off `examples/*.rs` runner to invoke.
 
 The registry (loaded from ``tools/parity_registry.json``) lists
-metric **families** — each family is a set of tag whitelist entries
+metric **families**, each family is a set of tag whitelist entries
 plus the field list to diff. Default invocations check the ``base``
 family only, preserving the 210-points-at-1e-3 claim today.
 
 ``--include`` adds opt-in families that exist for forward
-compatibility: ``costs`` (item #3 stdout exposure when ``record_costs``
-flips on), ``sortino`` (item #44), ``panel`` (item #1+#4+#5),
+compatibility: ``costs`` (cost-decomposition stdout exposure when ``record_costs``
+flips on), ``sortino``, ``panel``,
 ``pairs`` (Phase 3), ``carry`` (Phase 3). None of these emit new
 stdout lines yet; the registry slots are placeholders that will be
 populated as the corresponding items land.
@@ -26,6 +26,7 @@ populated as the corresponding items land.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -150,7 +151,7 @@ def run_python(csv: Path, overrides: Optional[Dict[str, str]] = None,
     """Invoke ``bt.main()`` in a subprocess with optional config overrides.
 
     ``overrides`` maps ``bt.X = Y`` constants to assign before
-    ``bt.main()``. ``extra_setup`` is appended verbatim — useful for
+    ``bt.main()``. ``extra_setup`` is appended verbatim, useful for
     derived assignments like ``bt.SL_PERCENTAGE *= bt.PIP_SIZE``.
     """
     env = os.environ.copy()
@@ -256,6 +257,22 @@ def compare(py: Dict[str, Dict[str, float]],
                 ok = p == r
                 marker = "OK" if ok else "DIFF"
                 print(f"    {fld:>8}: py={p}  rs={r}  [{marker}]")
+                if not ok:
+                    diffs += 1
+                continue
+            # Non-finite values must be handled before the relative
+            # deviation: inf - inf and nan - nan are both nan, and
+            # `nan <= tol` is False, so two engines that agree exactly on
+            # a degenerate stage (a zero-trade window reports PF = inf)
+            # would otherwise be reported as a divergence. Identical
+            # values pass whatever they are; a one-sided inf or nan is a
+            # real disagreement and still fails.
+            p_fin, r_fin = math.isfinite(p), math.isfinite(r)
+            if not (p_fin and r_fin):
+                ok = (p == r) or (math.isnan(p) and math.isnan(r))
+                marker = "OK" if ok else "DIFF"
+                print(f"    {fld:>8}: py={p:>14}  rs={r:>14}  "
+                      f"non-finite  [{marker}]")
                 if not ok:
                     diffs += 1
                 continue

@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 # SL-vs-TP priority inversion ablation. The engine's intrabar tie-break
 # (when both stop-loss and take-profit are touched on the same bar) is
-# encoded at lib.rs:471 as `if hit_sl && hit_tp { hit_tp = false; }` —
+# encoded at lib.rs:471 as `if hit_sl && hit_tp { hit_tp = false; }` :
 # i.e. SL wins. This script inverts the rule (TP wins on a tie) and
 # checks whether parity_check + parity_ledger catch the change.
 
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+
+# Restore on any exit path. Without this an aborted run leaves src/lib.rs
+# patched or, worse, leaves target/release/backtester built from patched
+# source, silently poisoning every later parity run.
+restore_source() {
+    git checkout -- src/lib.rs 2>/dev/null || true
+    cargo build --release >/dev/null 2>&1 || true
+}
+trap restore_source EXIT
 
 git diff --quiet src/lib.rs || {
     echo "src/lib.rs has uncommitted changes; aborting" >&2
@@ -36,7 +45,7 @@ set -e
 git checkout -- src/lib.rs
 cargo build --release >/dev/null 2>&1
 
-m_n=$(echo "$metric_out" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+' || echo 0)
-l_n=$(echo "$ledger_out" | grep -oE '[0-9]+ mismatches' | grep -oE '[0-9]+' || echo 0)
+m_n=$(echo "$metric_out" | grep -oE 'PARITY DIFF: [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)
+l_n=$(echo "$ledger_out" | grep -oE 'PARITY DIFF: [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)
 
 echo "sl_tp_priority, metric=${m_n:-0}, ledger=${l_n:-0}"

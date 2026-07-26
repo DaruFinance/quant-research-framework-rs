@@ -1,4 +1,4 @@
-//! Persistent-funding-sign carry model (item #43, Rust mirror).
+//! Persistent-funding-sign carry model (Rust mirror).
 
 #![cfg(feature = "carry")]
 

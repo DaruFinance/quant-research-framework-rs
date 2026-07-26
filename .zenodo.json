@@ -1,0 +1,30 @@
+{
+  "title": "quant-research-framework-rs: Rust port of the walk-forward backtester with tolerance-bounded cross-language parity",
+  "description": "The Rust port of the quant-research-framework walk-forward backtester, reproducing the Python reference's metric output within 1e-3 relative tolerance under a continuously gated cross-language parity oracle, and byte-identically across CPU architectures against committed goldens.",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "apache-2.0",
+  "creators": [
+    {
+      "name": "Vieira Gatto, Daniel",
+      "orcid": "0009-0003-3226-5978"
+    }
+  ],
+  "keywords": [
+    "backtesting",
+    "walk-forward optimization",
+    "look-ahead bias",
+    "cross-language parity",
+    "differential testing",
+    "reproducible research",
+    "quantitative finance",
+    "rust"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.19798593",
+      "relation": "isDerivedFrom",
+      "scheme": "doi"
+    }
+  ]
+}

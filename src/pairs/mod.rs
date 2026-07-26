@@ -1,14 +1,14 @@
-//! Pairs / stat-arb plugin (Phase 3 T2 — items #9, #10, #11, #12, #13).
+//! Pairs / stat-arb plugin.
 //!
 //! Mirror of Python's ``backtester.pairs`` package.  All primitives
 //! consume only data at indices ``<= t`` for any decision at logical
 //! time ``t``.
 //!
-//! - `spread`     — log_ratio, ols_resid, kalman_beta_spread (#10).
-//! - `eligibility` — half_life_ou, is_eligible_pair (#13).
-//! - `screener`   — engle_granger, distance_ssd, screen_pairs (#9).
-//! - `cadence`    — re-estimation engine (#11, HIGH-RISK).
-//! - `stops`      — z_multiple, half_life_multiple, breakdown (#12).
+//! - `spread`    : log_ratio, ols_resid, kalman_beta_spread (#10).
+//! - `eligibility`: half_life_ou, is_eligible_pair (#13).
+//! - `screener`  : engle_granger, distance_ssd, screen_pairs (#9).
+//! - `cadence`   : re-estimation engine (#11, HIGH-RISK).
+//! - `stops`     : z_multiple, half_life_multiple, breakdown (#12).
 //!
 //! `pca_resid` and `ml_resid` from the Python side are **not** ported.
 //! Both depend on sklearn-equivalent stacks (eigendecomposition of a

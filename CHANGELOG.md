@@ -5,33 +5,78 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.0] — 2026-06-12
+## [0.7.0] - 2026-07-26
+
+### Fixed
+- **Forex pip size is resolved by the engine, not by the parity harness.** The
+  Python reference resolves `PIP_SIZE` from the dataset path: a `BT_PIP_SIZE`
+  override wins, otherwise a path containing "JPY" resolves to the two-decimal
+  pip of JPY-quoted crosses, otherwise 0.0001. The Rust port hard-coded 0.0001,
+  so any caller using `with_forex_defaults()` on a JPY pair sized every trade
+  100x wrong, rescaling the pip-distance SL/TP levels and flipping P&L signs
+  while leaving entry bars untouched. `tools/parity_forex.py` had been
+  compensating with its own inline JPY case, so the gate was testing the harness
+  rather than the engine. New `resolve_pip_size()` and
+  `Config::with_pip_size_for()` mirror the Python rule, warning included, and
+  the harness workaround is gone. `parity_forex` on USDJPY 1h passes 56/56.
+- **Identical non-finite metrics are no longer reported as divergences.** A
+  stage with zero trades reports profit factor as `inf` in both engines. The
+  relative deviation computed `inf - inf = nan`, and `nan <= tol` is false, so a
+  surface on which the engines agreed exactly was failed. Non-finite values are
+  compared for equality before the ratio is taken; a one-sided `inf` or `nan`
+  is still a real divergence and still fails.
 
 ### Added
-- **Shared indicator module** (`src/indicators.rs`, `indicators` feature) — canonical
+- **`tools/ablations/fee_common_mode.sh`**, the negative control for the parity
+  oracle: the same fee bias in both ports, which the diff cannot see at any
+  tolerance because it only compares the engines against each other.
+- **`tools/ablations/rolling_materialized.sh`** and a `QRF_ROLLING` hook in
+  `compute_ema` that recomputes the EMA the materialised O(n*w) way,
+  numerically equivalent to the shipped O(n) recursion, separating a
+  constant-factor explanation of the cross-engine gap from an algorithmic one.
+  The default path is unchanged.
+- **`make sweep`** (`tools/sweep_all.sh`): every parity surface on every dataset
+  it supports, both test suites, the consistency guard, the benchmark drift
+  check and the cross-architecture goldens, with one pass/fail summary.
+
+### Changed
+- Internal planning artefacts removed from the public tree: per-item
+  verification logs, the docs TODO, absolute developer paths in the frozen
+  baseline captures, and internal tracker numbers in module headers.
+- Em dashes replaced with plain punctuation throughout.
+- The comparison table's cross-language column no longer reads "byte-parity".
+  Cross-language parity is tolerance-bounded at 1e-3; cross-architecture parity
+  is byte-identical and is now documented with its harness, golden counts and
+  CI gate.
+- Example strategies describe themselves instead of referencing private work.
+
+## [0.6.0] - 2026-06-12
+
+### Added
+- **Shared indicator module** (`src/indicators.rs`, `indicators` feature): canonical
   TradingView/pandas SMA/EMA/MACD/RSI/ATR/Stochastic; single source of truth for the
   example strategies, cross-engine parity-locked by `tools/parity_indicators.py`.
-- **OHLCV contract + volume** — optional 6th CSV `volume` column (backward-compatible),
+- **OHLCV contract + volume**: optional 6th CSV `volume` column (backward-compatible),
   `src/volume.rs` (OBV, VWAP rolling+session, vol SMA/EMA, relative volume, z-score,
   MFI, A/D), four volume strategy examples, `tools/parity_volume.py`.
-- **Overfitting-statistics layer** (`overfit` feature) — `src/{pbo,multitest,haircut}.rs`
+- **Overfitting-statistics layer** (`overfit` feature): `src/{pbo,multitest,haircut}.rs`
   (CSCV/PBO, Bonferroni/Holm/BH-FDR, White Reality Check, Romano-Wolf, Harvey-Liu
   haircut) + PSR / MinTRL / MinBTL in `src/dsr.rs`; `tools/parity_pbo.py`,
   `tools/parity_multitest.py`.
-- **IS parameter-robustness isosurface** — `src/opt_surface.rs` emits the dense
+- **IS parameter-robustness isosurface**: `src/opt_surface.rs` emits the dense
   in-sample objective grid (opt-in via `Config.emit_opt_surface`, default off);
   `tools/render_surface.py` renders it; `tools/parity_surface.py`.
-- **Reproducible robustness benchmark — engine surface** — `Config.funding_fee`
+- **Reproducible robustness benchmark, engine surface**: `Config.funding_fee`
   (default-value-preserving), `pub walk_forward_collect` / `WfoOut` /
   `default_ema_signal` / `compute_metrics_for`, pub engine consts. *(Benchmark
   runner/golden tooling in `tools/benchmark.py` is experimental.)*
-- **`tools/check_consistency.py`** — CI guard enforcing license / version / headline-
+- **`tools/check_consistency.py`**: CI guard enforcing license / version / headline-
   figure consistency across all repo artifacts.
 
 ### Changed
 - **License → Apache-2.0** (was MIT) across `LICENSE`, `Cargo.toml`, `README.md`.
-- Version → 0.6.0. One canonical performance band — **23.8–57× faster, 33–65× less
-  memory** — from the paper-grade harness `tools/bench_paper.py` (median warm wall-clock
+- Version → 0.6.0. One canonical performance band: **23.8–57× faster, 33–65× less
+  memory**, from the paper-grade harness `tools/bench_paper.py` (median warm wall-clock
   over n=5; the 5,000-bar 232× is a measurement-floor artifact). This single band now
   matches the README, the paper, and `CITATION.cff`. (`tools/bench.py` gained a
   `--stat {median,min}` flag and a std-dev footnote as a quick-check variant.)
@@ -41,13 +86,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`parity_check` 56/56, `parity_regime` 98/98, `parity_forex` 56/56, ledger, dsr) remain
   byte-identical.
 
-## [0.3.3] — 2026-05-03
+## [0.3.3] - 2026-05-03
 
 ### Fixed
 - **Regime detector NaN guards.** `default_regime_detector` in
   `src/lib.rs` (~line 1409) used `if !(close[idx] > ema200[idx])` to
   classify Uptrend / Downtrend bars. NaN values (from the EMA-200
-  warm-up window) silently fell through as "not greater AND not less" —
+  warm-up window) silently fell through as "not greater AND not less",
   the bar was labelled Ranging by accident, not by design. Replaced
   with explicit `is_nan()` short-circuits + a comment documenting the
   intentional Python-mirror semantics. Behaviour is unchanged on
@@ -81,19 +126,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per allow explaining why the lint is wrong here.
 
 ### Added
-- **GitHub repo discoverability scaffolding** — issue + PR templates,
+- **GitHub repo discoverability scaffolding**: issue + PR templates,
   `SECURITY.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1),
   `.github/dependabot.yml` (weekly cargo updates), README badges row.
-- **`.github/workflows/docs.yml`** — runs `cargo doc --no-deps` and
+- **`.github/workflows/docs.yml`**: runs `cargo doc --no-deps` and
   publishes to `gh-pages` on each `main` push. Adds a redirect
   `index.html` so `darufinance.github.io/quant-research-framework-rs/`
   lands on the crate's API page.
 - **crates.io publish workflow.** `.github/workflows/publish-crates.yml`
-  triggered by `v*` tag push, gated on `${{ secrets.CRATES_IO_TOKEN }}`
-  — see `RELEASING.md` for the one-time `cargo login` step.
-- **Pre-commit config** — `cargo fmt --check` + `cargo clippy -- -D warnings`
+  triggered by `v*` tag push, gated on `${{ secrets.CRATES_IO_TOKEN }}`.
+  See `RELEASING.md` for the one-time `cargo login` step.
+- **Pre-commit config**: `cargo fmt --check` + `cargo clippy -- -D warnings`
   hooks; `examples/` carve-out preserved via `#[rustfmt::skip]` blocks.
-- **CI status badges** — README top now shows a five-badge row
+- **CI status badges**: README top now shows a five-badge row
   (parity, docs, crates.io, DOI, License) mirroring the Python
   sibling so reviewers see green before clicking through.
 
@@ -113,10 +158,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   migration into a behavioural-change release window is the path to
   unpin.
 
-## [0.3.2] — 2026-05-03  (paper-v2 retag)
+## [0.3.2] - 2026-05-03  (paper-v2 retag)
 
 ### Added
-- **`tools/ablations/`** — bug-injection harness that reproduces the
+- **`tools/ablations/`**: bug-injection harness that reproduces the
   paper's §6.3 tolerance-sensitivity table. Three scripts
   (`fee_bias.sh`, `fill_off_by_one.sh`, `funding_skip.sh`) edit
   `src/lib.rs` on a clean working tree, run `cargo build --release`
@@ -128,7 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the Python reference within $10^{-3}$ relative tolerance) and the
   four-command verification checklist (`cargo test`, three parity
   scripts).
-- **`.github/workflows/parity.yml`** — GitHub Actions parity CI that
+- **`.github/workflows/parity.yml`**: GitHub Actions parity CI that
   runs `cargo fmt --check`, `cargo clippy -D warnings`,
   `cargo test --release`, and the three parity scripts against the
   matching commit of the Python framework on every push and pull
@@ -139,14 +184,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   After the deliberate-bug ablations were captured (off-by-one fill:
   54/56 mismatches, max rel-dev 179.6%; missed funding accrual:
   34/56 mismatches, max rel-dev 8.86%) and the source restored, the
-  three parity surfaces remain at 56/56, 98/98, 56/56 — sum 210/210.
+  three parity surfaces remain at 56/56, 98/98, 56/56, sum 210/210.
 
 ### Author
 - Sole author of record canonicalised to **Daniel Vieira Gatto**
   in `CITATION.cff` (alias: `DaruFinance`); previous variants
   deprecated for citation-tracking consistency.
 
-## [0.3.1] — 2026-04-30
+## [0.3.1] - 2026-04-30
 
 ### Added
 - **Forex-mode parity (third passing surface).** The new
@@ -191,7 +236,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accumulated across hundreds of trades produced a ~4% ROI drift.
   Rust now mirrors Python's hard-coded R-unit branch.
 
-## [0.3.0] — 2026-04-26
+## [0.3.0] - 2026-04-26
 
 ### Added
 - **Regime+WFO byte-identical parity** with the Python reference. The
@@ -203,22 +248,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `OOS-opt`, `Baseline IS/OOS`, and `W01..W04 IS/OOS` line matches
   byte-for-byte in trade count, ROI, PF, Sharpe, win rate, expectancy
   and max drawdown.
-- **`tools/bench.py`** — cross-language benchmark harness. Times both
+- **`tools/bench.py`**: cross-language benchmark harness. Times both
   engines across multiple dataset sizes with `/usr/bin/time -v`, emits a
   reproducible markdown table for the README. Replaces the unsourced
   "~24× faster" claim with measured numbers.
-- **`tools/parity_regime.py`** — dedicated regime+WFO parity check (sets
+- **`tools/parity_regime.py`**: dedicated regime+WFO parity check (sets
   `USE_REGIME_SEG=True, USE_WFO=True` and leaves all other flags at
   default). Asserts byte-identity at the chosen tolerance and returns
   exit 1 on any divergence.
-- **Comparison matrix** in `README.md` — this framework vs vectorbt /
+- **Comparison matrix** in `README.md`: this framework vs vectorbt /
   backtrader / NautilusTrader / zipline-reloaded / Lean / bt across
   built-in WFO, per-regime LB optimisation, strict-LAH property tests,
   cross-language byte-parity. Verified against primary docs as of
   2026-04.
 - **`CITATION.cff`** with sibling cross-reference to the Python repo so
   citing either implies citing the framework as a whole.
-- `Config::use_regime_seg` field — gates the 200-bar warm-up in the
+- `Config::use_regime_seg` field: gates the 200-bar warm-up in the
   backtest core, mirroring Python's global `USE_REGIME_SEG` flag.
   `run_with_regime` and `run_with_regime_cfg` flip this on
   automatically; default `Config::new()` keeps it off (zero-cost for
@@ -235,7 +280,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      `RRR ∈ {1..5}` maximising sum-of-R → re-run at chosen RRR), exactly
      mirroring Python's `optimize_regimes_sequential::_evaluate`.
      Returns `(best_lbs, best_rrrs)` instead of just `best_lbs`.
-  2. **LB candidate list now excludes `FAST_EMA_SPAN`** — Python's
+  2. **LB candidate list now excludes `FAST_EMA_SPAN`**: Python's
      regime-path optimiser uses
      `[lb for lb in range(*LOOKBACK_RANGE) if lb != FAST_EMA_SPAN]`
      while the classic optimiser keeps it. Rust used the classic list
@@ -246,11 +291,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      `entry` and `exit_p` from the trade tuple (which include slippage);
      Rust now reads `t.entry_price` / `t.exit_price` to match. The
      classic-path optimiser still uses `close[idx]` because Python's
-     classic optimiser does too — they're separate code paths.
+     classic optimiser does too, they're separate code paths.
 - **`optimize_regimes_sequential_rs` re-detects regimes locally on the
   IS slice**, mirroring Python's `optimize_regimes_sequential` (which
   computes EMA_200 on the local copy, then `detect_regimes(dfi)`). The
-  actual IS/OOS run still uses globally-detected regimes sliced — same
+  actual IS/OOS run still uses globally-detected regimes sliced, same
   two-regime-source design Python uses.
 - Removed the orphaned `if USE_REGIME_SEG && idx < 200 { continue; }`
   warm-up stub. The 200-bar warm-up now lives at the same position in
@@ -269,7 +314,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layer all four v0.2.x features are not part of v0.3.0's parity
   guarantee. Single-feature parity (default, regime+WFO) is.
 
-## [0.2.4] — 2026-04-26
+## [0.2.4] - 2026-04-26
 
 ### Fixed
 - **Session-end force-close fires unconditionally** when an open
@@ -281,7 +326,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `tests/invariants.rs::session_end_marks_last_in_session_bar_per_day`
-  — verifies the session_end mask marks exactly one bar per NY day
+  verifies the session_end mask marks exactly one bar per NY day
   (the last in-session bar before the day rolls out of session). 22
   Rust tests total now passing.
 
@@ -290,7 +335,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parity preserved: `tools/parity_check.py --tol 0.001` still reports
   56/56 byte-identical metric points against the Python reference.
 
-## [0.2.3] — 2026-04-26
+## [0.2.3] - 2026-04-26
 
 ### Added
 - **Property-check suite** (`tests/invariants.rs`, 10 tests). Verifies
@@ -314,7 +359,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - v0.1.0 parity still 56/56 byte-identical at 0.1% tol.
 - 21 Rust tests total (8 behavioural + 3 contract + 10 invariants).
 
-## [0.2.2] — 2026-04-26
+## [0.2.2] - 2026-04-26
 
 ### Added
 - **Full pip-based forex PnL math** in `backtest_core`. Mirrors Python's
@@ -338,43 +383,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   routes every engine call through the session-aware path so out-of-session
   signals are masked at parse time, matching Python's `_parse_signals_numba`.
 - **Out-of-session bar skipping** in `backtest_core`'s main loop. Mirrors
-  Python's `for idx in session_idxs` iteration — funding, SL/TP, and
+  Python's `for idx in session_idxs` iteration, funding, SL/TP, and
   entries no longer fire on out-of-session bars. Force-close at session
   end is now also gated on `code != 0`, matching Python's guard.
 - **`DISPLAY_FOREX` atomic** drives `prettyprint` / `prettyprint_str` to
   emit `R`-suffixed metrics (instead of `$`) when `cfg.use_forex` is set.
 
 ### Verification
-- `tools/parity_check.py` — v0.1.0 baseline still byte-identical
+- `tools/parity_check.py`: v0.1.0 baseline still byte-identical
   (56/56 metric points, 0% relative diff at 0.1% tolerance) after all
   the new code paths. The forex/session/regime additions are all opt-in,
   so they have zero impact on default-config behaviour.
-- `tools/parity_combo.py` — runs both engines with **regime + WFO + forex
+- `tools/parity_combo.py`: runs both engines with **regime + WFO + forex
   + session all on simultaneously**. The first WFO window's IS metrics
   match within 5% relative tolerance (trades py=49 vs rs=52, ROI 46.98R
   vs 45.42R, Sharpe 3.36 vs 3.35). Per-window OOS still diverges because
   a 1-LB tie-break in fine-tuning (Python picks Downtrend LB=71, Rust
-  picks 72 — both have nearly identical Sharpe scores) cascades through
+  picks 72, both have nearly identical Sharpe scores) cascades through
   forex's quantised ±1R/±3R PnL into very different OOS results. This
   is parameter sensitivity downstream of an honest tie-break, not an
   engine bug.
 
-## [0.2.1] — 2026-04-25
+## [0.2.1] - 2026-04-25
 
 ### Added
 - **Full regime-segmentation engine** (`src/lib.rs`). The 200-bar warmup
   stub is replaced with a real implementation:
-  - `default_regime_detector` — EMA-200 / 8-bar consistency, 3 labels
+  - `default_regime_detector`: EMA-200 / 8-bar consistency, 3 labels
     (Uptrend / Downtrend / Ranging) matching the Python reference.
-  - `optimize_regimes_sequential_rs` — per-regime LB optimiser with
+  - `optimize_regimes_sequential_rs`: per-regime LB optimiser with
     coarse/fine search; works for any `REGIME_LABELS.len()` in [2, 5].
-  - `create_regime_signals_internal` — bar-by-bar EMA-crossover signals
+  - `create_regime_signals_internal`: bar-by-bar EMA-crossover signals
     with the active LB rotating per bar based on the regime label.
-  - `walk_forward_regime` — WFO loop that walks `WFO_TRIGGER_VAL` cadence
+  - `walk_forward_regime`: WFO loop that walks `WFO_TRIGGER_VAL` cadence
     and rotates per-regime LBs in OOS, with all 5 robustness overlays
     (FEE / SLI / ENT / IND / NEWS) running per window. Same bug fix as
     Python: regime flips never re-anchor the IS window.
-  - `run_with_regime(bars, strategy, sig_fn, regime_cfg)` — public
+  - `run_with_regime(bars, strategy, sig_fn, regime_cfg)`: public
     entry point, supersedes the v0.2.0 surface-only stub.
 - **`RegimeConfig`** struct exposes `labels: Vec<String>` and
   `detector: RegimeDetectorFn` to user code; `RegimeConfig::new` panics
@@ -402,11 +447,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unqualified for v0.2.x additions; the harness now backs the claim
   with a re-runnable check.
 
-## [0.2.0] — 2026-04-25
+## [0.2.0] - 2026-04-25
 
 ### Added
 - **`USE_FOREX` toggle** in `src/lib.rs`. When `true`, the per-bar
-  funding-fee block (00/08/16 UTC) is skipped — matching FX broker PnL
+  funding-fee block (00/08/16 UTC) is skipped, matching FX broker PnL
   semantics and the Python reference.
 - **Session mode (`USE_SESSIONS`).** New `SESSION_START_HOUR` /
   `SESSION_END_HOUR` constants drive an in-session mask in
@@ -419,9 +464,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   five entries (ENTRY_DRIFT, FEE_SHOCK, SLIPPAGE_SHOCK,
   ENTRY_DRIFT+INDICATOR_VARIANCE, NEWS_CANDLES_INJECTION).
 - **ML signal examples.**
-  - `examples/ml_precomputed.rs` — train offline, plug a per-bar score
+  - `examples/ml_precomputed.rs`: train offline, plug a per-bar score
     slice into the strategy function, threshold it.
-  - `examples/ml_callback.rs` — keep a model in memory, call
+  - `examples/ml_callback.rs`: keep a model in memory, call
     `predict(features)` per bar; ships a hand-coded linear model so the
     example has zero extra dependencies.
 - **Custom regime detector contract.** New `RegimeDetectorFn = fn(&[Bar])
@@ -453,14 +498,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - parity for IS/OOS baseline + EMA-crossover optimiser + 4 robustness
     scenarios + WFO windows on the SOLUSDT_1h sample (same as `0.1.0`),
   - **not** parity for forex / session / news / regime paths in this
-    release — those features are now present in both implementations
+    release, those features are now present in both implementations
     but have not yet been jointly validated.
 - The integer-vs-string `side` comparison bug deliberately replicated
   at `src/lib.rs:486-487` is unchanged in `0.2.0` to keep parity with
   the Python reference, which still has it. Both will be fixed
   together in `0.3.0`.
 
-## [0.1.0] — 2026-03 (backfilled)
+## [0.1.0] - 2026-03 (backfilled)
 
 Initial public release. Contained:
 

@@ -1,4 +1,4 @@
-//! OBV divergence (item #2). Bullish when price makes a lower low over a
+//! OBV divergence. Bullish when price makes a lower low over a
 //! lookback while OBV makes a higher low; bearish on the mirror.
 //!
 //! No look-ahead: raw[i] compares bar i-1 against bar i-1-LOOK only.
