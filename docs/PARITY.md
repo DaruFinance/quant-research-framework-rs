@@ -57,12 +57,40 @@ green, not a deferred gap.
    the golden; only the cross-engine **gate** skips that one dataset, with the
    reason inline in the manifest. The other 15 core cells gate green.
 
-3. **Monte Carlo percentiles**: *intentional.* Python draws from NumPy's
+3. **USD/JPY per-trade ledger, one trade of 1,727** (`parity_ledger.py --forex`
+   on `USDJPY_1h`). Rust opens one short that Python does not, at the first
+   eligible bar of the W03 OOS segment (`entry_unix = 1486317600`, i.e.
+   2017-02-05 18:00 in the engines' shared bar labelling). Every one of the
+   1,727 shared trades agrees on all 8,635 compared fields, and every later
+   trade in that same window matches exactly, so the divergence is confined to
+   where the OOS segment starts trading, not to the fill or exit logic.
+
+   Ruled out by direct inspection: neither loader drops the bar, both engines
+   load all 87,648 rows; the EMA gap there is at least 5.5e-2 in magnitude
+   across every candidate lookback, many orders of magnitude from a
+   floating-point tie, so both engines signal short; and the SL/TP touch
+   comparisons are operator-for-operator identical (`low <= sl` / `high >= sl`).
+   What is left is the one-bar segment-start offset that follows from the
+   pandas negative-index slicing the Rust port mirrors deliberately
+   (`python_iloc_idx`).
+
+   It surfaces on this dataset and no other because **25,325 of USD/JPY's
+   87,648 bars (28.9%) have zero range**: weekend and gap-fill bars where
+   `O = H = L = C`. In a flat run every entry stops out on the next bar for a
+   full -1R, so one extra eligible bar becomes one extra complete trade instead
+   of vanishing into a position that was already open. The five metric surfaces
+   do not see it; the ledger does. That is the ledger oracle earning its place.
+
+   `tools/sweep_all.sh` runs this check through `run_known`, which **still runs
+   the comparison and still prints the diff**. It pins the count at exactly 1:
+   any other number fails the sweep and re-opens the item.
+
+4. **Monte Carlo percentiles**: *intentional.* Python draws from NumPy's
    global RNG; Rust uses `StdRng` seeded to 42. Different algorithms, so the
    percentile values differ while the distribution shape matches. Disable Monte
    Carlo and this surface is identical.
 
-4. **`INDICATOR_VARIANCE` robustness overlay**: *intentional.* Both engines
+5. **`INDICATOR_VARIANCE` robustness overlay**: *intentional.* Both engines
    pick the ±1 lookback shift from an unseeded RNG, so the
    `W*_IS+ENT+IND` / `W*_OOS+ENT+IND` lines jitter run-to-run in both. This is
    a property of the reference, reproduced faithfully.
