@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import os
 import subprocess
 import sys
@@ -279,6 +280,11 @@ def compare(py: list[TradeRow], rs: list[TradeRow], tol: float) -> int:
         for fld in ("open_entry", "close_entry", "open_exit",
                     "close_exit", "pnl"):
             av, bv = getattr(a, fld), getattr(b, fld)
+            if not (math.isfinite(av) and math.isfinite(bv)):
+                if not ((av == bv) or (math.isnan(av) and math.isnan(bv))):
+                    field_fails += 1
+                    field_examples.setdefault(fld, []).append((k, av, bv, float("nan")))
+                continue
             denom = max(abs(av), abs(bv), 1e-9)
             rel = abs(av - bv) / denom
             if rel > tol and not (abs(av) < 1e-6 and abs(bv) < 1e-6):

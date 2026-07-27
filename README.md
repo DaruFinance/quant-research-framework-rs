@@ -10,7 +10,7 @@
 
 **A walk-forward backtester written twice (a Python reference and a Rust port) that proves in CI the two produce the same numbers.** Walk-forward optimization (WFO), robustness stress tests, realism controls (fees, slippage, funding, SL/TP), and strict no-look-ahead enforced at the ledger level.
 
-It answers one question: *does an apparent edge survive out-of-sample evaluation under realistic frictions, or is it just fitting the past?* The Rust port answers it **23.8–57× faster** and in **33–65× less memory** than the Python reference ([benchmarks](#performance)), and a parity harness checks both engines agree within `1e-3` on every push.
+It answers one question: *does an apparent edge survive out-of-sample evaluation under realistic frictions, or is it just fitting the past?* The Rust port answers it **28.5–39× faster** and in **29–62× less memory** than the Python reference ([benchmarks](#performance)), and a parity harness checks both engines agree within `1e-3` on every push.
 
 ## Why two engines
 
@@ -253,15 +253,18 @@ python tools/bench_paper.py --runs 5
 
 | Bars   | Python warm (s) | Rust (s) | Speed-up | Python RSS (MB) | Rust RSS (MB) |
 |-------:|----------------:|---------:|---------:|----------------:|--------------:|
-|  5,000 |    2.32 ± 0.06  |    0.01  |  232×†   |             270 |           2.8 |
-| 15,000 |    2.85 ± 0.05  |    0.05  |  57.0×   |             273 |           4.2 |
-| 30,000 |    3.98 ± 0.09  |    0.12  |  33.2×   |             280 |           6.2 |
-| 48,000 |    5.71 ± 0.10  |    0.24  |  23.8×   |             294 |           8.8 |
+|  5,000 |    3.51 ± 8.6%  |   0.010  |   351×†  |             272 |           3.0 |
+| 15,000 |    4.35 ± 10.0% |   0.050  |  87.0×†  |             277 |           4.5 |
+| 30,000 |    5.86 ± 10.2% |   0.150  |  39.1×   |             280 |           7.2 |
+| 48,000 |    7.70 ± 11.5% |   0.270  |  28.5×   |             292 |          10.0 |
 
-So **23.8–57× faster** and **33–65× less memory** across the 15k–48k range.
+So **28.5–39× faster** and **29–62× less memory** across the 15k–48k range.
 †The 5,000-bar row is a measurement-floor artifact: Rust there (0.01 s) sits
-at the `/usr/bin/time` resolution, so the 232× should not be over-interpreted.
-The steady-state figure is the full 48k-bar row (23.8× faster, 33× less
+at the `/usr/bin/time` resolution of 0.01 s, as does 15,000; re-timed with a
+microsecond clock they fall to 251× and 65×, so neither should be
+over-interpreted. Dispersion is 9-12% on both engines, so treat every ratio
+here as good to two significant figures.
+The steady-state figure is the full 48k-bar row (28.5× faster, 29× less
 memory); the band widens at smaller N as Python's fixed overhead dominates.
 Rust's edge: no pandas, no NumPy, single-threaded with zero allocations in the
 hot loop. (`tools/bench.py` is a lighter quick-check variant of the same

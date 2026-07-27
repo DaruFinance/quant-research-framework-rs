@@ -51,8 +51,11 @@ done
 for ds in EURUSD_1h USDJPY_1h; do
   run "parity_forex/$ds" python3 tools/parity_forex.py --csv "data/$ds.csv" --tol "$TOL"
 done
-for ds in SOLUSDT_1h BTCUSDT_30m; do
+for ds in SOLUSDT_1h BTCUSDT_30m DOGEUSDT_30m SYNTH_100k; do
   run "parity_ledger/$ds" python3 tools/parity_ledger.py --csv "data/$ds.csv" --tol "$TOL"
+done
+for ds in EURUSD_1h USDJPY_1h; do
+  run "parity_ledger/$ds (forex)" python3 tools/parity_ledger.py --csv "data/$ds.csv" --forex --tol "$TOL"
 done
 for ds in EURUSD_1h SOLUSDT_1h; do
   run "parity_combo/$ds" python3 tools/parity_combo.py --csv "data/$ds.csv" --tol "$TOL"

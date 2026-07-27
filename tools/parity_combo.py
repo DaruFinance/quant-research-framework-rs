@@ -29,6 +29,7 @@ Exit 0 = parity OK, 1 = mismatch, 2 = setup failure.
 """
 from __future__ import annotations
 
+import math
 import os
 import re
 import subprocess
@@ -203,6 +204,14 @@ def report(py: dict, rs: dict, tags: list[str], tol: float) -> int:
             if k == "trades":
                 ok = p == r
                 print(f"    {k:>8}: py={p}  rs={r}  [{'OK' if ok else 'DIFF'}]")
+                if not ok: failures += 1
+                continue
+            if not (math.isfinite(p) and math.isfinite(r)):
+                # inf - inf and nan - nan are both nan, and nan <= tol is
+                # false, so identical degenerate values would read as a
+                # divergence. A one-sided inf or nan still fails.
+                ok = (p == r) or (math.isnan(p) and math.isnan(r))
+                print(f"    {k:>8}: py={p:>14}  rs={r:>14}  non-finite  [{'OK' if ok else 'DIFF'}]")
                 if not ok: failures += 1
                 continue
             denom = max(abs(p), abs(r), 1e-9)

@@ -41,13 +41,20 @@ pasting into Table 3.
 | `fill_off_by_one.sh` | `bars[idx].open` → `bars[(idx+1).min(...)].open` in `backtest_core` | Textbook look-ahead-direction off-by-one; exercises the core temporal contract |
 | `funding_skip.sh` | Comment out `funding_acc += fee_f` | Silent omission of a small recurring cost; exercises the cumulative-bias case |
 
-The expected output (paper Table 3, paper-v1 retag):
+The expected output, measured at v0.7.0 on SOLUSDT 1h:
 
 ```
-fee_0pct, 0, <5e-5, OK
-fee_0.01pct, 0, <5e-5, OK
-fee_0.1pct, 1, 0.16, FAIL
-fee_1pct, 21, 0.88, FAIL
-fill_off_by_one, 54, 179.6, FAIL
-funding_skip, 34, 8.86, FAIL
+fee_0pct,            metric=0,  ledger=0,     <5e-5,    OK
+fee_0.01pct,         metric=0,  ledger=0,     <5e-5,    OK
+fee_0.1pct,          metric=0,  ledger=0,     <5e-5,    OK
+fee_1pct,            metric=25, ledger=5,     0.46%,    FAIL
+fill_off_by_one,     metric=54, ledger=2386,  179.63%,  FAIL
+funding_skip,        metric=34, ledger=589,   8.86%,    FAIL
+sl_tp_priority,      metric=54, ledger=1035,  196.07%,  FAIL
+funding_sign,        metric=38, ledger=589,   16.28%,   FAIL
+fee_1pct_both_ports, metric=0,  ledger=0,     <5e-5,    OK
 ```
+
+The last row is the negative control: the same fault injected into both
+ports, which the diff cannot see at any tolerance because it only ever
+compares the two engines to each other.

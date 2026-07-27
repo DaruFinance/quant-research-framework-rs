@@ -42,11 +42,13 @@ green, not a deferred gap.
 ## Known divergences: labeled, not gated
 
 1. **Four-way combo** (`parity_combo.py`: regime + WFO + forex + session, all
-   at once). Single-feature parity holds (default, regime+WFO, forex each pass
-   independently), but the four layered together still diverge, and the gap is
-   in the **forex/session interaction**, it shows up even on the classic
-   `Baseline IS/OOS` line, not in the regime engine. Status: open, the natural
-   `paper-v3` milestone. Not a CI gate; the single-feature surfaces are.
+   at once). CLOSED. Passes 70/70 metric points on EURUSD 1h and SOLUSDT 1h.
+   Two causes were found: a harness mismatch driving the engines with different
+   selection knobs, and three session-end-bar divergences in the Rust core
+   (an opposite-flip entry could override the force-close, a new entry was not
+   blocked on the closing bar, and the intrabar SL/TP check still ran). All
+   three are now guarded by the session flag, leaving the single-feature
+   surfaces byte-unchanged. Gated in CI via `tools/sweep_all.sh`.
 
 2. **USD/JPY in the frozen benchmark** (`cross_engine_check = false` in
    `tools/benchmark_manifest.toml`). The JPY `pip_size = 0.01` forex path has a
