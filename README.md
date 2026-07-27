@@ -242,13 +242,13 @@ Both implementations run the same default pipeline (IS/OOS baseline +
 smart-optimiser + WFO + Monte Carlo + robustness overlays) on slices of the
 bundled `SOLUSDT_1h.csv`, single-threaded. The published benchmark is
 `tools/bench_paper.py`, the same harness, numbers, and methodology the
-[paper](#citation) reports: **median** warm wall-clock over `n=5` runs after
+[paper](#citation) reports: **median** warm wall-clock over `n=15` runs after
 one untimed warm-up (which absorbs Python's one-time Numba JIT cost), with a
 separately-reported Python cold run, and peak RSS as the max observed.
 Reproduce with:
 
 ```bash
-python tools/bench_paper.py --runs 5
+python tools/bench_paper.py --runs 15
 ```
 
 | Bars   | Python warm (s) | Rust (s) | Speed-up | Python RSS (MB) | Rust RSS (MB) |
