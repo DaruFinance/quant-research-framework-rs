@@ -113,19 +113,29 @@ def load_ledger(path: Path) -> list[TradeRow]:
         return [_row(d) for d in csv.DictReader(f)]
 
 
-def run_python(csv_path: Path) -> Path:
+def run_python(csv_path: Path, forex: bool = False) -> Path:
     """Run the Python engine; returns the path to its written ledger."""
     env = os.environ.copy()
     env["BT_CSV"] = str(Path(csv_path).resolve())
     env["MPLBACKEND"] = "Agg"
+    forex_setup = """
+bt.FOREX_MODE    = True
+bt.PIP_SIZE      = 0.01 if "JPY" in bt.CSV_FILE else 0.0001
+bt.SL_PERCENTAGE *= bt.PIP_SIZE
+bt.TP_PERCENTAGE *= bt.PIP_SIZE
+bt.RISK_AMOUNT   = 1.0
+bt.ACCOUNT_SIZE  = 1.0
+bt.POSITION_SIZE = 1.0
+""" if forex else ""
     driver = """
 import sys
 sys.path.insert(0, %r)
 import backtester as bt
 bt.PRINT_EQUITY_CURVE = False
 bt.USE_MONTE_CARLO   = False
+%s
 bt.main()
-""" % str(REPO_PY)
+""" % (str(REPO_PY), forex_setup)
     proc = subprocess.run([sys.executable, "-c", driver], env=env,
                           cwd=REPO_PY, capture_output=True, text=True,
                           timeout=900)
@@ -133,6 +143,52 @@ bt.main()
         sys.stderr.write(f"Python run failed:\n{proc.stderr}\n")
         sys.exit(2)
     return REPO_PY / "trade_list.csv"
+
+
+FOREX_RUNNER = r'''
+use quant_research_framework_rs::{Bar, Config, compute_ema, load_ohlc, run_cfg};
+
+fn ema_strategy(bars: &[Bar], lb: usize) -> Vec<i8> {
+    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
+    let fast = compute_ema(&close, 20);
+    let slow = compute_ema(&close, lb);
+    let n = bars.len();
+    let mut raw = vec![0i8; n];
+    for i in 1..n {
+        if fast[i - 1].is_nan() || slow[i - 1].is_nan() { continue; }
+        raw[i] = if fast[i - 1] > slow[i - 1] { 1 }
+                 else if fast[i - 1] < slow[i - 1] { -1 } else { 0 };
+    }
+    raw
+}
+
+fn main() {
+    let csv = std::env::args().nth(1).unwrap();
+    let bars = load_ohlc(&csv);
+    // Pip size comes from the engine, mirroring the Python reference.
+    let cfg = Config::new().with_forex_defaults().with_pip_size_for(&csv);
+    run_cfg(&bars, "EMA-crossover", ema_strategy, cfg);
+}
+'''
+
+
+def run_rust_forex(csv_path: Path) -> Path:
+    """Build and run a forex-configured runner that exports the ledger."""
+    src = REPO_RUST / "examples" / "_parity_ledger_forex.rs"
+    src.write_text(FOREX_RUNNER)
+    build = subprocess.run(
+        ["cargo", "build", "--release", "--example", "_parity_ledger_forex"],
+        cwd=REPO_RUST, capture_output=True, text=True, timeout=900)
+    if build.returncode != 0:
+        sys.stderr.write(f"Rust build failed:\n{build.stderr[-2000:]}\n")
+        sys.exit(2)
+    binp = REPO_RUST / "target" / "release" / "examples" / "_parity_ledger_forex"
+    proc = subprocess.run([str(binp), str(Path(csv_path).resolve())],
+                          cwd=REPO_RUST, capture_output=True, text=True, timeout=900)
+    if proc.returncode != 0:
+        sys.stderr.write(f"Rust run failed:\n{proc.stderr[-2000:]}\n")
+        sys.exit(2)
+    return REPO_RUST / "trade_list.csv"
 
 
 def run_rust(csv_path: Path) -> Path:
@@ -248,6 +304,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", type=Path, required=True,
                     help="OHLC CSV path (relative or absolute)")
+    ap.add_argument("--forex", action="store_true",
+                    help="drive both engines in forex mode (pip-aware sizing, "
+                         "R-unit PnL); required for the FX datasets")
     ap.add_argument("--tol", type=float, default=1e-3,
                     help="relative tolerance for numeric fields (default 1e-3)")
     args = ap.parse_args()
@@ -267,9 +326,9 @@ def main() -> int:
     print(f"Tolerance  : {args.tol*100:.3g}%\n")
 
     print("Running Python...")
-    py_path = run_python(csv_abs)
+    py_path = run_python(csv_abs, forex=args.forex)
     print("Running Rust...")
-    rs_path = run_rust(csv_abs)
+    rs_path = run_rust_forex(csv_abs) if args.forex else run_rust(csv_abs)
 
     py = load_ledger(py_path)
     rs = load_ledger(rs_path)
