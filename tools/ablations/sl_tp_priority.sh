@@ -38,7 +38,7 @@ open('src/lib.rs', 'w').write(src)
 cargo build --release >/dev/null 2>&1
 # parity scripts exit non-zero on mismatch; capture without aborting
 set +e
-metric_out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
+metric_out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
 ledger_out=$(python3 tools/parity_ledger.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
 set -e
 
@@ -48,4 +48,5 @@ cargo build --release >/dev/null 2>&1
 m_n=$(echo "$metric_out" | grep -oE 'PARITY DIFF: [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)
 l_n=$(echo "$ledger_out" | grep -oE 'PARITY DIFF: [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)
 
-echo "sl_tp_priority, metric=${m_n:-0}, ledger=${l_n:-0}"
+max_rel=$(printf '%s\n' "$metric_out" | grep -oE 'rel=[[:space:]]*[0-9.]+%' | grep -oE '[0-9.]+' | sort -g | tail -1 || true)
+echo "sl_tp_priority, metric=${m_n:-0}, ledger=${l_n:-0}, max_rel=${max_rel:-?}%"

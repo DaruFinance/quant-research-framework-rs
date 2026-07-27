@@ -20,6 +20,11 @@ git diff --quiet src/lib.rs || {
     exit 1
 }
 
+max_rel() {   # largest "rel= N%" in a parity transcript, or "-" if none
+    printf '%s\n' "$1" | grep -oE 'rel=[[:space:]]*[0-9.]+%' \
+        | grep -oE '[0-9.]+' | sort -g | tail -1 || true
+}
+
 run_one() {
     local label="$1" value="$2"
     python3 -c "
@@ -34,21 +39,25 @@ open('src/lib.rs', 'w').write(new_src)
     cargo build --release >/dev/null 2>&1
     local out
     set +e
-    out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
+    out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
+    local ledger_out l_n
+    ledger_out=$(python3 tools/parity_ledger.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
     set -e
     git checkout -- src/lib.rs
-    if [[ "$out" == *"OK"* ]]; then
-        echo "$label, 0, <5e-5, OK"
+    if [[ "$out" == *"PARITY OK"* ]]; then
+        echo "$label, metric=0, ledger=0, <5e-5, OK"
     else
         local n
         n=$(echo "$out" | grep -oE 'PARITY DIFF: [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)
-        echo "$label, ${n:-?}, <run for max-rel>, FAIL"
+        local mr; mr=$(max_rel "$out")
+        l_n=$(printf '%s\n' "$ledger_out" | grep -oE 'PARITY DIFF: [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)
+        echo "$label, metric=${n:-?}, ledger=${l_n:-0}, ${mr:-?}%, FAIL"
     fi
 }
 
 # Clean baseline (no edit needed; assert)
 out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
-[[ "$out" == *"OK"* ]] && echo "fee_0pct, 0, <5e-5, OK" || \
+[[ "$out" == *"PARITY OK"* ]] && echo "fee_0pct, 0, <5e-5, OK" || \
     echo "fee_0pct, ?, ?, UNEXPECTED_FAIL"
 
 run_one "fee_0.01pct" "0.020002"

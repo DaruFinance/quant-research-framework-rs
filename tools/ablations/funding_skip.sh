@@ -15,6 +15,11 @@ restore_source() {
 }
 trap restore_source EXIT
 
+max_rel() {   # largest "rel= N%" in a parity transcript, or "-" if none
+    printf '%s\n' "$1" | grep -oE 'rel=[[:space:]]*[0-9.]+%' \
+        | grep -oE '[0-9.]+' | sort -g | tail -1 || true
+}
+
 git diff --quiet src/lib.rs || {
     echo "src/lib.rs has uncommitted changes; aborting" >&2
     exit 1
@@ -40,15 +45,18 @@ open('src/lib.rs', 'w').write(src.replace(old, new))
 
 cargo build --release >/dev/null 2>&1
 set +e
-out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
+out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
+ledger_out=$(python3 tools/parity_ledger.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
 set -e
 
 git checkout -- src/lib.rs
 cargo build --release >/dev/null 2>&1
 
-if [[ "$out" == *"OK"* ]]; then
-    echo "funding_skip, 0, <5e-5, OK"
+if [[ "$out" == *"PARITY OK"* ]]; then
+    echo "funding_skip, metric=0, ledger=0, <5e-5, OK"
 else
     n=$(echo "$out" | grep -oE 'PARITY DIFF: [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)
-    echo "funding_skip, ${n:-?}, <run for max-rel>, FAIL"
+    mr=$(max_rel "$out")
+    l_n=$(printf '%s\n' "$ledger_out" | grep -oE 'PARITY DIFF: [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)
+    echo "funding_skip, metric=${n:-?}, ledger=${l_n:-0}, ${mr:-?}%, FAIL"
 fi
