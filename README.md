@@ -228,12 +228,12 @@ The full ledger of every surface (green-and-gated or known-divergence-with-reaso
 - **Four-way combo** (`tools/parity_combo.py`: regime + WFO + forex + session, all at once) is **closed**: 70/70 metric points on EURUSD 1h and SOLUSDT 1h, gated in CI via `tools/sweep_all.sh`.
 - **USD/JPY in the frozen benchmark** is excluded from the cross-engine gate (`cross_engine_check = false`): the JPY `pip_size = 0.01` path has a ~1–2% residual `parity_forex` (EUR/USD) does not exercise. NET/GROSS numbers are still reported.
 - **USD/JPY per-trade ledger** carries one unmatched trade of 1,727 (the W03 OOS segment-start bar); the sweep pins it to that exact count and key rather than suppressing it. See docs/PARITY.md.
-- **Monte Carlo percentiles** and the **`INDICATOR_VARIANCE`** overlay diverge by design (unseeded / differently-seeded RNGs); see below.
+- **Monte Carlo percentiles** and the **`INDICATOR_VARIANCE`** overlay diverge by design (Python MC unseeded, Rust MC seeded); see below.
 - **Python-only, no Rust counterpart:** `backtester/bootstrap.py` (stationary bootstrap) and the `examples/ml_*` strategies. Nothing to diff, not gated.
 
 ### Two non-deterministic sections intentionally diverge, by design of the reference
 1. **Monte Carlo percentiles**: Python uses NumPy's global RNG, Rust uses `StdRng` seeded to 42. Different algorithms, so percentiles differ; the distribution shape is the same.
-2. **`INDICATOR_VARIANCE` overlay**: picks a ±1 lookback shift via an unseeded RNG in both implementations, so `W*_IS+ENT+IND` / `W*_OOS+ENT+IND` lines jitter run-to-run in both.
+2. **`INDICATOR_VARIANCE` overlay**: picks a +/-1 lookback shift from an RNG seeded to 42 in both implementations, so the lines are reproducible and are covered by the byte-identical cross-architecture golden check.
 
 If you disable those two sources of randomness, the outputs are identical down to the last printed decimal on the validated surfaces above.
 
