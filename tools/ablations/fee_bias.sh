@@ -6,6 +6,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
+# Dataset under test. Override to reproduce the cross-dataset rows of the
+# fault-injection table:  CSV=data/BTCUSDT_30m.csv bash tools/ablations/fee_bias.sh
+CSV="${CSV:-data/SOLUSDT_1h.csv}"
+
 # Restore on any exit path. Without this an aborted run leaves src/lib.rs
 # patched or, worse, leaves target/release/backtester built from patched
 # source, silently poisoning every later parity run.
@@ -39,9 +43,9 @@ open('src/lib.rs', 'w').write(new_src)
     cargo build --release >/dev/null 2>&1
     local out
     set +e
-    out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1)
+    out=$(python3 tools/parity_check.py --csv "$CSV" --tol 0.001 2>&1)
     local ledger_out l_n
-    ledger_out=$(python3 tools/parity_ledger.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
+    ledger_out=$(python3 tools/parity_ledger.py --csv "$CSV" --tol 0.001 2>&1 | tail -1)
     set -e
     git checkout -- src/lib.rs
     if [[ "$out" == *"PARITY OK"* ]]; then
@@ -65,7 +69,7 @@ open('src/lib.rs', 'w').write(new_src)
 }
 
 # Clean baseline (no edit needed; assert)
-out=$(python3 tools/parity_check.py --csv data/SOLUSDT_1h.csv --tol 0.001 2>&1 | tail -1)
+out=$(python3 tools/parity_check.py --csv "$CSV" --tol 0.001 2>&1 | tail -1)
 [[ "$out" == *"PARITY OK"* ]] && echo "fee_0pct, 0, <5e-5, OK" || \
     echo "fee_0pct, ?, ?, UNEXPECTED_FAIL"
 
