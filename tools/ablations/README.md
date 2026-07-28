@@ -41,7 +41,7 @@ pasting into Table 3.
 | `fill_off_by_one.sh` | `bars[idx].open` → `bars[(idx+1).min(...)].open` in `backtest_core` | Textbook look-ahead-direction off-by-one; exercises the core temporal contract |
 | `funding_skip.sh` | Comment out `funding_acc += fee_f` | Silent omission of a small recurring cost; exercises the cumulative-bias case |
 
-The expected output, measured at v0.7.0 on SOLUSDT 1h:
+The expected output, measured at v0.7.2 on SOLUSDT 1h:
 
 ```
 fee_0pct,            metric=0,  ledger=0,     <5e-5,    OK

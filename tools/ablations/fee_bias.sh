@@ -45,7 +45,16 @@ open('src/lib.rs', 'w').write(new_src)
     set -e
     git checkout -- src/lib.rs
     if [[ "$out" == *"PARITY OK"* ]]; then
-        echo "$label, metric=0, ledger=0, <5e-5, OK"
+        # Report the ledger result we actually measured rather than
+        # assuming it is clean because the metric surface passed. A
+        # metric-clean / ledger-dirty row is exactly the metric
+        # cancellation mode this campaign is meant to be able to show.
+        if [[ "$ledger_out" == *"LEDGER PARITY OK"* ]]; then
+            l_n=0
+        else
+            l_n=$(printf '%s\n' "$ledger_out" | grep -oE 'PARITY (DIFF|FAIL): [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)
+        fi
+        echo "$label, metric=0, ledger=${l_n:-?}, <5e-5, OK"
     else
         local n
         n=$(echo "$out" | grep -oE 'PARITY DIFF: [0-9]+|[0-9]+ mismatches' | grep -oE '[0-9]+' | head -1 || true)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Paper-grade benchmark: extends tools/bench.py with N=7 runs, std/IQR
+"""Paper-grade benchmark: extends tools/bench.py with N=15 runs, std/IQR
 reporting, and a separate cold-Numba (first-call JIT compile) measurement
 for the Python side. Used to populate the §Performance table in the
 quant-research-framework paper.
@@ -16,7 +16,7 @@ REPO_RUST = Path(__file__).resolve().parent.parent
 REPO_PY = Path(os.environ.get("QRF_PY_DIR", REPO_RUST.parent / "quant-research-framework"))
 DEFAULT_CSV = REPO_RUST / "data" / "SOLUSDT_1h.csv"
 DEFAULT_SIZES = [5000, 15000, 30000, 48000]
-DEFAULT_RUNS = 7
+DEFAULT_RUNS = 15
 
 GNU_TIME = "/usr/bin/time"
 TIME_FMT = "QRF_BENCH %e %M"

@@ -90,10 +90,19 @@ green, not a deferred gap.
    percentile values differ while the distribution shape matches. Disable Monte
    Carlo and this surface is identical.
 
-5. **`INDICATOR_VARIANCE` robustness overlay**: *intentional.* Both engines
-   pick the ±1 lookback shift from an unseeded RNG, so the
-   `W*_IS+ENT+IND` / `W*_OOS+ENT+IND` lines jitter run-to-run in both. This is
-   a property of the reference, reproduced faithfully.
+5. **`INDICATOR_VARIANCE` robustness overlay**: *seeded, and gated.* Both
+   engines pick the ±1 lookback shift from an RNG seeded to 42
+   (`IND_VARIANCE_SEED` in Rust, `random.Random(42)` in Python), so the
+   `W*_IS+ENT+IND` / `W*_OOS+ENT+IND` lines are reproducible run-to-run and
+   are covered by the byte-identical cross-architecture golden check.
+
+6. **Robustness scenario sets differ between the ports.** Rust's
+   `robustness_scenarios()` defines five scenarios; the Python reference
+   defines four and omits the news-candle injection. Rust therefore prints
+   `NEWS IS` / `NEWS OOS1` stages that Python never emits, which is the
+   194-vs-196 tagged-line gap. The parity gate does not see this: those tags
+   are outside the compared whitelist. This is a real semantic divergence,
+   not a formatting artefact.
 
 ## Python-only: no Rust counterpart, not cross-engine-checked by design
 

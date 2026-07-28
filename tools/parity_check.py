@@ -16,7 +16,7 @@ The shared regex / subprocess / comparison machinery lives in
 the ``base`` metric family from ``tools/parity_registry.json``.
 
 refactor: behaviour is bit-identical to the pre-#15 single-
-file script when invoked without ``--include``. The 210/210 default
+file script when invoked without ``--include``. The 56/56 default
 parity claim is unchanged.
 
 Exit code 0 = within tolerance; 1 = mismatch; 2 = setup failure.
