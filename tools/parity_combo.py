@@ -128,7 +128,8 @@ fn ema_strategy(bars: &[Bar], lb: usize) -> Vec<i8> {
     let mut raw = vec![0i8; n];
     for i in 1..n {
         if fast[i - 1].is_nan() || slow[i - 1].is_nan() { continue; }
-        raw[i] = if fast[i - 1] > slow[i - 1] { 1 } else { -1 };
+        raw[i] = if fast[i - 1] > slow[i - 1] { 1 }
+                 else if fast[i - 1] < slow[i - 1] { -1 } else { 0 };
     }
     raw
 }
