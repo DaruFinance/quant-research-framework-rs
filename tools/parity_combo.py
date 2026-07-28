@@ -20,7 +20,7 @@ mismatch above, and (2) three session-end-bar handling divergences in the
 Rust backtest core (it let opposite-flip entries through, never blocked a
 new entry when flat, and ran the SL/TP check on the closing bar, whereas
 Python force-closes unconditionally and skips SL/TP). With both fixed the
-combo is byte-exact on EURUSD 1h across all 14 stages x 7 fields.
+combo is byte-exact on EURUSD 1h across all 10 stages x 7 fields.
 
 Usage:
     python tools/parity_combo.py                       # EURUSD 1h, tol 1e-3

@@ -82,7 +82,7 @@ done
 run "parity_ledger/EURUSD_1h (forex)" \
   python3 tools/parity_ledger.py --csv data/EURUSD_1h.csv --forex --tol "$TOL"
 run_known "parity_ledger/USDJPY_1h (forex)" 1 "('OOS', 1486317600, '-1')" \
-  "OOS segment-start bar, see docs/PARITY.md" \
+  "EMA tie on a constant run, see docs/PARITY.md" \
   python3 tools/parity_ledger.py --csv data/USDJPY_1h.csv --forex --tol "$TOL"
 for ds in EURUSD_1h SOLUSDT_1h; do
   run "parity_combo/$ds" python3 tools/parity_combo.py --csv "data/$ds.csv" --tol "$TOL"
