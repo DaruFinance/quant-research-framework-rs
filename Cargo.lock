@@ -414,7 +414,7 @@ dependencies = [
 
 [[package]]
 name = "quant-research-framework-rs"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "chrono",
  "chrono-tz",

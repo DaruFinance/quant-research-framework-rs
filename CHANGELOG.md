@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-07-28
+
+### Fixed
+- `parity_regime.py` and `parity_combo.py` drove the Rust side with a two-way
+  EMA comparison while the Python reference emits three states. Those two
+  harnesses carry 434 of the 770 metric points, so the gate was comparing
+  programs that were not identical. Both now use the three-way form.
+- `fee_bias.sh` reported a literal `ledger=0` on metric-clean rows instead of
+  the value it had measured.
+- README/PARITY.md: the indicator-variance overlay is seeded in both ports;
+  the two ports define different robustness scenario sets.
+
 ## [0.7.2] - 2026-07-27
 
 ### Fixed
