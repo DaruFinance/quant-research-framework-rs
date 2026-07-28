@@ -121,7 +121,9 @@ def run_python(csv_path: Path, forex: bool = False) -> Path:
     env["MPLBACKEND"] = "Agg"
     forex_setup = """
 bt.FOREX_MODE    = True
-bt.PIP_SIZE      = 0.01 if "JPY" in bt.CSV_FILE else 0.0001
+# PIP_SIZE is resolved by the engine at import (_resolve_pip_size).
+# Do not override it here: the gate must test the engine's rule, not a
+# harness workaround. See the JPY episode in the paper.
 bt.SL_PERCENTAGE *= bt.PIP_SIZE
 bt.TP_PERCENTAGE *= bt.PIP_SIZE
 bt.RISK_AMOUNT   = 1.0
