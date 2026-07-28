@@ -67,11 +67,12 @@ green, not a deferred gap.
    87,648 rows, and the SL/TP touch comparisons are operator-for-operator
    identical. The slice opens on a run of constant 112.551 closes, on which
    the fast and slow EMAs are equal in exact arithmetic. The two ports reach
-   that equality by algebraically identical but numerically different
-   recursions:
-
-       pandas ewm(adjust=False):  e[i] = e[i-1] + a*(x[i] - e[i-1])  ->  gap 0.0
-       this port:                 e[i] = a*x[i] + (1-a)*e[i-1]       ->  gap -1.42e-14
+   that equality differently. Both run the same recursion,
+   e[i] = a*x[i] + (1-a)*e[i-1], but pandas guards it: the ewm kernel skips
+   the update when the running average already equals the incoming
+   observation, so on a constant run seeded at that value it returns the seed
+   and a gap of exactly 0.0. This port applies the multiply-and-add
+   unconditionally and returns -1.42e-14.
 
    That is one unit in the last place at this price level, and it is enough to
    make the strict `fast < slow` test fire here and not in the reference.
