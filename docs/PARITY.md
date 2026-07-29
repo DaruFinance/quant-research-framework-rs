@@ -58,34 +58,35 @@ green, not a deferred gap.
    reason inline in the manifest. The other 15 core cells gate green.
 
 3. **USD/JPY per-trade ledger, one trade of 1,727** (`parity_ledger.py --forex`
-   on `USDJPY_1h`). Rust opens one short that Python does not, at
-   `entry_unix = 1486317600`. Every one of the 1,727 shared trades agrees on
-   all 8,635 compared fields.
+   on `USDJPY_1h`). CLOSED at v0.7.4. Passes 1,727/1,727 trades and all 8,635
+   compared fields, gated in CI like every other ledger surface.
 
-   The cause is a floating-point tie, not a segment boundary. Both engines
-   resolve the same W03 OOS slice (`bars[7648:12648]`), both loaders read all
-   87,648 rows, and the SL/TP touch comparisons are operator-for-operator
+   The cause was a floating-point tie, not a segment boundary. Both engines
+   resolved the same W03 OOS slice (`bars[7648:12648]`), both loaders read all
+   87,648 rows, and the SL/TP touch comparisons were operator-for-operator
    identical. The slice opens on a run of constant 112.551 closes, on which
-   the fast and slow EMAs are equal in exact arithmetic. The two ports reach
+   the fast and slow EMAs are equal in exact arithmetic. The two ports reached
    that equality differently. Both run the same recursion,
    e[i] = a*x[i] + (1-a)*e[i-1], but pandas guards it: the ewm kernel skips
    the update when the running average already equals the incoming
    observation, so on a constant run seeded at that value it returns the seed
-   and a gap of exactly 0.0. This port applies the multiply-and-add
-   unconditionally and returns -1.42e-14.
+   and a gap of exactly 0.0. This port applied the multiply-and-add
+   unconditionally and returned -1.42e-14.
 
-   That is one unit in the last place at this price level, and it is enough to
-   make the strict `fast < slow` test fire here and not in the reference.
+   That is one unit in the last place at this price level, and it was enough to
+   make the strict `fast < slow` test fire here and not in the reference. The
+   residue is not specific to this series: across 780 probed (span, price)
+   pairs the unguarded form lands one ulp off the guarded one in 125 of them.
 
-   It surfaces on this dataset and no other because 25,325 of USD/JPY's 87,648
+   It surfaced on this dataset and no other because 25,325 of USD/JPY's 87,648
    bars (28.9%) have zero range: weekend and gap-fill bars where O = H = L = C.
-   A flat run is both where the recursions can differ by an ULP and where every
-   entry stops out on the next bar for a full -1R, so one extra signal becomes
+   A flat run is both where the recursions can differ by an ulp and where every
+   entry stops out on the next bar for a full -1R, so one extra signal became
    one extra complete trade.
 
-   `tools/sweep_all.sh` runs this check through `run_known`, which **still runs
-   the comparison and still prints the diff**. It pins the count at exactly 1
-   at that trade key: any other number or key fails the sweep.
+   The fix mirrors the pandas guard in both Rust EMA sites (`compute_ema` in
+   `src/lib.rs` and in `src/indicators.rs`): skip the update when the running
+   average already equals the incoming observation.
 
 4. **Monte Carlo percentiles**: *intentional.* Python draws from NumPy's
    global RNG; Rust uses `StdRng` seeded to 42. Different algorithms, so the
@@ -98,13 +99,15 @@ green, not a deferred gap.
    `W*_IS+ENT+IND` / `W*_OOS+ENT+IND` lines are reproducible run-to-run and
    are covered by the byte-identical cross-architecture golden check.
 
-6. **Robustness scenario sets differ between the ports.** Rust's
-   `robustness_scenarios()` defines five scenarios; the Python reference
-   defines four and omits the news-candle injection. Rust therefore prints
-   `NEWS IS` / `NEWS OOS1` stages that Python never emits, which is the
-   194-vs-196 tagged-line gap. The parity gate does not see this: those tags
-   are outside the compared whitelist. This is a real semantic divergence,
-   not a formatting artefact.
+6. **Robustness scenario sets differ between the ports.** CLOSED at v0.7.4.
+   Rust's `robustness_scenarios()` defined five scenarios against the
+   reference's four, the extra one being the news-candle injection, which the
+   reference drops by design. Rust therefore printed `NEWS IS` / `NEWS OOS1`
+   stages that Python never emits, which was the 194-vs-196 tagged-line gap.
+   The port now runs the same four scenarios and both engines print 194 tagged
+   metric lines. `inject_news_candles` stays in the crate, unreferenced by the
+   default scenario set, exactly as the reference keeps its own
+   `inject_news_candles` outside `ROBUSTNESS_SCENARIOS`.
 
 ## Python-only: no Rust counterpart, not cross-engine-checked by design
 

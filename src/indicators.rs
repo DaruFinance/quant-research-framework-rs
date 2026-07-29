@@ -118,7 +118,13 @@ pub fn compute_ema(close: &[f64], span: usize) -> Vec<f64> {
     }
     out[0] = close[0];
     for i in 1..n {
-        out[i] = alpha * close[i] + (1.0 - alpha) * out[i - 1];
+        // Same constant-run guard as `crate::compute_ema`; see the comment
+        // there for why the unguarded form drifts by one ulp.
+        out[i] = if out[i - 1] == close[i] {
+            close[i]
+        } else {
+            alpha * close[i] + (1.0 - alpha) * out[i - 1]
+        };
     }
     out
 }

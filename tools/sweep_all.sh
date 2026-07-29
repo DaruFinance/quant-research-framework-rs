@@ -81,8 +81,7 @@ for ds in SOLUSDT_1h BTCUSDT_30m DOGEUSDT_30m SYNTH_100k; do
 done
 run "parity_ledger/EURUSD_1h (forex)" \
   python3 tools/parity_ledger.py --csv data/EURUSD_1h.csv --forex --tol "$TOL"
-run_known "parity_ledger/USDJPY_1h (forex)" 1 "('OOS', 1486317600, '-1')" \
-  "EMA tie on a constant run, see docs/PARITY.md" \
+run "parity_ledger/USDJPY_1h (forex)" \
   python3 tools/parity_ledger.py --csv data/USDJPY_1h.csv --forex --tol "$TOL"
 for ds in EURUSD_1h SOLUSDT_1h; do
   run "parity_combo/$ds" python3 tools/parity_combo.py --csv "data/$ds.csv" --tol "$TOL"

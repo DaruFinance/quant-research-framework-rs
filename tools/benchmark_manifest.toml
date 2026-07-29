@@ -138,10 +138,21 @@ id = "USDJPY_1h"
 path = "data/USDJPY_1h.csv"
 kind = "fx"
 oos_candles = 70000   # per-dataset (n=87,648): start_total>0, ~14 genuine WFO windows (kills the mixed-sign wrap)
-cross_engine_check = false  # KNOWN DIVERGENCE: the JPY pip_size=0.01 forex path
-                            # has a ~1-2% Python<->Rust residual that parity_forex
-                            # (EURUSD, pip=0.0001) does not cover. NET/GROSS numbers
-                            # are still reported; only the cross-engine GATE skips it.
+cross_engine_check = false  # KNOWN DIVERGENCE, re-measured at v0.7.4. Flipping this
+                            # to true gives 18 core cells / 144 comparisons / 6 bad.
+                            # The old reason recorded here ("a JPY pip path
+                            # parity_forex does not cover") is WRONG: parity_forex
+                            # and parity_ledger both gate USDJPY green at 1e-3 since
+                            # v0.7.0/v0.7.4 respectively. What actually remains is
+                            # confined to this WFO-harvest path and has two parts:
+                            #   (a) ema_cross harvests 476 OOS bars on the Rust side
+                            #       vs 474 on the Python side, a 2-bar stream-length
+                            #       difference that moves net_* by ~1.3%;
+                            #   (b) macd_zero harvests an IDENTICAL 2,036 bars yet
+                            #       still differs on gross_sharpe/gross_roi by ~0.15%.
+                            # eff_oos_bars agrees on all 15 non-USDJPY core cells.
+                            # NET/GROSS numbers are still reported; only the
+                            # cross-engine GATE skips this dataset.
 
 [[datasets]]
 id = "SYNTH_100k"

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.4] - 2026-07-29
 
+### Fixed
+- **`compute_ema` now mirrors pandas' constant-run guard.** The pandas `ewm`
+  kernel skips the update whenever the running average already equals the
+  incoming observation. This port applied the multiply-and-add
+  unconditionally, and `alpha*x + (1-alpha)*x` does not round back to `x` at
+  every span and price level: across 780 probed (span, price) pairs it lands
+  one unit in the last place away in 125 of them. On a run of constant-price
+  bars, where the fast and slow EMAs are equal in exact arithmetic, that
+  residue was enough to flip a strict indicator comparison. It opened one
+  short on `USDJPY_1h` that the reference does not take, the last remaining
+  known divergence on the parity surface. `parity_ledger --forex` on that
+  series now passes 1,727/1,727 trades and all 8,635 compared fields, and
+  `tools/sweep_all.sh` gates it as an ordinary row rather than through
+  `run_known`. Both EMA sites carry the guard (`src/lib.rs`,
+  `src/indicators.rs`).
+- **Robustness scenario set now matches the reference's four.** The port
+  defined a fifth scenario, `NEWS_CANDLES_INJECTION`, that the Python
+  reference deliberately omits, so the port printed `NEWS IS` / `NEWS OOS1`
+  stages the reference never emits. That was the 194-vs-196 tagged-line gap;
+  both engines now print 194. `inject_news_candles` remains in the crate,
+  unreferenced by the default scenario set, mirroring how the reference keeps
+  its own outside `ROBUSTNESS_SCENARIOS`.
+
 ### Changed
 - `tools/ablations/fee_bias.sh` takes the dataset from a `CSV` environment
   variable (default `data/SOLUSDT_1h.csv`). The cross-dataset rows of the

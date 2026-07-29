@@ -12,8 +12,6 @@ FEE OOS1 (LB 55) | Trades:1688  ROI:$-4,730.26  PF:  0.84  Shp: -3.23  Win: 29.5
 SLI OOS1 (LB 55) | Trades:1688  ROI:$-7,690.62  PF:  0.75  Shp: -5.49  Win: 28.44%  Exp:$-4.29  MaxDD:$7,813.37
 ENT+IND IS (LB 54) | Trades: 175  ROI:$-20.28  PF:  1.01  Shp:  0.07  Win: 35.43%  Exp:$0.17  MaxDD:$359.65
 ENT+IND OOS1 (LB 54) | Trades:1706  ROI:$-3,723.83  PF:  0.87  Shp: -2.49  Win: 30.01%  Exp:$-1.92  MaxDD:$4,546.73
- NEWS IS (LB 55) | Trades: 173  ROI:$-119.86  PF:  0.97  Shp: -0.17  Win: 31.79%  Exp:$-0.41  MaxDD:$439.13
-NEWS OOS1 (LB 55) | Trades:1688  ROI:$-3,134.16  PF:  0.90  Shp: -2.03  Win: 29.68%  Exp:$-1.59  MaxDD:$3,875.12
   W01 IS (LB 55) | Trades: 173  ROI:$-0.72  PF:  1.02  Shp:  0.12  Win: 25.43%  Exp:$0.37  MaxDD:$489.88
  W01 OOS (LB 55) | Trades: 110  ROI:$240.24  PF:  1.13  Shp:  0.56  Win: 28.18%  Exp:$2.32  MaxDD:$310.90
 W01 IS+ENT (LB 55) | Trades: 173  ROI:$-278.38  PF:  0.92  Shp: -0.43  Win: 26.59%  Exp:$-1.26  MaxDD:$716.11

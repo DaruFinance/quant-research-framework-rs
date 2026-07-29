@@ -12,8 +12,6 @@ FEE OOS1 (LB 12) | Trades:3649  ROI:$-12,112.04  PF:  0.75  Shp: -8.01  Win: 52.
 SLI OOS1 (LB 12) | Trades:3649  ROI:$-19,096.69  PF:  0.63  Shp:-12.86  Win: 48.48%  Exp:$-5.16  MaxDD:$19,254.39
 ENT+IND IS (LB 11) | Trades: 492  ROI:$-77.05  PF:  0.99  Shp: -0.07  Win: 54.27%  Exp:$-0.07  MaxDD:$390.26
 ENT+IND OOS1 (LB 11) | Trades:3787  ROI:$-10,276.78  PF:  0.79  Shp: -7.00  Win: 49.12%  Exp:$-2.65  MaxDD:$10,389.05
- NEWS IS (LB 12) | Trades: 482  ROI:$1,416.54  PF:  1.35  Shp:  3.05  Win: 66.39%  Exp:$3.02  MaxDD:$198.16
-NEWS OOS1 (LB 12) | Trades:3649  ROI:$-8,597.71  PF:  0.82  Shp: -5.63  Win: 52.37%  Exp:$-2.29  MaxDD:$9,177.47
   W01 IS (LB 12) | Trades: 482  ROI:$1,576.03  PF:  1.33  Shp:  2.62  Win: 59.96%  Exp:$3.38  MaxDD:$303.66
  W01 OOS (LB 12) | Trades: 203  ROI:$1,131.46  PF:  1.39  Shp:  1.95  Win: 46.31%  Exp:$5.63  MaxDD:$247.35
 W01 IS+ENT (LB 12) | Trades: 482  ROI:$133.29  PF:  1.03  Shp:  0.30  Win: 48.13%  Exp:$0.38  MaxDD:$619.17
