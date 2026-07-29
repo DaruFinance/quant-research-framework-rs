@@ -226,7 +226,7 @@ python tools/parity_forex.py --tol 0.001    # exit 0 = parity
 The full ledger of every surface (green-and-gated or known-divergence-with-reason) is **[docs/PARITY.md](docs/PARITY.md)**. The short version:
 
 - **Four-way combo** (`tools/parity_combo.py`: regime + WFO + forex + session, all at once) is **closed**: 70/70 metric points on EURUSD 1h and SOLUSDT 1h, gated in CI via `tools/sweep_all.sh`.
-- **USD/JPY in the frozen benchmark** is excluded from the cross-engine gate (`cross_engine_check = false`): the JPY `pip_size = 0.01` path has a ~1–2% residual `parity_forex` (EUR/USD) does not exercise. NET/GROSS numbers are still reported.
+- **USD/JPY in the frozen benchmark** is **closed** at v0.7.4 and no longer excluded: all 18 core cells gate green, 144 comparisons, 0 bad @ 1e-3. The residual was a third, unguarded copy of the EMA recursion private to `examples/benchmark_runner.rs`, not the JPY `pip_size` path the manifest used to blame. See docs/PARITY.md.
 - **USD/JPY per-trade ledger** is **closed** at v0.7.4: 1,727/1,727 trades and all 8,635 compared fields, gated in CI. It previously carried one unmatched trade, caused by this port skipping the constant-run guard that pandas' `ewm` kernel applies. See docs/PARITY.md.
 - **Monte Carlo percentiles** and the **`INDICATOR_VARIANCE`** overlay diverge by design (Python MC unseeded, Rust MC seeded); see below.
 - **Python-only, no Rust counterpart:** `backtester/bootstrap.py` (stationary bootstrap) and the `examples/ml_*` strategies. Nothing to diff, not gated.

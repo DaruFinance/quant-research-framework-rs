@@ -138,7 +138,14 @@ id = "USDJPY_1h"
 path = "data/USDJPY_1h.csv"
 kind = "fx"
 oos_candles = 70000   # per-dataset (n=87,648): start_total>0, ~14 genuine WFO windows (kills the mixed-sign wrap)
-cross_engine_check = false  # KNOWN DIVERGENCE, re-measured at v0.7.4. Flipping this
+# cross_engine_check: no longer excluded. Through v0.7.3 this dataset was
+# skipped in the cross-engine gate with a stale reason ("a JPY pip path
+# parity_forex does not cover"). The real cause was a third, unguarded copy of
+# the EMA recursion in examples/benchmark_runner.rs: on USDJPY's forward-filled
+# constant runs it drifted one ulp off pandas, so ema_cross harvested 476 OOS
+# trades against the reference's 474 and macd_zero drifted ~0.15% on an
+# identical stream. With that copy guarded the gate is 18 cells / 144
+# comparisons / 0 bad, so the dataset is checked like every other.
                             # to true gives 18 core cells / 144 comparisons / 6 bad.
                             # The old reason recorded here ("a JPY pip path
                             # parity_forex does not cover") is WRONG: parity_forex

@@ -99,7 +99,9 @@ fn ewm(series: &[f64], span: usize) -> Vec<f64> {
         if v.is_nan() {
             continue;
         }
-        state = if state.is_nan() { v } else { alpha * v + (1.0 - alpha) * state };
+        // pandas' ewm constant-run guard; see `compute_ema` in src/lib.rs.
+        state = if state.is_nan() || state == v { v }
+                else { alpha * v + (1.0 - alpha) * state };
         out[i] = state;
     }
     out

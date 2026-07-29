@@ -58,7 +58,12 @@ fn ema(close: &[f64], span: usize) -> Vec<f64> {
     }
     out[0] = close[0];
     for i in 1..close.len() {
-        out[i] = alpha * close[i] + (1.0 - alpha) * out[i - 1];
+        // pandas' ewm constant-run guard; see `compute_ema` in src/lib.rs.
+        out[i] = if out[i - 1] == close[i] {
+            close[i]
+        } else {
+            alpha * close[i] + (1.0 - alpha) * out[i - 1]
+        };
     }
     out
 }

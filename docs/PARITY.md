@@ -33,7 +33,7 @@ make parity     # or: python tools/parity_check.py && parity_regime.py && parity
 | Panel substrate (regime / baskets / ERC / neutralisations) | `parity_panel.py` | agree (ERC iterative solver ~3e-5) |
 | Pairs primitives (spread / screener / cadence / stops) | `parity_pairs.py` | agree @ 1e-3 |
 | Carry primitives (funding / basis / OI / triggers / models) | `parity_carry.py` | agree @ 1e-3 |
-| Frozen robustness benchmark (15 core cells) | `tools/benchmark.py --cross-engine` | 120 comparisons, 0 bad @ 1e-3 |
+| Frozen robustness benchmark (18 core cells) | `tools/benchmark.py --cross-engine` | 144 comparisons, 0 bad @ 1e-3 |
 
 The v0.5.0 multi-asset substrate (panel / pairs / carry) **is** re-verified at
 v0.6.0: those three harnesses run in CI on every push, so the substrate is
@@ -50,12 +50,20 @@ green, not a deferred gap.
    three are now guarded by the session flag, leaving the single-feature
    surfaces byte-unchanged. Gated in CI via `tools/sweep_all.sh`.
 
-2. **USD/JPY in the frozen benchmark** (`cross_engine_check = false` in
-   `tools/benchmark_manifest.toml`). The JPY `pip_size = 0.01` forex path has a
-   ~1–2% Python↔Rust residual that `parity_forex` (EUR/USD, `pip_size = 0.0001`)
-   does not exercise. The NET/GROSS numbers for USD/JPY are still reported in
-   the golden; only the cross-engine **gate** skips that one dataset, with the
-   reason inline in the manifest. The other 15 core cells gate green.
+2. **USD/JPY in the frozen benchmark.** CLOSED at v0.7.4. The dataset is no
+   longer excluded: all 18 core cells gate green, 144 comparisons, 0 bad @ 1e-3.
+
+   The reason previously recorded here was wrong. It blamed a JPY `pip_size`
+   path `parity_forex` did not cover, but that harness gates USD/JPY green at
+   1e-3 and has since v0.7.0. The actual cause was a third, unguarded copy of
+   the EMA recursion, private to `examples/benchmark_runner.rs`, which missed
+   the pandas constant-run guard that divergence 3 below describes. On USD/JPY's
+   forward-filled flat bars it drifted one ulp off the reference, so the strict
+   comparisons in `signal_ema_cross` resolved to +/-1 where the reference gives
+   0: that cell harvested 476 OOS trades against the reference's 474 (~1.3% on
+   the net metrics), and `signal_macd_zero` drifted ~0.15% on an otherwise
+   identical 2,036-trade stream. `eff_oos_bars` agreed on all 15 non-USD/JPY
+   cells throughout, which is what localised it.
 
 3. **USD/JPY per-trade ledger, one trade of 1,727** (`parity_ledger.py --forex`
    on `USDJPY_1h`). CLOSED at v0.7.4. Passes 1,727/1,727 trades and all 8,635
@@ -84,9 +92,16 @@ green, not a deferred gap.
    entry stops out on the next bar for a full -1R, so one extra signal became
    one extra complete trade.
 
-   The fix mirrors the pandas guard in both Rust EMA sites (`compute_ema` in
-   `src/lib.rs` and in `src/indicators.rs`): skip the update when the running
-   average already equals the incoming observation.
+   The fix mirrors the pandas guard: skip the update when the running average
+   already equals the incoming observation. It is applied at every site in this
+   crate that reimplements a pandas `ewm`, not only the one the bug surfaced
+   through: `compute_ema` in `src/lib.rs`, `compute_ema` and the NaN-tolerant
+   `ema` in `src/indicators.rs`, `src/volume.rs`, `src/panel/regime.rs`, and
+   the private copies in `examples/benchmark_runner.rs`, `examples/batch_runner.rs`
+   and `examples/atr_cross.rs`. `ewm_adjusted` is left alone: the `adjust=True`
+   accumulator is a different algorithm and does not carry the same trap.
+   `tests/invariants.rs` now asserts a constant run stays exactly flat, so the
+   bug cannot come back unnoticed.
 
 4. **Monte Carlo percentiles**: *intentional.* Python draws from NumPy's
    global RNG; Rust uses `StdRng` seeded to 42. Different algorithms, so the

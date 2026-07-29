@@ -305,8 +305,40 @@ fn compute_ema_matches_recursive_form() {
     assert_eq!(ema.len(), close.len());
     assert_eq!(ema[0], close[0]);
     for i in 1..close.len() {
-        let want = alpha * close[i] + (1.0 - alpha) * ema[i - 1];
+        let want = if ema[i - 1] == close[i] {
+            close[i]
+        } else {
+            alpha * close[i] + (1.0 - alpha) * ema[i - 1]
+        };
         assert!((ema[i] - want).abs() < 1e-9,
             "EMA off at bar {}: got {}, want {}", i, ema[i], want);
+    }
+}
+
+/// A constant run must stay EXACTLY flat, which the bare multiply-and-add does
+/// not guarantee: `alpha*x + (1-alpha)*x` fails to round back to `x` at many
+/// span/price combinations, and pandas' `ewm` kernel avoids it by skipping the
+/// update when the running average already equals the incoming observation.
+/// One ulp there is enough to flip a strict `fast > slow` comparison on
+/// forward-filled bars and open a trade the Python reference never takes,
+/// which is exactly what it did on `USDJPY_1h` before v0.7.4. Regression guard
+/// for that bug: price levels chosen from the probed set where the unguarded
+/// form is known to drift.
+#[test]
+fn compute_ema_is_exactly_flat_on_a_constant_run() {
+    for &px in &[99.7_f64, 110.25, 112.551, 123.456] {
+        for span in [2_usize, 5, 8, 12, 20, 47] {
+            let close = vec![px; 64];
+            let ema = compute_ema(&close, span);
+            for (i, &e) in ema.iter().enumerate() {
+                assert_eq!(e, px,
+                    "EMA drifted off a constant run at px={px} span={span} bar={i}: \
+                     got {e:?}, want {px:?} (delta {:e})", e - px);
+            }
+            // The fast/slow gap a crossover strategy tests must be exactly zero.
+            let slow = compute_ema(&close, span * 4);
+            assert!(ema.iter().zip(slow.iter()).all(|(f, s)| f == s),
+                "fast and slow EMAs unequal on a constant run at px={px} span={span}");
+        }
     }
 }

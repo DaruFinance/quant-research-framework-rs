@@ -8,27 +8,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.4] - 2026-07-29
 
 ### Fixed
-- **`compute_ema` now mirrors pandas' constant-run guard.** The pandas `ewm`
-  kernel skips the update whenever the running average already equals the
-  incoming observation. This port applied the multiply-and-add
+- **Every mirror of pandas' `ewm` now carries its constant-run guard.** The
+  pandas kernel skips the update whenever the running average already equals
+  the incoming observation. This port applied the multiply-and-add
   unconditionally, and `alpha*x + (1-alpha)*x` does not round back to `x` at
   every span and price level: across 780 probed (span, price) pairs it lands
   one unit in the last place away in 125 of them. On a run of constant-price
-  bars, where the fast and slow EMAs are equal in exact arithmetic, that
-  residue was enough to flip a strict indicator comparison. It opened one
-  short on `USDJPY_1h` that the reference does not take, the last remaining
-  known divergence on the parity surface. `parity_ledger --forex` on that
-  series now passes 1,727/1,727 trades and all 8,635 compared fields, and
-  `tools/sweep_all.sh` gates it as an ordinary row rather than through
-  `run_known`. Both EMA sites carry the guard (`src/lib.rs`,
-  `src/indicators.rs`).
+  bars, where a fast and a slow EMA are equal in exact arithmetic, that residue
+  is enough to flip a strict indicator comparison. It closed the last two
+  cross-engine divergences on record, both on `USDJPY_1h`, whose 25,325
+  zero-range bars (28.9% of the file) are forward-filled non-trading hours:
+
+  - **The per-trade ledger.** The port opened one short of 1,727 that the
+    reference does not take. `parity_ledger --forex` now passes 1,727/1,727
+    trades and all 8,635 compared fields, so `tools/sweep_all.sh` gates it as
+    an ordinary row instead of through `run_known`. Blast radius is one trade:
+    regenerating the cross-architecture goldens leaves five of six datasets
+    byte-identical and moves USD/JPY in the `W03 OOS` stages alone, 90 to 89.
+  - **The frozen benchmark.** Guarding the two core sites was not enough:
+    `examples/benchmark_runner.rs` carried a third, private copy of the
+    recursion whose comment asserted it was "identical" to pandas. It was not,
+    and it was the real cause of the residual that `cross_engine_check = false`
+    had been suppressing under a reason (a JPY `pip_size` path) already fixed
+    at v0.7.0. `signal_ema_cross` harvested 476 OOS trades against the
+    reference's 474, ~1.3% on the net metrics, and `signal_macd_zero` drifted
+    ~0.15% on an identical 2,036-trade stream. The cross-engine gate is now
+    18 core cells / 144 comparisons / 0 bad, USD/JPY is no longer excluded, and
+    the manifest flag is gone. The published Python golden is unchanged, since
+    only the port moved.
+
+  The guard is applied at every site that reimplements a pandas `ewm`:
+  `src/lib.rs`, both EMAs in `src/indicators.rs`, `src/volume.rs`,
+  `src/panel/regime.rs`, and the `benchmark_runner`, `batch_runner` and
+  `atr_cross` examples. `ewm_adjusted` is deliberately left alone, since the
+  `adjust=True` accumulator is a different algorithm without the same trap.
+- **Regression cover for the above.** `compute_ema_matches_recursive_form` was
+  asserting the *unguarded* formula as the specification and would have blessed
+  the bug indefinitely; it now encodes the guard. A new
+  `compute_ema_is_exactly_flat_on_a_constant_run` asserts a constant run stays
+  exactly flat, and that the fast/slow gap a crossover tests is exactly zero,
+  across the span and price combinations where the unguarded form was measured
+  to drift.
 - **Robustness scenario set now matches the reference's four.** The port
   defined a fifth scenario, `NEWS_CANDLES_INJECTION`, that the Python
   reference deliberately omits, so the port printed `NEWS IS` / `NEWS OOS1`
   stages the reference never emits. That was the 194-vs-196 tagged-line gap;
-  both engines now print 194. `inject_news_candles` remains in the crate,
-  unreferenced by the default scenario set, mirroring how the reference keeps
-  its own outside `ROBUSTNESS_SCENARIOS`.
+  both engines now print 194. Dropping it from the port is the right direction:
+  the injection is PRNG-driven, Mersenne Twister on one side and ChaCha on the
+  other, so adding it to the reference would have placed the synthetic wicks on
+  different bars and created a permanent divergence instead of closing one.
+  `inject_news_candles` remains in the crate, unreferenced by the default
+  scenario set, mirroring how the reference keeps its own outside
+  `ROBUSTNESS_SCENARIOS`.
+- `docs/PARITY.md` named the wrong root cause for the USD/JPY ledger
+  divergence. It is a one-unit-in-the-last-place difference between the two EMA
+  recursions on a constant-price run, not a segment-boundary effect.
+- `tools/parity_combo.py` and `tools/sweep_all.sh` carried stale harness labels
+  (a 14-stage count that is 10, and the superseded divergence description).
+- `CITATION.cff` published a private address in its author `email` field.
 
 ### Changed
 - `tools/ablations/fee_bias.sh` takes the dataset from a `CSV` environment
@@ -37,14 +74,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CSV=data/BTCUSDT_30m.csv bash tools/ablations/fee_bias.sh` and likewise for
   the other series. Before this the script hard-coded SOLUSDT, so those rows
   could not be reproduced from a released tag.
-
-### Fixed
-- `docs/PARITY.md` named the wrong root cause for the USD/JPY ledger
-  divergence. It is a one-unit-in-the-last-place difference between the two EMA
-  recursions on a constant-price run, not a segment-boundary effect.
-- `tools/parity_combo.py` and `tools/sweep_all.sh` carried stale harness labels
-  (a 14-stage count that is 10, and the superseded divergence description).
-- `CITATION.cff` published a private address in its author `email` field.
 
 ## [0.7.3] - 2026-07-28
 

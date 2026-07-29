@@ -91,6 +91,9 @@ pub fn ema(series: &[f64], span: usize) -> Vec<f64> {
         }
         state = if state.is_nan() {
             v
+        } else if state == v {
+            // pandas' ewm constant-run guard; see `compute_ema` in src/lib.rs.
+            v
         } else {
             alpha * v + (1.0 - alpha) * state
         };

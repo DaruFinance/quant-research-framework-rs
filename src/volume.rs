@@ -59,7 +59,13 @@ pub fn volume_ema(volume: &[f64], span: usize) -> Vec<f64> {
     }
     out[0] = volume[0];
     for i in 1..n {
-        out[i] = alpha * volume[i] + (1.0 - alpha) * out[i - 1];
+        // pandas' ewm constant-run guard; see `compute_ema` in src/lib.rs.
+        // Flat-volume stretches are common, so this path hits often.
+        out[i] = if out[i - 1] == volume[i] {
+            volume[i]
+        } else {
+            alpha * volume[i] + (1.0 - alpha) * out[i - 1]
+        };
     }
     out
 }

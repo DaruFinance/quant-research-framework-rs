@@ -58,13 +58,22 @@ fn shifted(sig: Vec<i8>) -> Vec<i8> {
     out
 }
 fn ema(c: &[f64], span: usize) -> Vec<f64> {
-    // ewm(span, adjust=False): o[0]=c[0], alpha=2/(span+1). Matches pandas
-    // ewm(adjust=False) used by signal_ema_cross / signal_macd_zero -> identical.
+    // ewm(span, adjust=False): o[0]=c[0], alpha=2/(span+1), mirroring the
+    // pandas call used by signal_ema_cross / signal_macd_zero. The `o[i-1] ==
+    // c[i]` short-circuit is load-bearing, not an optimisation: the pandas
+    // kernel skips the update when the running average already equals the
+    // incoming observation, and without it a*x + (1-a)*x fails to round back
+    // to x at many span/price combinations. On a constant run the fast and
+    // slow EMAs are then unequal by one ulp, the strict comparisons below
+    // resolve to +/-1 where the reference yields 0, and this cell harvests
+    // trades the reference never takes. See `compute_ema` in src/lib.rs.
     let a = 2.0 / (span as f64 + 1.0);
     let mut o = vec![0.0; c.len()];
     if c.is_empty() { return o; }
     o[0] = c[0];
-    for i in 1..c.len() { o[i] = a * c[i] + (1.0 - a) * o[i - 1]; }
+    for i in 1..c.len() {
+        o[i] = if o[i - 1] == c[i] { c[i] } else { a * c[i] + (1.0 - a) * o[i - 1] };
+    }
     o
 }
 fn signal_ema_cross(b: &[Bar], lb: usize) -> Vec<i8> {

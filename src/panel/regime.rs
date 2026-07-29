@@ -40,7 +40,8 @@ fn ema(close: &[f64], span: usize) -> Vec<f64> {
     let mut prev = close[0];
     out.push(prev);
     for &c in &close[1..] {
-        prev = alpha * c + (1.0 - alpha) * prev;
+        // pandas' ewm constant-run guard; see `compute_ema` in src/lib.rs.
+        prev = if prev == c { c } else { alpha * c + (1.0 - alpha) * prev };
         out.push(prev);
     }
     out
