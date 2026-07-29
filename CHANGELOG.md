@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-07-29
+
+### Changed
+- `tools/ablations/fee_bias.sh` takes the dataset from a `CSV` environment
+  variable (default `data/SOLUSDT_1h.csv`). The cross-dataset rows of the
+  fault-injection campaign are reproduced with
+  `CSV=data/BTCUSDT_30m.csv bash tools/ablations/fee_bias.sh` and likewise for
+  the other series. Before this the script hard-coded SOLUSDT, so those rows
+  could not be reproduced from a released tag.
+
+### Fixed
+- `docs/PARITY.md` named the wrong root cause for the USD/JPY ledger
+  divergence. It is a one-unit-in-the-last-place difference between the two EMA
+  recursions on a constant-price run, not a segment-boundary effect.
+- `tools/parity_combo.py` and `tools/sweep_all.sh` carried stale harness labels
+  (a 14-stage count that is 10, and the superseded divergence description).
+- `CITATION.cff` published a private address in its author `email` field.
+
 ## [0.7.3] - 2026-07-28
 
 ### Fixed
