@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.5] - 2026-07-30
+
+### Fixed
+- **Stage labels now match the reference exactly.** The port annotated its
+  `Baseline` and robustness stages with the selected lookback (`Baseline IS
+  (LB 47)`, `FEE OOS1 (LB 47)`) where the reference prints them bare
+  (`prettyprint(f"{label} IS", ...)` and `prettyprint('Baseline IS', ...)` in
+  `__init__.py`, both called without an `lb`). Ten call sites in `src/lib.rs`
+  now pass `None`. The windowed stages, which the reference *does* annotate,
+  are untouched.
+
+  This was not a numerical divergence, and no compared value moves:
+  regenerating the cross-architecture goldens leaves all six datasets
+  value-identical once the `(LB nn)` prefix is stripped. It mattered because a
+  label that differs cannot be compared tag-to-tag, so those lines were
+  unreachable by the diff even in principle. With the labels aligned, both
+  engines emit the same 194 tags and the parity whitelist is a scope decision
+  alone: widening it is now a matter of choosing to compare more lines, not of
+  first making them comparable.
+
 ## [0.7.4] - 2026-07-29
 
 ### Fixed

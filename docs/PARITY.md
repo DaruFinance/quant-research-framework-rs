@@ -124,6 +124,15 @@ green, not a deferred gap.
    default scenario set, exactly as the reference keeps its own
    `inject_news_candles` outside `ROBUSTNESS_SCENARIOS`.
 
+7. **Printed stage labels differed.** CLOSED at v0.7.5. The port annotated its
+   `Baseline` and robustness stages with the selected lookback (`Baseline IS
+   (LB 47)`) where the reference prints them bare. Not a numerical divergence,
+   and no compared value moved: the regenerated goldens are value-identical
+   once the `(LB nn)` prefix is stripped. It mattered because a label that
+   differs cannot be compared tag-to-tag, so those lines sat outside the diff's
+   reach even in principle. Both engines now emit the same 194 tags, and the
+   parity whitelist is a scope decision alone.
+
 ## Python-only: no Rust counterpart, not cross-engine-checked by design
 
 These ship in the Python reference and have no Rust port, so there is nothing

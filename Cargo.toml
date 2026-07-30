@@ -1,6 +1,6 @@
 [package]
 name = "quant-research-framework-rs"
-version = "0.7.4"
+version = "0.7.5"
 edition = "2021"
 description = "Walk-forward backtester with robustness tests (Rust port of quant-research-framework)"
 license = "Apache-2.0"

@@ -1845,8 +1845,11 @@ fn run_robustness_tests(all_bars: &[Bar], best_lb: Option<usize>, best_rrr: Opti
         if opts.drift_on { sig_oos = drift_entries(&sig_oos); }
         let (_, met_oos, _, _) = run_backtest(oos_bars, &sig_oos, &cfg_rb);
 
-        prettyprint(&format!("{} IS", label), &met_is, Some(lb_use));
-        prettyprint(&format!("{} OOS1", label), &met_oos, Some(lb_use));
+        // No lookback note: the reference prints these robustness stages
+        // without one (`prettyprint(f"{label} IS", ...)` in __init__.py), and a
+        // label that differs cannot be compared tag-to-tag.
+        prettyprint(&format!("{} IS", label), &met_is, None);
+        prettyprint(&format!("{} OOS1", label), &met_oos, None);
     }
 }
 
@@ -1867,9 +1870,9 @@ pub fn run(bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn) {
 
     println!(" Baseline Optimized Metrics ");
     if let Some(ref met) = base.met_is_opt {
-        prettyprint("Baseline IS", met, base.best_lb);
+        prettyprint("Baseline IS", met, None);
         if let Some(ref met_oos) = base.met_oos_opt {
-            prettyprint("Baseline OOS", met_oos, base.best_lb);
+            prettyprint("Baseline OOS", met_oos, None);
         }
     }
 
@@ -1894,9 +1897,9 @@ pub fn run_cfg(bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn, mut cfg: Conf
 
     println!(" Baseline Optimized Metrics ");
     if let Some(ref met) = base.met_is_opt {
-        prettyprint("Baseline IS", met, base.best_lb);
+        prettyprint("Baseline IS", met, None);
         if let Some(ref met_oos) = base.met_oos_opt {
-            prettyprint("Baseline OOS", met_oos, base.best_lb);
+            prettyprint("Baseline OOS", met_oos, None);
         }
     }
 
@@ -2331,8 +2334,8 @@ pub fn run_with_regime(
     let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
 
     println!(" Baseline Optimized Metrics ");
-    if let Some(ref met) = base.met_is_opt { prettyprint("Baseline IS", met, base.best_lb); }
-    if let Some(ref met) = base.met_oos_opt { prettyprint("Baseline OOS", met, base.best_lb); }
+    if let Some(ref met) = base.met_is_opt { prettyprint("Baseline IS", met, None); }
+    if let Some(ref met) = base.met_oos_opt { prettyprint("Baseline OOS", met, None); }
     run_robustness_tests(&bars, base.best_lb, base.best_rrr, &cfg, sig_fn);
 
     println!("\n Running Walk-Forward Windows (regime-rotated LB) ");
@@ -2354,8 +2357,8 @@ pub fn run_with_regime_cfg(
     DISPLAY_FOREX.store(cfg.use_forex, Ordering::Relaxed);
     let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
     println!(" Baseline Optimized Metrics ");
-    if let Some(ref met) = base.met_is_opt { prettyprint("Baseline IS", met, base.best_lb); }
-    if let Some(ref met) = base.met_oos_opt { prettyprint("Baseline OOS", met, base.best_lb); }
+    if let Some(ref met) = base.met_is_opt { prettyprint("Baseline IS", met, None); }
+    if let Some(ref met) = base.met_oos_opt { prettyprint("Baseline OOS", met, None); }
     run_robustness_tests(&bars, base.best_lb, base.best_rrr, &cfg, sig_fn);
     println!("\n Running Walk-Forward Windows (regime-rotated LB) ");
     walk_forward_regime(&bars, &mut cfg, &regime_cfg, &base.eq_is_raw);
