@@ -103,6 +103,14 @@ run "parity_carry"         python3 tools/parity_carry.py --tol "$TOL"
 echo
 echo "== determinism, suites and guards =="
 run "parity_arch/x86_64 goldens" python3 tools/parity_arch.py --bin target/release/backtester
+# Lockfile satisfiability. `--locked` forbids touching Cargo.lock and the
+# feature set drags in the whole optional graph (statrs -> nalgebra -> simba ->
+# wide -> safe_arch), so a lock entry that no longer resolves fails HERE rather
+# than in a reader's clean clone. v0.7.3 through v0.7.5 shipped a safe_arch pin
+# that did not exist on crates.io; every local sweep stayed green because the
+# default build skips statrs and a warm target/ never re-resolves.
+run "cargo lock resolves"        cargo metadata --locked --format-version 1 \
+  --features "panel,pairs,carry,dsr,overfit,indicators"
 run "benchmark --check"          python3 tools/benchmark.py --check
 run "check_consistency"          python3 tools/check_consistency.py
 run "cargo test"                 cargo test --release --jobs 1 --features "panel,pairs,carry,dsr,indicators"
