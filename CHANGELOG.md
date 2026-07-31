@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.6] - 2026-07-31
+
+### Fixed
+- **`Cargo.lock` pinned a `safe_arch` version that does not exist.** The lock
+  carried `safe_arch 0.7.5`; the crates.io 0.7.x line tops out at 0.7.4, so the
+  version is absent from the index rather than merely yanked. Any resolution of
+  the `statrs` chain (`wide` -> `simba` -> `nalgebra` -> `statrs`) therefore
+  failed, which gates the `dsr`, `overfit`, `panel`, `pairs` and `carry`
+  features and with them the `parity_dsr`, `parity_pbo`, `parity_multitest`,
+  `parity_panel`, `parity_pairs` and `parity_carry` harnesses. Repinned to
+  0.7.4, which satisfies `wide`'s `^0.7` requirement and exists.
+
+  The defect was present in v0.7.3, v0.7.4 and v0.7.5 and reproduces from a
+  clean clone of any of them. It stayed hidden because the default build does
+  not need `statrs` and a warm `target/` never re-resolves; CI caught it only
+  when `cargo clippy` refreshed the index. `make sweep` from a warm tree was
+  green throughout, which is exactly why a warm tree is not sufficient
+  evidence that a release builds.
+
 ## [0.7.5] - 2026-07-30
 
 ### Fixed
