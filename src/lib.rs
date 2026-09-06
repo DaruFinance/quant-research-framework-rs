@@ -1121,10 +1121,9 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
         if let Some(cached) = cache.get(&lb) { return cached.clone(); }
         let raw = sig_fn(bars, lb);
         let sig = parse_signals_for(&raw, bars, cfg);
-        let met;
-        if !OPTIMIZE_RRR {
+        let met = if !OPTIMIZE_RRR {
             let (_, m, _, _) = run_backtest(bars, &sig, cfg);
-            met = m;
+            m
         } else {
             let old_tp = cfg.tp_percentage;
             let old_use = cfg.use_tp;
@@ -1174,8 +1173,8 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
             m.rrr = Some(best_rrr);
             cfg.tp_percentage = old_tp;
             cfg.use_tp = old_use;
-            met = m;
-        }
+            m
+        };
         if met.trades < MIN_TRADES { cache.insert(lb, None); return None; }
         if let Some(dd_c) = cfg.dd_constraint() {
             if met.max_drawdown > dd_c { cache.insert(lb, None); return None; }
