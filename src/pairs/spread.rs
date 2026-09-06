@@ -6,8 +6,8 @@
 //! Parity (vs. Python `backtester.pairs.spread`):
 //! - `log_ratio`        : bit-equal under f64.
 //! - `ols_resid`        : closed-form OLS via the same normal equations
-//!                         numpy.polyfit(deg=1) implements; agrees to
-//!                         ~1e-12 in practice on financial-scale data.
+//!   numpy.polyfit(deg=1) implements; agrees to
+//!   ~1e-12 in practice on financial-scale data.
 //! - `kalman_beta_spread`: deterministic float math; agrees to ~1e-12.
 
 #![cfg(feature = "pairs")]

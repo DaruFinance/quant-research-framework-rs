@@ -9,7 +9,7 @@ relative; the maximum observed deviation on the core surfaces is below `5e-5`
 Reproduce all green surfaces at once:
 
 ```bash
-make parity     # or: python tools/parity_check.py && parity_regime.py && parity_forex.py ...
+make sweep
 ```
 
 ## Green: gated in CI (`.github/workflows/parity.yml`)
@@ -23,6 +23,8 @@ make parity     # or: python tools/parity_check.py && parity_regime.py && parity
 | Regime + WFO (SOL 1h) | `parity_regime.py` | 98/98 metric points @ 1e-3 |
 | Forex mode (EURUSD 1h) | `parity_forex.py` | 56/56 metric points @ 1e-3 |
 | Ledger, row-by-row (SOL 1h) | `parity_ledger.py` | per-trade agree @ 1e-3 |
+| Forex ledger, row-by-row (USDJPY 1h) | `parity_ledger.py --forex` | per-trade agree @ 1e-3 |
+| Four-way combo (EURUSD and SOL 1h) | `parity_combo.py` | 70/70 metric points per dataset @ 1e-3 |
 | Shared indicators (SMA/EMA/MACD/RSI/ATR/Stochastic) | `parity_indicators.py` | agree @ 1e-3 |
 | Volume indicators + strategy | `parity_volume.py` | agree @ 1e-3 |
 | IS objective surface (2-axis, SL-3axis, bar-Sharpe) | `parity_surface.py` | agree @ 1e-3 |
@@ -39,7 +41,7 @@ The v0.5.0 multi-asset substrate (panel / pairs / carry) **is** re-verified at
 v0.6.0: those three harnesses run in CI on every push, so the substrate is
 green, not a deferred gap.
 
-## Known divergences: labeled, not gated
+## Documented differences and resolved comparisons
 
 1. **Four-way combo** (`parity_combo.py`: regime + WFO + forex + session, all
    at once). CLOSED. Passes 70/70 metric points on EURUSD 1h and SOLUSDT 1h.
@@ -48,7 +50,8 @@ green, not a deferred gap.
    (an opposite-flip entry could override the force-close, a new entry was not
    blocked on the closing bar, and the intrabar SL/TP check still ran). All
    three are now guarded by the session flag, leaving the single-feature
-   surfaces byte-unchanged. Gated in CI via `tools/sweep_all.sh`.
+   surfaces byte-unchanged. Both datasets run through `tools/parity_combo.py`
+   directly in CI.
 
 2. **USD/JPY in the frozen benchmark.** CLOSED at v0.7.4. The dataset is no
    longer excluded: all 18 core cells gate green, 144 comparisons, 0 bad @ 1e-3.
@@ -67,7 +70,7 @@ green, not a deferred gap.
 
 3. **USD/JPY per-trade ledger, one trade of 1,727** (`parity_ledger.py --forex`
    on `USDJPY_1h`). CLOSED at v0.7.4. Passes 1,727/1,727 trades and all 8,635
-   compared fields, gated in CI like every other ledger surface.
+   compared fields. CI checks this ledger and the SOLUSDT ledger directly.
 
    The cause was a floating-point tie, not a segment boundary. Both engines
    resolved the same W03 OOS slice (`bars[7648:12648]`), both loaders read all

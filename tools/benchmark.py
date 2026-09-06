@@ -43,8 +43,9 @@ DUAL COST: each cell is run NET then GROSS. NET = engine defaults
 EXPLICITLY LABELED frictionless comparison column, NEVER the headline result.
 
 DSR/PBO (item 3) consume the WFO OOS NET trial set ONLY (not GROSS):
-  - DSR(returns=all_oos_rets, sharpe_chosen=cell NET OOS Sharpe,
-        trial_sharpes=distinct-strategy NET OOS Sharpes on that dataset).
+  - DSR(returns=all_oos_rets, sharpe_chosen=mean/std of that cell's returns,
+        trial_sharpes=mean/std of each distinct strategy's NET OOS returns).
+        Each trial uses its own sample size, with no sqrt(T) scaling.
         Trials = STRATEGIES, not windows (effective-trials discipline).
   - PBO over the strategies' WFO OOS equity curves (eq_wfo), per dataset.
   Both degrade gracefully if backtester.dsr / backtester.pbo are absent.
@@ -88,9 +89,12 @@ GOLDEN_DIR = REPO / "data" / "golden"
 LEADERBOARD_MD = REPO / "docs" / "benchmark_leaderboard.md"
 
 # The Python reference engine lives in a sibling checkout (CI checks both out
-# side-by-side: parity.yml); locally BT_PY_REPO can point at it.
-_PY_REPO = Path(os.environ.get(
-    "BT_PY_REPO", REPO.parent / "quant-research-framework"))
+# side-by-side: parity.yml). QRF_PY_DIR takes precedence over legacy BT_PY_REPO.
+_PY_REPO = Path(
+    os.environ.get("QRF_PY_DIR")
+    or os.environ.get("BT_PY_REPO")
+    or REPO.parent / "quant-research-framework"
+)
 if str(_PY_REPO) not in sys.path:
     sys.path.insert(0, str(_PY_REPO))
 
@@ -261,7 +265,7 @@ def run_cells(m):
         import backtester as bt
     except ImportError as e:
         print("  ERROR: cannot import the Python reference engine "
-              "'backtester'.\n  Set BT_PY_REPO to your quant-research-framework "
+            "'backtester'.\n  Set QRF_PY_DIR to your quant-research-framework "
               f"checkout (sibling of this repo). Tried: {_PY_REPO}\n  ({e})",
               file=sys.stderr)
         raise SystemExit(2)
@@ -278,7 +282,6 @@ def run_cells(m):
     sig_lib = _load_signal_lib()
     rows = []
     eq_by_dataset = {}          # ds_id -> {sid: net WFO-OOS equity ndarray}
-    sharpe_by_dataset = {}      # ds_id -> {sid: net OOS Sharpe}   (DSR trials)
     rets_by_cell = {}           # (ds_id,sid) -> net all_oos_rets  (DSR returns)
 
     enabled = [s for s in m["strategies"] if s.get("enabled", True)]
@@ -294,7 +297,6 @@ def run_cells(m):
         df = bt.load_ohlc(str(csv_path))
         use_forex = (ds["kind"] == "fx")
         eq_by_dataset[ds["id"]] = {}
-        sharpe_by_dataset[ds["id"]] = {}
         for strat in enabled:
             sid = strat["id"]
             sig_fn = sig_lib.get(sid)        # None for engine_ema (built-in)
@@ -314,7 +316,6 @@ def run_cells(m):
 
             if strat.get("core"):
                 eq_by_dataset[ds["id"]][sid] = eqw_net
-            sharpe_by_dataset[ds["id"]][sid] = agg_net["sharpe"]
             rets_by_cell[(ds["id"], sid)] = oos_net
 
             rows.append({
@@ -337,28 +338,32 @@ def run_cells(m):
                 "dsr": None,
             })
     # ---- LIVE DSR (per cell) + PBO (per dataset), off the NET WFO OOS set ----
-    _fill_dsr(rows, sharpe_by_dataset, rets_by_cell)
+    _fill_dsr(rows, rets_by_cell)
     pbo_by_ds = _pbo_corpus(eq_by_dataset)
     return rows, pbo_by_ds
 
 
-def _fill_dsr(rows, sharpe_by_dataset, rets_by_cell):
+def _fill_dsr(rows, rets_by_cell):
     """DSR per cell off the NET WFO OOS stream. trial_sharpes = the
     distinct-strategy NET OOS Sharpes on that dataset (trials = STRATEGIES, not
     windows, effective-trials discipline, constraint #6). returns = the cell's
     concatenated WFO OOS per-trade stream (OOS-only -> no look-ahead).
+    All DSR Sharpes are mean/sample_std, recomputed separately for each
+    strategy; the printed net_sharpe t-statistic remains unchanged.
     Degrades to None if backtester.dsr is absent or inputs are degenerate.
     """
     try:
-        from backtester.dsr import deflated_sharpe_ratio as _dsr
+        from backtester.dsr import deflated_sharpe_ratio as _dsr, sharpe_per_observation
     except Exception:
         return
+    observation_sharpes = {key: sharpe_per_observation(rets)
+                           for key, rets in rets_by_cell.items()}
     for r in rows:
         ds_id, sid = r["dataset"], r["strategy"]
-        trials = [s for k, s in sharpe_by_dataset.get(ds_id, {}).items()
-                  if s is not None and math.isfinite(s)]
+        trials = [s for (dataset, _), s in observation_sharpes.items()
+                  if dataset == ds_id and math.isfinite(s)]
         rets = rets_by_cell.get((ds_id, sid))
-        sh = r["net_sharpe"]
+        sh = observation_sharpes.get((ds_id, sid))
         if (rets is None or len(rets) < 3 or len(trials) < 2
                 or sh is None or not math.isfinite(sh)):
             continue

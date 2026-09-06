@@ -12,7 +12,7 @@ trades that happen to compensate in aggregate. Ledger parity catches
 that, every trade's side, entry price, exit price, and PnL must agree
 within tolerance.
 
-Both engines write ``trade_list.csv`` to their own working directory
+Both engines write ledgers into this invocation's private temporary directory
 with identical schema:
     strategy, window, sample, side,
     entry_time, open_entry, high_entry, low_entry, close_entry,
@@ -35,6 +35,7 @@ import math
 import os
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -114,10 +115,11 @@ def load_ledger(path: Path) -> list[TradeRow]:
         return [_row(d) for d in csv.DictReader(f)]
 
 
-def run_python(csv_path: Path, forex: bool = False) -> Path:
+def run_python(csv_path: Path, output_path: Path, forex: bool = False) -> Path:
     """Run the Python engine; returns the path to its written ledger."""
     env = os.environ.copy()
     env["BT_CSV"] = str(Path(csv_path).resolve())
+    env["BT_EXPORT_PATH"] = str(output_path.resolve())
     env["MPLBACKEND"] = "Agg"
     forex_setup = """
 bt.FOREX_MODE    = True
@@ -145,67 +147,42 @@ bt.main()
     if proc.returncode != 0:
         sys.stderr.write(f"Python run failed:\n{proc.stderr}\n")
         sys.exit(2)
-    return REPO_PY / "trade_list.csv"
+    return output_path
 
 
-FOREX_RUNNER = r'''
-use quant_research_framework_rs::{Bar, Config, compute_ema, load_ohlc, run_cfg};
-
-fn ema_strategy(bars: &[Bar], lb: usize) -> Vec<i8> {
-    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    let fast = compute_ema(&close, 20);
-    let slow = compute_ema(&close, lb);
-    let n = bars.len();
-    let mut raw = vec![0i8; n];
-    for i in 1..n {
-        if fast[i - 1].is_nan() || slow[i - 1].is_nan() { continue; }
-        raw[i] = if fast[i - 1] > slow[i - 1] { 1 }
-                 else if fast[i - 1] < slow[i - 1] { -1 } else { 0 };
-    }
-    raw
-}
-
-fn main() {
-    let csv = std::env::args().nth(1).unwrap();
-    let bars = load_ohlc(&csv);
-    // Pip size comes from the engine, mirroring the Python reference.
-    let cfg = Config::new().with_forex_defaults().with_pip_size_for(&csv);
-    run_cfg(&bars, "EMA-crossover", ema_strategy, cfg);
-}
-'''
-
-
-def run_rust_forex(csv_path: Path) -> Path:
+def run_rust_forex(csv_path: Path, output_path: Path) -> Path:
     """Build and run a forex-configured runner that exports the ledger."""
-    src = REPO_RUST / "examples" / "_parity_ledger_forex.rs"
-    src.write_text(FOREX_RUNNER)
     build = subprocess.run(
-        ["cargo", "build", "--release", "--example", "_parity_ledger_forex"],
+        ["cargo", "build", "--release", "--example", "parity_ledger_forex"],
         cwd=REPO_RUST, capture_output=True, text=True, timeout=900)
     if build.returncode != 0:
         sys.stderr.write(f"Rust build failed:\n{build.stderr[-2000:]}\n")
         sys.exit(2)
-    binp = REPO_RUST / "target" / "release" / "examples" / "_parity_ledger_forex"
+    binp = REPO_RUST / "target" / "release" / "examples" / "parity_ledger_forex"
+    env = os.environ.copy()
+    env["BT_EXPORT_PATH"] = str(output_path.resolve())
     proc = subprocess.run([str(binp), str(Path(csv_path).resolve())],
-                          cwd=REPO_RUST, capture_output=True, text=True, timeout=900)
+                          cwd=REPO_RUST, env=env, capture_output=True, text=True, timeout=900)
     if proc.returncode != 0:
         sys.stderr.write(f"Rust run failed:\n{proc.stderr[-2000:]}\n")
         sys.exit(2)
-    return REPO_RUST / "trade_list.csv"
+    return output_path
 
 
-def run_rust(csv_path: Path) -> Path:
+def run_rust(csv_path: Path, output_path: Path) -> Path:
     bin_path = REPO_RUST / "target" / "release" / "backtester"
     if not bin_path.exists():
         subprocess.run(["cargo", "build", "--release"], cwd=REPO_RUST,
                        check=True, capture_output=True)
+    env = os.environ.copy()
+    env["BT_EXPORT_PATH"] = str(output_path.resolve())
     proc = subprocess.run([str(bin_path), str(Path(csv_path).resolve())],
-                          cwd=REPO_RUST, capture_output=True, text=True,
+                          cwd=REPO_RUST, env=env, capture_output=True, text=True,
                           timeout=600)
     if proc.returncode != 0:
         sys.stderr.write(f"Rust run failed:\n{proc.stderr}\n")
         sys.exit(2)
-    return REPO_RUST / "trade_list.csv"
+    return output_path
 
 
 def _norm_sample(s: str) -> str:
@@ -333,13 +310,15 @@ def main() -> int:
     print(f"CSV        : {csv_abs}")
     print(f"Tolerance  : {args.tol*100:.3g}%\n")
 
-    print("Running Python...")
-    py_path = run_python(csv_abs, forex=args.forex)
-    print("Running Rust...")
-    rs_path = run_rust_forex(csv_abs) if args.forex else run_rust(csv_abs)
-
-    py = load_ledger(py_path)
-    rs = load_ledger(rs_path)
+    with tempfile.TemporaryDirectory(prefix="qrf-parity-ledger-") as tmp:
+        output_dir = Path(tmp)
+        print("Running Python...")
+        py_path = run_python(csv_abs, output_dir / "python" / "trade_list.csv", forex=args.forex)
+        print("Running Rust...")
+        runner = run_rust_forex if args.forex else run_rust
+        rs_path = runner(csv_abs, output_dir / "rust" / "trade_list.csv")
+        py = load_ledger(py_path)
+        rs = load_ledger(rs_path)
 
     fails = compare(py, rs, args.tol)
     if fails == 0:

@@ -179,7 +179,7 @@ pub fn neutralize_sigma(
     if vols.iter().any(|v| *v <= 0.0) {
         return Err(format!("sigma-neutral requires positive vols; got {:?}", vols));
     }
-    if raw_weights.iter().any(|w| *w == 0.0) {
+    if raw_weights.contains(&0.0) {
         return Err("sigma-neutral requires every raw weight non-zero".to_string());
     }
     let signs: Vec<f64> = raw_weights.iter().map(|x| x.signum()).collect();

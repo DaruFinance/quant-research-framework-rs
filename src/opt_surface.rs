@@ -30,7 +30,13 @@ use crate::{Bar, Config, Metrics, RawSignalsFn, parse_signals_for, run_backtest,
 /// SL_PERCENTAGE. Mirrors `_SL_GRID_MULTIPLIERS` in backtester/opt_surface.py.
 pub const SL_GRID_MULTIPLIERS: [f64; 5] = [0.5, 0.75, 1.0, 1.25, 1.5];
 
-const SURFACE_PATH: &str = "opt_surface.csv";
+pub(crate) fn surface_path(cfg: &Config) -> std::path::PathBuf {
+    let ledger = std::path::Path::new(&cfg.export_path);
+    let name = ledger.file_name().expect("Trade ledger path needs a filename").to_string_lossy();
+    let surface = if name == "trade_list.csv" { "opt_surface.csv".to_owned() }
+                  else { format!("{}.opt_surface.csv", name) };
+    ledger.with_file_name(surface)
+}
 const HEADER: &str = "window_idx,regime,lb,rrr,sl_idx,sl,sharpe_mode,roi,pf,sharpe,mdd,n_trades,split";
 
 struct SurfaceRow {
@@ -168,7 +174,7 @@ pub fn emit_surface_classic(
             });
         }
     }
-    write_rows(SURFACE_PATH, &rows, smode, write_header);
+    write_rows(&surface_path(cfg).to_string_lossy(), &rows, smode, write_header);
 }
 
 /// Regime per-cell metric for one (regime r, lb, sl) triple, mirror of
@@ -281,5 +287,5 @@ pub fn emit_surface_regime(
             }
         }
     }
-    write_rows(SURFACE_PATH, &rows, smode, write_header);
+    write_rows(&surface_path(cfg).to_string_lossy(), &rows, smode, write_header);
 }
