@@ -87,6 +87,10 @@ path = "examples/wfo_benchmark.rs"
 required-features = ["indicators"]
 
 [[example]]
+name = "bar_permutation_worker"
+path = "examples/bar_permutation_worker.rs"
+
+[[example]]
 name = "_parity_indicators"
 path = "examples/_parity_indicators.rs"
 required-features = ["indicators"]
