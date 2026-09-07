@@ -7,12 +7,14 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
 pub const DEFAULT_TRADE_RUNS: usize = 1_000;
+pub const DEFAULT_BAR_RUNS: usize = 500;
 pub const DEFAULT_SEED: u64 = 42;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MonteCarloMode {
     Permutation,
     Resampling,
+    BarPermutation,
 }
 
 impl MonteCarloMode {
@@ -20,6 +22,15 @@ impl MonteCarloMode {
         match self {
             Self::Permutation => "permutation",
             Self::Resampling => "resampling",
+            Self::BarPermutation => "bar-permutation",
+        }
+    }
+
+    pub fn default_runs(self) -> usize {
+        if self == Self::BarPermutation {
+            DEFAULT_BAR_RUNS
+        } else {
+            DEFAULT_TRADE_RUNS
         }
     }
 
@@ -27,8 +38,9 @@ impl MonteCarloMode {
         match value.to_ascii_lowercase().as_str() {
             "permutation" => Ok(Self::Permutation),
             "resampling" => Ok(Self::Resampling),
+            "bar-permutation" => Ok(Self::BarPermutation),
             _ => Err(format!(
-                "unknown Monte Carlo mode {value:?}; choose permutation or resampling"
+                "unknown Monte Carlo mode {value:?}; choose permutation, resampling or bar-permutation"
             )),
         }
     }
@@ -102,8 +114,16 @@ fn metric_values(sample: &[f64], use_forex: bool) -> Values {
     let wins = sample.iter().filter(|&&v| v > 0.0).count();
     let losses = n - wins;
     let win_rate = wins as f64 / n as f64;
-    let mean_win = if wins > 0 { wins_sum / wins as f64 } else { 0.0 };
-    let mean_loss = if losses > 0 { losses_sum / losses as f64 } else { 0.0 };
+    let mean_win = if wins > 0 {
+        wins_sum / wins as f64
+    } else {
+        0.0
+    };
+    let mean_loss = if losses > 0 {
+        losses_sum / losses as f64
+    } else {
+        0.0
+    };
     let expectancy = mean_win * win_rate - mean_loss * (1.0 - win_rate);
     let mean = roi / n as f64;
     let variance = sample.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n as f64;
@@ -204,6 +224,9 @@ pub fn run_trade_monte_carlo(
     if runs == 0 {
         return Err("runs must be positive".into());
     }
+    if mode == MonteCarloMode::BarPermutation {
+        return Err("bar-permutation reruns a frozen strategy on OHLCV; use mc_bar_permutation/run.py --mode bar-permutation".into());
+    }
 
     let actual = metric_values(returns, use_forex);
     let mut rng = StdRng::seed_from_u64(seed);
@@ -222,6 +245,7 @@ pub fn run_trade_monte_carlo(
             MonteCarloMode::Resampling => (0..returns.len())
                 .map(|_| returns[rng.random_range(0..returns.len())])
                 .collect(),
+            MonteCarloMode::BarPermutation => unreachable!(),
         };
         let values = metric_values(&sample, use_forex);
         for (index, distribution) in distributions.iter_mut().enumerate() {
@@ -252,7 +276,10 @@ pub fn run_trade_monte_carlo(
             }
         })
         .collect();
-    let loss_percent = distributions[0].iter().filter(|&&value| value < 0.0).count() as f64
+    let loss_percent = distributions[0]
+        .iter()
+        .filter(|&&value| value < 0.0)
+        .count() as f64
         / runs as f64
         * 100.0;
     let drawdown_over_80_percent = distributions[5]
@@ -287,16 +314,14 @@ mod tests {
     #[test]
     fn permutation_preserves_order_invariant_metrics() {
         let returns = [0.02, -0.01, 0.03, -0.015, 0.01];
-        let result = run_trade_monte_carlo(
-            &returns,
-            MonteCarloMode::Permutation,
-            25,
-            7,
-            false,
-        )
-        .unwrap();
+        let result =
+            run_trade_monte_carlo(&returns, MonteCarloMode::Permutation, 25, 7, false).unwrap();
         for name in ["ROI", "PF", "WinRate", "Exp", "Sharpe"] {
-            let metric = result.metrics.iter().find(|metric| metric.name == name).unwrap();
+            let metric = result
+                .metrics
+                .iter()
+                .find(|metric| metric.name == name)
+                .unwrap();
             assert_eq!(metric.ties, 25, "{name}");
             assert_eq!(metric.percentile_midrank, 50.0, "{name}");
         }
@@ -305,24 +330,16 @@ mod tests {
     #[test]
     fn resampling_is_deterministic_and_changes_order_invariant_metrics() {
         let returns = [0.02, -0.01, 0.03, -0.015, 0.01];
-        let first = run_trade_monte_carlo(
-            &returns,
-            MonteCarloMode::Resampling,
-            25,
-            9,
-            false,
-        )
-        .unwrap();
-        let second = run_trade_monte_carlo(
-            &returns,
-            MonteCarloMode::Resampling,
-            25,
-            9,
-            false,
-        )
-        .unwrap();
+        let first =
+            run_trade_monte_carlo(&returns, MonteCarloMode::Resampling, 25, 9, false).unwrap();
+        let second =
+            run_trade_monte_carlo(&returns, MonteCarloMode::Resampling, 25, 9, false).unwrap();
         assert_eq!(first.equity_finals, second.equity_finals);
-        let roi = first.metrics.iter().find(|metric| metric.name == "ROI").unwrap();
+        let roi = first
+            .metrics
+            .iter()
+            .find(|metric| metric.name == "ROI")
+            .unwrap();
         assert!(roi.ties < 25);
     }
 
@@ -336,7 +353,11 @@ mod tests {
             false,
         )
         .unwrap();
-        let profit_factor = result.metrics.iter().find(|metric| metric.name == "PF").unwrap();
+        let profit_factor = result
+            .metrics
+            .iter()
+            .find(|metric| metric.name == "PF")
+            .unwrap();
         assert!(profit_factor.actual.is_infinite());
         assert_eq!(profit_factor.ties, 10);
     }
@@ -344,14 +365,8 @@ mod tests {
     #[test]
     fn forex_uses_absolute_drawdown() {
         let returns = [1.0, -2.0, 0.5];
-        let result = run_trade_monte_carlo(
-            &returns,
-            MonteCarloMode::Permutation,
-            1,
-            1,
-            true,
-        )
-        .unwrap();
+        let result =
+            run_trade_monte_carlo(&returns, MonteCarloMode::Permutation, 1, 1, true).unwrap();
         let drawdown = result
             .metrics
             .iter()
@@ -359,5 +374,36 @@ mod tests {
             .unwrap();
         assert_eq!(drawdown.actual, 2.0);
         assert_eq!(result.drawdown_convention, "absolute R from equity 0");
+    }
+
+    #[test]
+    fn all_three_modes_parse_with_documented_defaults() {
+        assert_eq!(
+            MonteCarloMode::parse("resampling").unwrap().default_runs(),
+            1_000
+        );
+        assert_eq!(
+            MonteCarloMode::parse("permutation").unwrap().default_runs(),
+            1_000
+        );
+        assert_eq!(
+            MonteCarloMode::parse("bar-permutation")
+                .unwrap()
+                .default_runs(),
+            500
+        );
+    }
+
+    #[test]
+    fn trade_entry_rejects_bar_mode_with_queue_command() {
+        let error = run_trade_monte_carlo(
+            &[0.01, -0.02],
+            MonteCarloMode::BarPermutation,
+            500,
+            42,
+            false,
+        )
+        .unwrap_err();
+        assert!(error.contains("mc_bar_permutation/run.py"));
     }
 }

@@ -72,7 +72,6 @@ pub const MIN_TRADES: usize = 10;
 pub const SMART_OPTIMIZATION: bool = true;
 const DRAWDOWN_CONSTRAINT: Option<f64> = None;
 const USE_MONTE_CARLO: bool = true;
-const MC_RUNS: usize = 1000;
 const MC_MODE: MonteCarloMode = MonteCarloMode::Resampling;
 const MC_SEED: u64 = 42;
 const USE_SL: bool = true;
@@ -347,6 +346,12 @@ pub struct Config {
 impl Config {
     pub fn new() -> Self {
         let oos = if USE_OOS2 { OOS_CANDLES_BASE * 2 } else { OOS_CANDLES_BASE };
+        let mc_mode = std::env::var("BT_MC_MODE")
+            .map(|value| MonteCarloMode::parse(&value).unwrap_or_else(|error| panic!("{error}")))
+            .unwrap_or(MC_MODE);
+        let mc_runs = std::env::var("BT_MC_RUNS")
+            .map(|value| value.parse::<usize>().expect("BT_MC_RUNS must be a positive integer"))
+            .unwrap_or_else(|_| mc_mode.default_runs());
         Config { export_path: std::env::var("BT_EXPORT_PATH").unwrap_or_else(|_| "trade_list.csv".into()),
                  tp_percentage: TP_PERCENTAGE_DEFAULT, use_tp: USE_TP_DEFAULT, use_sl: USE_SL,
                  fee_pct: FEE_PCT_DEFAULT, slippage_pct: SLIPPAGE_PCT_DEFAULT,
@@ -355,12 +360,8 @@ impl Config {
                  sharpe_bar: std::env::var("BT_SHARPE_MODE").map(|v| v == "bar").unwrap_or(SHARPE_BAR),
                  use_monte_carlo: std::env::var("BT_USE_MONTE_CARLO")
                      .map(|v| v != "0" && v != "false").unwrap_or(USE_MONTE_CARLO),
-                 mc_mode: std::env::var("BT_MC_MODE")
-                     .map(|value| MonteCarloMode::parse(&value).unwrap_or_else(|error| panic!("{error}")))
-                     .unwrap_or(MC_MODE),
-                 mc_runs: std::env::var("BT_MC_RUNS")
-                     .map(|value| value.parse::<usize>().expect("BT_MC_RUNS must be a positive integer"))
-                     .unwrap_or(MC_RUNS),
+                 mc_mode,
+                 mc_runs,
                  mc_seed: std::env::var("BT_MC_SEED")
                      .map(|value| value.parse::<u64>().expect("BT_MC_SEED must be a non-negative integer"))
                      .unwrap_or(MC_SEED),

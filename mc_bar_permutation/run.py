@@ -22,17 +22,17 @@ ALLOWED_CONFIG = {
 }
 
 
-def build_worker(repo: Path, target: Path) -> Path:
+def build_worker(repo: Path, target: Path, example: str = "bar_permutation_worker") -> Path:
     environment = os.environ.copy()
     environment["CARGO_TARGET_DIR"] = str(target)
     subprocess.run(
-        ["cargo", "build", "--release", "--example", "bar_permutation_worker"],
+        ["cargo", "build", "--release", "--example", example],
         cwd=repo,
         check=True,
         env=environment,
     )
     suffix = ".exe" if os.name == "nt" else ""
-    return target / "release" / "examples" / f"bar_permutation_worker{suffix}"
+    return target / "release" / "examples" / f"{example}{suffix}"
 
 
 def load_spec(path: Path) -> tuple[dict, dict]:
@@ -108,14 +108,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run expensive full-backtest bar permutations with frozen strategy parameters."
     )
-    parser.add_argument("--input", required=True)
+    parser.add_argument("--mode", choices=("permutation", "resampling", "bar-permutation"),
+                        default="bar-permutation")
+    parser.add_argument("--input")
+    parser.add_argument("--returns", help="JSON array or one-return-per-line file for trade modes")
     parser.add_argument("--spec", default=str(Path(__file__).with_name("spec.example.json")))
     parser.add_argument("--output", required=True)
-    parser.add_argument("--runs", type=int, default=DEFAULT_RUNS)
+    parser.add_argument("--runs", type=int)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--worker-bin")
+    parser.add_argument("--forex", action="store_true", help="use absolute-R trade drawdown")
     args = parser.parse_args()
+    if args.runs is None:
+        args.runs = DEFAULT_RUNS if args.mode == "bar-permutation" else 1_000
     if args.runs <= 0:
         parser.error("--runs must be positive")
     if not 1 <= args.workers <= MAX_WORKERS:
@@ -127,6 +133,22 @@ def main() -> None:
     repo = root.parent
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=True)
+    if args.mode != "bar-permutation":
+        if not args.returns:
+            parser.error("--returns is required for permutation and resampling")
+        returns_path = Path(args.returns).resolve()
+        worker = Path(args.worker_bin).resolve() if args.worker_bin else build_worker(
+            repo, output / ".cargo-target", "monte_carlo_worker"
+        )
+        command = [
+            str(worker), "--returns", str(returns_path), "--mode", args.mode,
+            "--runs", str(args.runs), "--seed", str(args.seed),
+            "--forex", str(args.forex).lower(), "--output", str(output / "manifest.json"),
+        ]
+        subprocess.run(command, check=True)
+        return
+    if not args.input:
+        parser.error("--input is required for bar-permutation")
     source = Path(args.input).resolve()
     spec_path = Path(args.spec).resolve()
     strategy, config = load_spec(spec_path)
