@@ -60,6 +60,8 @@ pub const DEFAULT_LB: usize = 50;
 pub const BACKTEST_CANDLES: usize = 10_000;
 const OOS_CANDLES_BASE: usize = 90_000;
 const USE_OOS2: bool = false;
+/// `Consistency` is a project-specific example designed by Daniel Gatto. The
+/// name does not refer to an established financial metric; see README.
 pub const OPT_METRIC: &str = "Sharpe";
 pub const MIN_TRADES: usize = 10;
 pub const SMART_OPTIMIZATION: bool = true;
@@ -236,6 +238,8 @@ pub struct Metrics {
     pub exp: f64,
     pub sharpe: f64,
     pub max_drawdown: f64,
+    /// Daniel Gatto's project-specific example objective, not a standard
+    /// financial metric.
     pub consistency: f64,
     pub rrr: Option<usize>,
 }
@@ -1043,6 +1047,8 @@ pub fn compute_metrics_for(rets: &[f64], eq_frac: &[f64], use_forex: bool) -> Me
     } else {
         (0..eq_frac.len()).map(|i| if hw[i] > 0.0 { (hw[i]-eq_frac[i])/hw[i] } else { 0.0 }).fold(0.0f64, f64::max)
     };
+    // Daniel Gatto's project-specific Consistency example weights 5
+    // chronological return segments and blends them with total ROI.
     let w = [0.0117, 0.0317, 0.0861, 0.2341, 0.6364];
     let segments = split_into_5(rets);
     let seg_sums: Vec<f64> = segments.iter().map(|s| s.iter().sum::<f64>()).collect();

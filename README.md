@@ -311,13 +311,24 @@ Tunables are plain `const`s at the top of `src/lib.rs`; edit and `cargo build --
 | `ACCOUNT_SIZE` / `RISK_AMOUNT` | 100 000 / 2 500 | USD |
 | `BACKTEST_CANDLES` / `OOS_CANDLES_BASE` | 10 000 / 90 000 | IS / OOS window sizes |
 | `DEFAULT_LB` | 50 | lookback centre for the optimiser search range |
-| `OPT_METRIC` | `"Sharpe"` | one of ROI, PF, Sharpe, WinRate, Exp, MaxDrawdown |
+| `OPT_METRIC` | `"Sharpe"` | one of ROI, PF, Sharpe, WinRate, Exp, MaxDrawdown, Consistency |
 | `USE_SL` / `SL_PERCENTAGE` | true / 1.0 | stop-loss in % |
 | `USE_TP_DEFAULT` / `TP_PERCENTAGE_DEFAULT` | true / 3.0 | take-profit in % |
 | `OPTIMIZE_RRR` | true | auto-pick best R:R; classic optimiser searches {1,2,3}, regime-path optimiser searches {1..5} (mirrors the Python reference's split) |
 | `USE_WFO` / `WFO_TRIGGER_MODE` / `WFO_TRIGGER_VAL` | true / candles / 5000 | walk-forward config |
 | `USE_MONTE_CARLO` / `MC_RUNS` | true / 1000 | diagnostics on IS returns |
 | `Config::use_regime_seg` | false (flipped to true by `run_with_regime_cfg`) | enables the 200-bar warmup in the backtest core; matches Python's `USE_REGIME_SEG` global |
+
+Daniel Gatto designed `Consistency` as an example objective for this project.
+The name does not refer to an established financial metric: the score splits
+trade returns into 5 chronological segments, weights later segments more
+heavily and blends that result with total ROI.
+
+The single-asset optimiser uses a closed name lookup. A user can implement
+another optimization metric by adding its score to `Metrics`, updating the
+lookup and rebuilding the crate; this interface has no arbitrary objective
+callback. `src/objectives.rs::MultiTermObjective` is a separate objective
+implementation for panel research.
 
 ## Citation
 
