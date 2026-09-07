@@ -17,8 +17,8 @@ Most backtesters ask you to trust one implementation. This one is written twice 
 
 ```
                 ┌────────────────────────────────────────────────┐
-                │                same OHLC input                  │
-                │     data/SOLUSDT_1h.csv · EURUSD_1h.csv · …      │
+                │                same OHLC input                 │
+                │     data/SOLUSDT_1h.csv · EURUSD_1h.csv · …    │
                 └───────────────┬────────────────┬───────────────┘
                                 │                │
                 ┌───────────────▼──────┐  ┌──────▼───────────────┐
@@ -30,9 +30,9 @@ Most backtesters ask you to trust one implementation. This one is written twice 
                                 │ metrics        │ metrics
                                 ▼                ▼
                 ┌────────────────────────────────────────────────┐
-                │              parity oracle  (CI)                │
-                │      tools/parity_*.py  ·  assert |Δ| ≤ 1e-3    │
-                │   default 56/56 · regime+WFO 98/98 · fx 56/56   │
+                │              parity oracle  (CI)               │
+                │      tools/parity_*.py  ·  assert |Δ| ≤ 1e-3   │
+                │   default 56/56 · regime+WFO 98/98 · fx 56/56  │
                 └────────────────────────┬───────────────────────┘
                                          │
                                  red if the port drifts
