@@ -61,7 +61,9 @@ def load_spec(path: Path) -> tuple[dict, dict]:
     return strategy, config
 
 
-def complete_status(run_dir: Path, source_hash: str, spec_hash: str, seed: int) -> bool:
+def complete_status(
+    run_dir: Path, source_hash: str, spec_hash: str, seed: int, worker_hash: str,
+) -> bool:
     path = run_dir / "status.json"
     if not path.exists():
         return False
@@ -69,18 +71,27 @@ def complete_status(run_dir: Path, source_hash: str, spec_hash: str, seed: int) 
         status = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
+    metrics = run_dir / "metrics.json"
+    ledger = run_dir / "ledger.bin"
+    if not metrics.is_file() or not ledger.is_file():
+        return False
     return (
         status.get("status") == "complete"
         and status.get("source_sha256") == source_hash
         and status.get("spec_sha256") == spec_hash
         and status.get("seed") == seed
+        and status.get("worker_sha256") == worker_hash
+        and status.get("metrics_sha256") == sha256(metrics)
+        and status.get("ledger_sha256") == sha256(ledger)
     )
 
 
 def run_one(
     command: list[str], environment: dict[str, str], run_dir: Path,
-    seed: int, source_hash: str, spec_hash: str,
+    seed: int, source_hash: str, spec_hash: str, worker_hash: str,
 ) -> dict:
+    for name in ("metrics.json", "ledger.bin", "status.json"):
+        (run_dir / name).unlink(missing_ok=True)
     started = time.perf_counter()
     process = subprocess.run(
         command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment
@@ -98,6 +109,7 @@ def run_one(
             "status": "complete", "seed": seed,
             "source_sha256": source_hash, "spec_sha256": spec_hash,
             "metrics_sha256": sha256(metrics), "ledger_sha256": sha256(ledger),
+            "ledger_file": ledger.name, "worker_sha256": worker_hash,
             "elapsed_seconds": time.perf_counter() - started,
         }
     atomic_json(run_dir / "status.json", status)
@@ -177,13 +189,14 @@ def main() -> None:
         "--max-hold-bars", str(config.get("max_hold_bars", 0)),
         "--sharpe-mode", str(config.get("sharpe_mode", "trade")),
     ]
+    worker_hash = sha256(worker)
     statuses = {}
     pending = []
     for index in range(args.runs):
         seed = args.seed + index
         run_dir = output / "runs" / f"{index:06d}"
         run_dir.mkdir(parents=True, exist_ok=True)
-        if complete_status(run_dir, source_hash, spec_hash, seed):
+        if complete_status(run_dir, source_hash, spec_hash, seed, worker_hash):
             statuses[index] = json.loads((run_dir / "status.json").read_text(encoding="utf-8"))
         else:
             pending.append((index, seed, run_dir, base + ["--seed", str(seed), "--output", str(run_dir)]))
@@ -197,7 +210,7 @@ def main() -> None:
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
         future_map = {
             executor.submit(
-                run_one, command, environment, run_dir, seed, source_hash, spec_hash
+                run_one, command, environment, run_dir, seed, source_hash, spec_hash, worker_hash
             ): (index, seed)
             for index, seed, run_dir, command in pending
         }
