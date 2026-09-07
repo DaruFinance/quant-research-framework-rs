@@ -46,6 +46,11 @@ use rand::{Rng, SeedableRng};
 use chrono::{TimeZone, Timelike};
 use chrono_tz::America::New_York;
 
+pub mod monte_carlo;
+pub use monte_carlo::{run_trade_monte_carlo, MonteCarloMode, MonteCarloResult};
+pub mod bar_permutation;
+pub use bar_permutation::permute_bars;
+
 // ============================================================================
 // CONFIGURATION, mirrors backtester.py constants
 // ============================================================================
@@ -68,6 +73,8 @@ pub const SMART_OPTIMIZATION: bool = true;
 const DRAWDOWN_CONSTRAINT: Option<f64> = None;
 const USE_MONTE_CARLO: bool = true;
 const MC_RUNS: usize = 1000;
+const MC_MODE: MonteCarloMode = MonteCarloMode::Resampling;
+const MC_SEED: u64 = 42;
 const USE_SL: bool = true;
 const SL_PERCENTAGE: f64 = 1.0;
 const USE_TP_DEFAULT: bool = true;
@@ -265,6 +272,7 @@ pub struct Config {
     pub export_path: String,
     pub tp_percentage: f64,
     pub use_tp: bool,
+    pub use_sl: bool,
     pub fee_pct: f64,
     pub slippage_pct: f64,
     pub oos_candles: usize,
@@ -272,6 +280,15 @@ pub struct Config {
     pub use_forex: bool,
     /// false = per-trade Sharpe (default); true = bar-based standard Sharpe.
     pub sharpe_bar: bool,
+    /// Run completed-trade Monte Carlo diagnostics on the first IS sample.
+    pub use_monte_carlo: bool,
+    /// One null model per invocation. Resampling is the default because it
+    /// produces distributions for order-invariant as well as path metrics.
+    pub mc_mode: MonteCarloMode,
+    /// Number of trade-level simulations. Bar permutation uses its own runner.
+    pub mc_runs: usize,
+    /// Stable seed for trade-level Monte Carlo diagnostics.
+    pub mc_seed: u64,
     pub use_sessions: bool,
     pub session_start_hour: u32,
     pub session_end_hour: u32,
@@ -331,11 +348,22 @@ impl Config {
     pub fn new() -> Self {
         let oos = if USE_OOS2 { OOS_CANDLES_BASE * 2 } else { OOS_CANDLES_BASE };
         Config { export_path: std::env::var("BT_EXPORT_PATH").unwrap_or_else(|_| "trade_list.csv".into()),
-                 tp_percentage: TP_PERCENTAGE_DEFAULT, use_tp: USE_TP_DEFAULT,
+                 tp_percentage: TP_PERCENTAGE_DEFAULT, use_tp: USE_TP_DEFAULT, use_sl: USE_SL,
                  fee_pct: FEE_PCT_DEFAULT, slippage_pct: SLIPPAGE_PCT_DEFAULT,
                  oos_candles: oos, position_size: RISK_AMOUNT,
                  use_forex: USE_FOREX,
                  sharpe_bar: std::env::var("BT_SHARPE_MODE").map(|v| v == "bar").unwrap_or(SHARPE_BAR),
+                 use_monte_carlo: std::env::var("BT_USE_MONTE_CARLO")
+                     .map(|v| v != "0" && v != "false").unwrap_or(USE_MONTE_CARLO),
+                 mc_mode: std::env::var("BT_MC_MODE")
+                     .map(|value| MonteCarloMode::parse(&value).unwrap_or_else(|error| panic!("{error}")))
+                     .unwrap_or(MC_MODE),
+                 mc_runs: std::env::var("BT_MC_RUNS")
+                     .map(|value| value.parse::<usize>().expect("BT_MC_RUNS must be a positive integer"))
+                     .unwrap_or(MC_RUNS),
+                 mc_seed: std::env::var("BT_MC_SEED")
+                     .map(|value| value.parse::<u64>().expect("BT_MC_SEED must be a non-negative integer"))
+                     .unwrap_or(MC_SEED),
                  use_sessions: USE_SESSIONS,
                  session_start_hour: SESSION_START_HOUR,
                  session_end_hour: SESSION_END_HOUR,
@@ -354,6 +382,17 @@ impl Config {
     /// Switch the reported Sharpe to the standard bar-based calendar-time
     /// convention (default off = per-trade statistic).
     pub fn with_sharpe_bar(mut self, on: bool) -> Self { self.sharpe_bar = on; self }
+    pub fn with_monte_carlo(mut self, on: bool) -> Self { self.use_monte_carlo = on; self }
+    pub fn with_monte_carlo_mode(mut self, mode: MonteCarloMode) -> Self {
+        self.mc_mode = mode;
+        self
+    }
+    pub fn with_monte_carlo_runs(mut self, runs: usize) -> Self {
+        assert!(runs > 0, "Monte Carlo runs must be positive");
+        self.mc_runs = runs;
+        self
+    }
+    pub fn with_monte_carlo_seed(mut self, seed: u64) -> Self { self.mc_seed = seed; self }
     /// Forex defaults: position_size = account_size = 1.0 (R-unit
     /// reporting), use_forex = true. Mirrors Python's module-level
     /// FOREX_MODE setup at import time.
@@ -963,7 +1002,45 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config, use_sl: bool) -> (Vec<T
 }
 
 fn run_backtest(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics, Vec<f64>, Vec<f64>) {
-    backtest_core(bars, sig, cfg, USE_SL)
+    backtest_core(bars, sig, cfg, cfg.use_sl)
+}
+
+#[derive(Clone, Debug)]
+pub struct FrozenBacktestResult {
+    pub trades: Vec<Trade>,
+    pub metrics: Metrics,
+    pub equity: Vec<f64>,
+    pub returns: Vec<f64>,
+}
+
+/// Run one frozen strategy specification on the supplied bars.
+///
+/// This entrypoint does not optimise parameters. The caller provides the
+/// strategy function and fixed lookback, so bar-permutation runs regenerate
+/// signals from every permuted OHLCV path instead of replaying old signals.
+pub fn run_frozen_backtest(
+    bars: &[Bar],
+    cfg: &Config,
+    lookback: usize,
+    signal_fn: RawSignalsFn,
+) -> Result<FrozenBacktestResult, String> {
+    if bars.len() < 2 {
+        return Err("a frozen backtest requires at least 2 bars".into());
+    }
+    let raw = signal_fn(bars, lookback);
+    if raw.len() != bars.len() {
+        return Err(format!(
+            "strategy returned {} signals for {} bars",
+            raw.len(),
+            bars.len()
+        ));
+    }
+    if raw.iter().any(|signal| !matches!(*signal, -1..=1)) {
+        return Err("raw strategy signals must be -1, 0 or 1".into());
+    }
+    let signals = parse_signals_for(&raw, bars, cfg);
+    let (trades, metrics, equity, returns) = run_backtest(bars, &signals, cfg);
+    Ok(FrozenBacktestResult { trades, metrics, equity, returns })
 }
 
 /// Benchmark-only access to the existing signal-driven core with SL/TP
@@ -1261,79 +1338,45 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
 // ============================================================================
 // 7. MONTE CARLO
 // ============================================================================
-fn monte_carlo(arr: &[f64], actual: &Metrics, runs: usize) {
-    let n = arr.len();
-    if n == 0 { println!(" Monte Carlo skipped: no return series provided."); return; }
-    let mut rng = StdRng::seed_from_u64(42);
-    let total_sims = runs * 2;
-    let mut roi_dist = Vec::with_capacity(total_sims);
-    let mut pf_dist = Vec::with_capacity(total_sims);
-    let mut wr_dist = Vec::with_capacity(total_sims);
-    let mut exp_dist = Vec::with_capacity(total_sims);
-    let mut shp_dist = Vec::with_capacity(total_sims);
-    let mut dd_dist = Vec::with_capacity(total_sims);
-    let mut cons_dist = Vec::with_capacity(total_sims);
-    let mut eq_finals = Vec::with_capacity(total_sims);
-
-    for sim_type in 0..2 {
-        for _ in 0..runs {
-            let sim: Vec<f64> = if sim_type == 0 {
-                (0..n).map(|_| arr[rng.random_range(0..n)]).collect()
-            } else {
-                let mut s = arr.to_vec();
-                for i in (1..s.len()).rev() { let j = rng.random_range(0..=i); s.swap(i, j); }
-                s
-            };
-            let roi: f64 = sim.iter().sum();
-            roi_dist.push(roi);
-            let ws: f64 = sim.iter().filter(|&&r| r > 0.0).sum();
-            let ls: f64 = sim.iter().filter(|&&r| r <= 0.0).map(|r| -r).sum();
-            pf_dist.push(if ls > 0.0 { ws / ls } else { 1e9 });
-            let wr = sim.iter().filter(|&&r| r > 0.0).count() as f64 / n as f64;
-            wr_dist.push(wr);
-            let wc = sim.iter().filter(|&&r| r > 0.0).count();
-            let lc = sim.iter().filter(|&&r| r <= 0.0).count();
-            let mw = if wc > 0 { ws / wc as f64 } else { 0.0 };
-            let ml = if lc > 0 { ls / lc as f64 } else { 0.0 };
-            exp_dist.push(mw * wr - ml * (1.0 - wr));
-            let mean: f64 = sim.iter().sum::<f64>() / n as f64;
-            let var: f64 = sim.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / n as f64;
-            let std = var.sqrt();
-            shp_dist.push(if std > 0.0 { mean / std * (n as f64).sqrt() } else { 0.0 });
-            let mut eq_val = 1.0f64; let mut hw_v = 1.0f64; let mut max_dd = 0.0f64;
-            for &r in &sim {
-                eq_val += r; hw_v = hw_v.max(eq_val);
-                let dd = if hw_v > 0.0 { (hw_v - eq_val) / hw_v } else { 0.0 };
-                max_dd = max_dd.max(dd);
-            }
-            dd_dist.push(max_dd); eq_finals.push(eq_val);
-            let w = [0.0117, 0.0317, 0.0861, 0.2341, 0.6364];
-            let segs = split_into_5(&sim);
-            let seg_sums: Vec<f64> = segs.iter().map(|s| s.iter().sum::<f64>()).collect();
-            let weighted: f64 = w.iter().zip(seg_sums.iter()).map(|(wi, si)| wi * si).sum();
-            cons_dist.push(0.6 * weighted + 0.4 * roi);
-        }
+fn print_monte_carlo(arr: &[f64], cfg: &Config) {
+    if arr.is_empty() {
+        println!(" Monte Carlo skipped: no return series provided.");
+        return;
     }
-    println!("\n Monte-Carlo Percentile Ranks vs ACTUAL ");
-    for (name, dist, actual_val) in &[
-        ("ROI", &roi_dist, actual.roi), ("PF", &pf_dist, actual.pf),
-        ("WinRate", &wr_dist, actual.win_rate), ("Exp", &exp_dist, actual.exp),
-        ("Sharpe", &shp_dist, actual.sharpe), ("MaxDrawdown", &dd_dist, actual.max_drawdown),
-        ("Consistency", &cons_dist, actual.consistency),
-    ] {
-        let pct = dist.iter().filter(|&&v| v <= *actual_val).count() as f64 / dist.len() as f64 * 100.0;
-        println!("  {:>12}: {:6.1}th percentile", name, pct);
+    let mut result = run_trade_monte_carlo(
+        arr,
+        cfg.mc_mode,
+        cfg.mc_runs,
+        cfg.mc_seed,
+        cfg.use_forex,
+    )
+    .unwrap_or_else(|error| panic!("Monte Carlo failed: {error}"));
+    println!(
+        "\n Monte Carlo ({}, seed={}, runs={})",
+        result.mode.as_str(), result.seed, result.completed_runs
+    );
+    println!(" Sharpe: {}", result.sharpe_convention);
+    println!(" Drawdown: {}", result.drawdown_convention);
+    for metric in &result.metrics {
+        println!(
+            "  {:>12}: {:7.3}th percentile (ties={})",
+            metric.name, metric.percentile_midrank, metric.ties
+        );
     }
-    eq_finals.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    result
+        .equity_finals
+        .sort_by(|left, right| left.partial_cmp(right).unwrap());
     println!("\n Equity Curve Final Value Percentiles ");
-    for &p in &[5, 25, 50, 75, 95] {
-        let idx = ((p as f64 / 100.0 * eq_finals.len() as f64) as usize).min(eq_finals.len() - 1);
-        println!("  {:>2}th pct: {:9.4}", p, eq_finals[idx]);
+    for percentile in [5usize, 25, 50, 75, 95] {
+        let index = ((percentile as f64 / 100.0 * result.equity_finals.len() as f64) as usize)
+            .min(result.equity_finals.len() - 1);
+        println!("  {:>2}th pct: {:9.4}", percentile, result.equity_finals[index]);
     }
-    let loss_pct = roi_dist.iter().filter(|&&r| r < 0.0).count() as f64 / total_sims as f64 * 100.0;
-    let dd80_pct = dd_dist.iter().filter(|&&d| d > 0.80).count() as f64 / total_sims as f64 * 100.0;
-    println!("\nSimulations ending with LOSS:           {:5.1}%", loss_pct);
-    println!("Simulations max-DD > 80 %:              {:5.1}%\n", dd80_pct);
+    println!("\nSimulations ending with LOSS:           {:5.1}%", result.loss_percent);
+    println!(
+        "Simulations max-DD > 80 %:              {:5.1}%\n",
+        result.drawdown_over_80_percent
+    );
 }
 
 // ============================================================================
@@ -1570,7 +1613,7 @@ pub fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, si
             println!("  {:>12}: {:6.3}", mm, r);
         }
 
-        if USE_MONTE_CARLO { monte_carlo(&rets_is_opt, &met_is_opt2, MC_RUNS); }
+        if cfg.use_monte_carlo { print_monte_carlo(&rets_is_opt, cfg); }
 
         return ClassicResult {
             met_is_raw, eq_is_raw,
@@ -1579,7 +1622,7 @@ pub fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, si
         };
     }
 
-    if USE_MONTE_CARLO { monte_carlo(&rets_is_raw, &met_is_raw, MC_RUNS); }
+    if cfg.use_monte_carlo { print_monte_carlo(&rets_is_raw, cfg); }
     ClassicResult { met_is_raw, eq_is_raw, met_is_opt: None, met_oos_opt: None, best_lb: None, best_rrr: None }
 }
 

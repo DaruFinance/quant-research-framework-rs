@@ -242,11 +242,11 @@ The full ledger of every surface (green-and-gated or known-divergence-with-reaso
 - **Four-way combo** (`tools/parity_combo.py`: regime + WFO + forex + session, all at once) is **closed**: 70/70 metric points on EURUSD 1h and SOLUSDT 1h, gated in CI via `tools/sweep_all.sh`.
 - **USD/JPY in the frozen benchmark** is **closed** at v0.7.4 and no longer excluded: all 18 core cells gate green, 144 comparisons, 0 bad @ 1e-3. The residual was a third, unguarded copy of the EMA recursion private to `examples/benchmark_runner.rs`, not the JPY `pip_size` path the manifest used to blame. See docs/PARITY.md.
 - **USD/JPY per-trade ledger** is **closed** at v0.7.4: 1,727/1,727 trades and all 8,635 compared fields, gated in CI. It previously carried one unmatched trade, caused by this port skipping the constant-run guard that pandas' `ewm` kernel applies. See docs/PARITY.md.
-- **Monte Carlo percentiles** and the **`INDICATOR_VARIANCE`** overlay diverge by design (Python MC unseeded, Rust MC seeded); see below.
+- **Monte Carlo percentiles** and the **`INDICATOR_VARIANCE`** overlay use seeded but language-specific random generators; see below.
 - **Python-only, no Rust counterpart:** `backtester/bootstrap.py` (stationary bootstrap) and the `examples/ml_*` strategies. Nothing to diff, not gated.
 
-### Two non-deterministic sections intentionally diverge, by design of the reference
-1. **Monte Carlo percentiles**: Python uses NumPy's global RNG, Rust uses `StdRng` seeded to 42. Different algorithms, so percentiles differ; the distribution shape is the same.
+### Two randomised sections intentionally differ across languages
+1. **Monte Carlo percentiles**: Python uses NumPy's generator and Rust uses `StdRng`. Both default to seed 42, but the generator algorithms differ, so individual samples need not match.
 2. **`INDICATOR_VARIANCE` overlay**: picks a +/-1 lookback shift from an RNG seeded to 42 in both implementations, so the lines are reproducible and are covered by the byte-identical cross-architecture golden check.
 
 If you disable those two sources of randomness, the outputs are identical down to the last printed decimal on the validated surfaces above.
@@ -316,8 +316,16 @@ Tunables are plain `const`s at the top of `src/lib.rs`; edit and `cargo build --
 | `USE_TP_DEFAULT` / `TP_PERCENTAGE_DEFAULT` | true / 3.0 | take-profit in % |
 | `OPTIMIZE_RRR` | true | auto-pick best R:R; classic optimiser searches {1,2,3}, regime-path optimiser searches {1..5} (mirrors the Python reference's split) |
 | `USE_WFO` / `WFO_TRIGGER_MODE` / `WFO_TRIGGER_VAL` | true / candles / 5000 | walk-forward config |
-| `USE_MONTE_CARLO` / `MC_RUNS` | true / 1000 | diagnostics on IS returns |
+| `Config::use_monte_carlo` / `mc_mode` / `mc_runs` / `mc_seed` | true / resampling / 1000 / 42 | one completed-trade null per invocation; environment overrides use `BT_USE_MONTE_CARLO`, `BT_MC_MODE`, `BT_MC_RUNS`, `BT_MC_SEED` |
 | `Config::use_regime_seg` | false (flipped to true by `run_with_regime_cfg`) | enables the 200-bar warmup in the backtest core; matches Python's `USE_REGIME_SEG` global |
+
+Completed-trade Monte Carlo exposes `resampling` with replacement and
+`permutation` without replacement. Resampling is the default because it
+produces distributions for order-invariant metrics as well as path metrics.
+Both modes default to 1,000 runs. The separate
+[`mc_bar_permutation/`](mc_bar_permutation/) runner reconstructs OHLCV,
+regenerates a frozen strategy and runs the complete backtest 500 times by
+default. All three run counts are configurable.
 
 Daniel Gatto designed `Consistency` as an example objective for this project.
 The name does not refer to an established financial metric: the score splits
