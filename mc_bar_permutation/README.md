@@ -1,6 +1,8 @@
 # Bar-permutation Monte Carlo
 
-This runner tests a frozen strategy specification against reconstructed OHLCV
+Completed-trade `permutation` shuffles without replacement; `resampling` samples with replacement. Both default to 1,000 runs and accept a custom count. Bar permutation defaults to 500 runs because every iteration rebuilds OHLCV and reruns the frozen strategy.
+
+Each invocation tests a frozen strategy specification against reconstructed OHLCV
 paths. Each iteration independently shuffles close log returns and complete
 intrabar templates without replacement, keeps timestamps fixed, moves volume
 with its template, regenerates strategy signals and runs the full backtest
@@ -12,26 +14,29 @@ measure local cost, then choose a worker count from 1 to 4:
 
 ```bash
 python mc_bar_permutation/run.py \
+  --mode bar-permutation \
   --input data/SOLUSDT_1h.csv \
   --output results/mc-bars \
   --runs 500 \
   --workers 1
 ```
 
+Completed-trade Monte Carlo uses the same dispatcher:
+`python mc_bar_permutation/run.py --mode resampling --returns returns.json --output results/mc-trades`.
+Use `--mode permutation` as the alternative. Trade modes default to 1,000 runs.
+
 Before timing the queue, the script builds the Rust worker. Build files stay
 under the output directory unless `--worker-bin` is provided.
 
 Each run writes a native binary trade ledger, metrics and a status record.
 `manifest.json` records source and parameter hashes, requested and completed
-counts, seeds, failures and output hashes. Completed runs with the same source,
-specification and seed are reused on restart.
+counts, seeds, failures and output hashes. Completed runs with the same source, specification and seed are reused on restart.
 
 A failed run makes the command fail. No p-value is reported from an incomplete
 queue.
 
 `spec.example.json` freezes the built-in EMA-crossover lookback, disables SL/TP
-and keeps fees, slippage and funding enabled. The shipped worker rejects unknown
-strategy names. A custom Rust
+and keeps fees, slippage and funding enabled. The shipped worker rejects unknown strategy names. A custom Rust
 strategy can call `permute_bars()` and `run_frozen_backtest()` with its own
 `RawSignalsFn`; this recompiles the worker rather than substituting saved
 historical signals.
