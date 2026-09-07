@@ -17,13 +17,15 @@ pub enum CadenceMode {
     OnBreakdown,
 }
 
+pub type TriggerFn = std::sync::Arc<dyn Fn(&[f64], usize) -> bool + Send + Sync>;
+
 #[derive(Clone)]
 pub struct Cadence {
     pub mode: CadenceMode,
     pub every: usize,
     /// `(spread_so_far, t_idx) -> bool`.  Required for `Trigger` mode;
     /// ignored otherwise.
-    pub trigger_fn: Option<std::sync::Arc<dyn Fn(&[f64], usize) -> bool + Send + Sync>>,
+    pub trigger_fn: Option<TriggerFn>,
 }
 
 impl Default for Cadence {
@@ -113,7 +115,7 @@ impl CadenceEngine {
                         continue;
                     }
                     let latest = &results.last().unwrap().1;
-                    let lo = if t >= 60 { t - 60 } else { 0 };
+                    let lo = t.saturating_sub(60);
                     let seg: Vec<f64> = latest.spread[lo..=t]
                         .iter()
                         .filter(|v| !v.is_nan())

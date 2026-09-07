@@ -18,6 +18,9 @@
 //!
 //! where `g_4` is the *raw* fourth standardised moment (= 3 for a Normal,
 //! NOT excess kurtosis); see the comment block in `deflated_sharpe_ratio`.
+//! All Sharpe arguments (chosen, trial, benchmark) are mean/sample_std,
+//! without sqrt(T) or annualisation. Each trial uses its own return series,
+//! with the same observation type as the chosen returns (e.g. trades).
 //!
 //! Like the Python module this is a *post-processing* utility, it does
 //! not run inside the engine and does not affect the engine's stdout
@@ -55,12 +58,29 @@ fn sample_var_ddof1(xs: &[f64]) -> f64 {
     ss / (n - 1.0)
 }
 
+/// Mean/sample_std (ddof=1), without sqrt(T) or annualisation. Non-finite
+/// observations are dropped; fewer than two or zero dispersion yield NaN.
+/// Use each trial's own returns, never the chosen strategy's sample count.
+pub fn sharpe_per_observation(returns: &[f64]) -> f64 {
+    let rets: Vec<f64> = returns.iter().copied().filter(|r| r.is_finite()).collect();
+    if rets.len() < 2 {
+        return f64::NAN;
+    }
+    let sd = sample_var_ddof1(&rets).sqrt();
+    if sd > 0.0 {
+        (rets.iter().sum::<f64>() / rets.len() as f64) / sd
+    } else {
+        f64::NAN
+    }
+}
+
 /// `E[max SR_n]` under the null that the true SR is zero, the `SR_0`
 /// quantity of Bailey & López de Prado 2014 §3.
 ///
 /// Mirrors `expected_max_sharpe_under_null`: non-finite trials are
 /// dropped; fewer than two finite trials, or non-positive trial-Sharpe
 /// variance, return `0.0`.
+/// Inputs and output use per-observation mean/sample_std units.
 pub fn expected_max_sharpe_under_null(trial_sharpes: &[f64]) -> f64 {
     let finite: Vec<f64> = trial_sharpes
         .iter()
@@ -87,6 +107,7 @@ pub fn expected_max_sharpe_under_null(trial_sharpes: &[f64]) -> f64 {
 /// in-sample maximised Sharpe, the per-trial Sharpe variance, and the
 /// per-trade return moments. Returns a value in `[0, 1]`, or `NaN` on any
 /// of the degenerate guards (mirrors `deflated_sharpe_ratio`).
+/// Chosen and trial Sharpes must be per-observation mean/sample_std.
 pub fn deflated_sharpe_ratio(
     sharpe_chosen: f64,
     trial_sharpes: &[f64],
@@ -146,6 +167,7 @@ fn sr_std_correction(rets: &[f64], sharpe: f64) -> Option<f64> {
 
 /// Probabilistic Sharpe Ratio (Bailey-LdP 2014). DSR = PSR with
 /// SR* = SR_0. P(SR>SR*) in [0,1], NaN on the DSR guards.
+/// `sharpe` and `sr_benchmark` are per-observation mean/sample_std.
 pub fn probabilistic_sharpe_ratio(sharpe: f64, returns: &[f64], sr_benchmark: f64) -> f64 {
     let rets: Vec<f64> = returns.iter().copied().filter(|r| r.is_finite()).collect();
     let t = rets.len();
@@ -162,6 +184,7 @@ pub fn probabilistic_sharpe_ratio(sharpe: f64, returns: &[f64], sr_benchmark: f6
 
 /// Minimum Track Record Length (Bailey-LdP 2014 eq 19). Observation
 /// count, inf if SR <= SR*, NaN on the DSR guards.
+/// Both Sharpe arguments are per-observation mean/sample_std.
 pub fn min_track_record_length(
     sharpe: f64, returns: &[f64], sr_benchmark: f64, prob: f64,
 ) -> f64 {
@@ -217,6 +240,34 @@ pub fn report(sharpe_chosen: f64, trial_sharpes: &[f64], returns: &[f64]) -> Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn observation_units_match_symmetric_closed_form() {
+        let t = 1000;
+        let sr = 0.1;
+        let shift = sr * (t as f64 / (t - 1) as f64).sqrt();
+        let rets: Vec<f64> = (0..t)
+            .map(|i| if i % 2 == 0 { shift - 1.0 } else { shift + 1.0 })
+            .collect();
+        let g4 = ((t - 1) as f64 / t as f64).powi(2);
+        let correction = 1.0 + (g4 - 1.0) * sr * sr / 4.0;
+        approx(sharpe_per_observation(&rets), sr, 1e-12);
+        // Set the benchmark so the independently derived normal argument
+        // is exactly one; pin Phi(1), not merely the probability's range.
+        let benchmark = sr - correction.sqrt() / ((t - 1) as f64).sqrt();
+        approx(probabilistic_sharpe_ratio(sr, &rets, benchmark), 0.8413447460685429, 1e-10);
+        let expected = 1.0 + correction * (1.6448536269514722 / (sr - 0.03)).powi(2);
+        approx(min_track_record_length(sr, &rets, 0.03, 0.95), expected, 1e-9);
+        assert!(expected > 500.0);
+    }
+
+    #[test]
+    fn observation_sharpe_filters_nonfinite_and_degenerate() {
+        approx(sharpe_per_observation(&[-1.0, 1.0, f64::NAN, f64::INFINITY]), 0.0, 1e-12);
+        assert!(sharpe_per_observation(&[]).is_nan());
+        assert!(sharpe_per_observation(&[1.0]).is_nan());
+        assert!(sharpe_per_observation(&[1.0, 1.0]).is_nan());
+    }
 
     // Golden values precomputed once from backtester/dsr.py on the exact
     // input arrays below; asserted to <1e-9 to pin the port independently

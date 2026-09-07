@@ -217,8 +217,10 @@ struct BatchResult {
     oos_metrics: Option<Metrics>,
 }
 
-fn run_one(bars: &[Bar], spec: &BatchSpec) -> BatchResult {
+fn run_one(bars: &[Bar], spec: &BatchSpec, ledger_dir: &Path) -> BatchResult {
     let mut cfg = Config::new();
+    let worker_dir = ledger_dir.join(spec.name);
+    cfg.export_path = worker_dir.join("trade_list.csv").to_string_lossy().into_owned();
     cfg.tp_percentage = spec.tp_pct;
     cfg.use_tp = spec.use_tp;
 
@@ -288,6 +290,15 @@ fn main() {
     println!("[batch_runner] loading {}", csv_path);
     let bars = load_bars(&csv_path);
     let specs = strategies();
+    let export = Config::new().export_path;
+    let parent = Path::new(&export).parent().filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent).expect("Cannot create batch output directory");
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .expect("System clock is before UNIX epoch").as_nanos();
+    let ledger_dir = parent.join(format!("batch-ledgers-{}-{}", std::process::id(), stamp));
+    std::fs::create_dir(&ledger_dir).expect("Cannot create unique batch ledger directory");
+    println!("[batch_runner] ledgers: {}", ledger_dir.display());
     println!(
         "[batch_runner] {} strategies on {} bars, {}",
         specs.len(),
@@ -297,9 +308,9 @@ fn main() {
 
     let t0 = Instant::now();
     let mut results: Vec<BatchResult> = if serial {
-        specs.iter().map(|s| run_one(&bars, s)).collect()
+        specs.iter().map(|s| run_one(&bars, s, &ledger_dir)).collect()
     } else {
-        specs.par_iter().map(|s| run_one(&bars, s)).collect()
+        specs.par_iter().map(|s| run_one(&bars, s, &ledger_dir)).collect()
     };
     let total = t0.elapsed().as_secs_f64();
 

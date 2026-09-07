@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- DSR calculations use per-observation Sharpe; benchmark probabilities were regenerated without changing other metrics (#17).
+- Documentation points to the library constants and states the committed golden counts (#18, #22).
+- CI checks DSR, both combo datasets and the USDJPY ledger, plus all-feature tests and lint (#19, #20).
+- Parity example runners are tracked files, so all-feature tests work from a clean checkout (#20).
+- The benchmark honors `QRF_PY_DIR` before the legacy `BT_PY_REPO` override (#21).
+- Source-build instructions replace the unpublished crate badge, and publishing retains Cargo's package verification (#23).
+- Ledger writes use configurable paths and run-scoped locks; batch and parity outputs are isolated (#24).
+
 ## [0.7.6] - 2026-07-31
 
 ### Fixed

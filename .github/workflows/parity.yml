@@ -26,11 +26,22 @@ jobs:
         with:
           path: quant-research-framework-rs
 
-      - name: Checkout the Python reference (coordinated tag/branch)
+      - name: Resolve the coordinated Python branch
+        id: counterpart
+        env:
+          PAIR_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          if git ls-remote --exit-code --heads https://github.com/DaruFinance/quant-research-framework.git "refs/heads/$PAIR_REF" >/dev/null; then
+            echo "ref=$PAIR_REF" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout the Python reference (matching branch, otherwise main)
         uses: actions/checkout@v6
         with:
           repository: DaruFinance/quant-research-framework
-          ref: main
+          ref: ${{ steps.counterpart.outputs.ref }}
           path: quant-research-framework
 
       - name: Set up Rust toolchain
@@ -50,11 +61,11 @@ jobs:
 
       - name: cargo clippy
         working-directory: quant-research-framework-rs
-        run: cargo clippy --release --no-deps -- -D warnings
+        run: cargo clippy --release --all-features --no-deps -- -D warnings
 
-      - name: cargo test --release
+      - name: cargo test --release --all-features
         working-directory: quant-research-framework-rs
-        run: cargo test --release
+        run: cargo test --release --all-features
 
       - name: Build the release binary
         working-directory: quant-research-framework-rs
@@ -78,6 +89,11 @@ jobs:
           # harnesses can import backtester.{panel,pairs,carry}
           # (statsmodels, xarray, pyarrow, scipy).
           pip install -e ".[panel,pairs,carry]"
+          pip install pytest
+
+      - name: Tooling regression tests
+        working-directory: quant-research-framework-rs
+        run: python -m pytest -q tests/test_*.py tools/test_*.py
 
       - name: Parity, default config (56 metric points, SOLUSDT 1h)
         working-directory: quant-research-framework-rs
@@ -95,6 +111,10 @@ jobs:
         working-directory: quant-research-framework-rs
         run: python tools/parity_ledger.py --csv data/SOLUSDT_1h.csv --tol 0.001
 
+      - name: Parity, forex ledger row-by-row (USDJPY 1h)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_ledger.py --csv data/USDJPY_1h.csv --forex --tol 0.001
+
       - name: Parity, default config on BTC 30m (146k bars)
         working-directory: quant-research-framework-rs
         run: python tools/parity_check.py --csv data/BTCUSDT_30m.csv --tol 0.001
@@ -111,6 +131,10 @@ jobs:
       - name: Parity, four-way combo (regime + WFO + forex + session, EURUSD 1h)
         working-directory: quant-research-framework-rs
         run: python tools/parity_combo.py --csv data/EURUSD_1h.csv --tol 0.001
+
+      - name: Parity, four-way combo (SOLUSDT 1h)
+        working-directory: quant-research-framework-rs
+        run: python tools/parity_combo.py --csv data/SOLUSDT_1h.csv --tol 0.001
 
       - name: Parity, panel substrate (regime / baskets / ERC / neutralisations)
         working-directory: quant-research-framework-rs
@@ -157,6 +181,7 @@ jobs:
         working-directory: quant-research-framework-rs
         run: |
           python tools/parity_pbo.py --tol 0.001
+          python tools/parity_dsr.py --tol 0.001
           python tools/parity_multitest.py --tol 0.001
           python tools/parity_overfit_lines.py
 

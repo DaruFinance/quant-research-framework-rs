@@ -14,6 +14,7 @@ not in the repo) is reconciled separately and is out of CI scope.
 """
 import os
 import re
+import runpy
 import sys
 from pathlib import Path
 
@@ -83,6 +84,17 @@ versions = {
 }
 distinct = {v for v in versions.values() if v}
 must(len(distinct) == 1, f"[version] not synchronised: {versions}")
+must(all(versions.values()), f"[version] missing version fields: {versions}")
+readme_version = first(r'currently `([^`]+)`', rd(REPO_PY / "README.md"))
+must(readme_version == versions["pyproject"],
+     f"[version] Python README current version differs: {readme_version}")
+try:
+    docs_version = runpy.run_path(str(REPO_PY / "docs" / "conf.py"))["release"]
+except (OSError, KeyError, AttributeError) as exc:
+    docs_version = None
+    fails.append(f"[version] cannot read Sphinx release: {exc}")
+must(docs_version == versions["pyproject"],
+     f"[version] Sphinx release differs: {docs_version}")
 
 # ---- 4b. CITATION.cff license fields are Apache-2.0, not MIT ----
 for name, cit in (("rust", cit_rs), ("python", cit_py)):
@@ -101,6 +113,19 @@ b_rs, b_py = speed_band(rd(REPO_RS / "README.md")), speed_band(rd(REPO_PY / "REA
 must(b_rs is not None and b_rs == b_py,
      f"[speed] README speed-up bands differ or missing: rust={b_rs} python={b_py}")
 
+# ---- 6. README metric totals come from the committed golden files ----
+goldens = sorted((REPO_RS / "data" / "golden").glob("*.x86_64.txt"))
+counts = [len(p.read_text(encoding="utf-8").splitlines()) for p in goldens]
+must(len(counts) == 6 and len(set(counts)) == 1,
+     f"[golden] expected six equal-sized metric snapshots, got {counts}")
+for name, repo in (("rust", REPO_RS), ("python", REPO_PY)):
+    claim = re.search(r'\((\d+) metric lines each, ([\d,]+) in total\)',
+                      rd(repo / "README.md") or "")
+    actual = (counts[0], sum(counts)) if counts else None
+    stated = (int(claim[1]), int(claim[2].replace(",", ""))) if claim else None
+    must(stated is not None and stated == actual,
+         f"[golden] {name} README totals differ: stated={stated}, actual={actual}")
+
 # ---- report ----
 if fails:
     print("CONSISTENCY GUARD: FAIL\n")
@@ -108,4 +133,4 @@ if fails:
         print("  ✗", f)
     print(f"\n{len(fails)} inconsistency(ies).")
     sys.exit(1)
-print("CONSISTENCY GUARD: OK, license / version / speed claims consistent across all repo artifacts.")
+print("CONSISTENCY GUARD: OK, license / version / speed / golden counts consistent across repo artifacts.")

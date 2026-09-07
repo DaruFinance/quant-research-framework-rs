@@ -3,6 +3,10 @@
 Release process for the Rust port. The Python framework has its own
 `RELEASING.md`; the two coordinate via matching version-suffix tags.
 
+The crate is currently source-install only. The steps below configure optional
+future crates.io publishing. Without `CRATES_IO_TOKEN`, the workflow skips
+publishing; a successful skipped run does not establish a registry release.
+
 ## One-time crates.io setup
 
 1. On `crates.io` (logged in as the publishing account), generate an API
@@ -25,7 +29,7 @@ $EDITOR CHANGELOG.md
 # 3. Build + test locally.
 cargo build --release
 cargo test --release
-cargo clippy --release --no-deps -- -D warnings
+cargo clippy --release --all-features --no-deps -- -D warnings
 cargo fmt --check
 
 # 4. Verify cross-language parity hasn't regressed.

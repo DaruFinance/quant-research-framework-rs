@@ -103,6 +103,14 @@ def build_cases() -> List[Tuple[str, float, List[float], List[float]]]:
     interleaved = [0.01, float("nan"), -0.02, float("inf"), 0.03, 0.0, 0.015, 0.004]
     cases.append(("guard_nonfinite_returns", 0.9, [0.2, 0.6, 0.4], interleaved))
 
+    # An actual caller contract, in addition to scalar formula/guard cases:
+    # each trial has its own count. No chosen-T rescaling is valid here.
+    trial_returns = [rng.normal(0.0, 0.01, t) for t in (50, 120, 400, 1000)]
+    trial_sr = [float(r.mean() / r.std(ddof=1)) for r in trial_returns]
+    chosen = int(np.argmax(trial_sr))
+    cases.append(("own_observation_counts", trial_sr[chosen], trial_sr,
+                  list(trial_returns[chosen])))
+
     return cases
 
 
@@ -140,6 +148,7 @@ def run_python(fixture: Path) -> Dict[str, float]:
     from backtester.dsr import (  # noqa: E402
         deflated_sharpe_ratio,
         expected_max_sharpe_under_null,
+        sharpe_per_observation,
     )
 
     out: Dict[str, float] = {}
@@ -153,61 +162,16 @@ def run_python(fixture: Path) -> Dict[str, float]:
         returns = parse_csv(returns_s)
         out[f"{name}_sr0"] = expected_max_sharpe_under_null(trials)
         out[f"{name}_dsr"] = deflated_sharpe_ratio(sharpe, trials, returns)
+        if name == "own_observation_counts":
+            out[f"{name}_sr"] = sharpe_per_observation(returns)
+            assert math.isclose(out[f"{name}_sr"], sharpe, rel_tol=1e-12)
     return out
 
 
-# The Rust parity driver. examples/_parity_*.rs is gitignored (auto-generated
-# scaffolding), so we write it here before building: matching parity_carry.py.
-RUST_DRIVER = r'''//! Cross-language parity harness binary (roadmap item 09, DSR).
-//! Generated at runtime by tools/parity_dsr.py.
-//!
-//! Reads a fixture file (path = argv[1]) of pipe-delimited cases and emits
-//! one `key=value` line per scalar, mirroring the Python side. Each line is
-//! `<name>|<sharpe>|<trial_sharpes csv>|<returns csv>`; numbers are written
-//! by the Python harness with %.17g so parsing back to f64 is bit-identical.
-//! NaN is emitted as the literal `nan` on both sides.
-
-#![cfg(feature = "dsr")]
-
-use quant_research_framework_rs::dsr::{deflated_sharpe_ratio, expected_max_sharpe_under_null};
-
-fn fmt(v: f64) -> String {
-    if v.is_nan() { "nan".to_string() } else { format!("{:.12}", v) }
-}
-
-fn parse_csv(field: &str) -> Vec<f64> {
-    let field = field.trim();
-    if field.is_empty() {
-        return Vec::new();
-    }
-    field.split(',').map(|s| s.trim().parse::<f64>().expect("parse f64")).collect()
-}
-
-fn main() {
-    let path = std::env::args().nth(1).expect("fixture file path arg");
-    let contents = std::fs::read_to_string(&path).expect("read fixture file");
-    for line in contents.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let parts: Vec<&str> = line.split('|').collect();
-        assert!(parts.len() == 4, "bad fixture line: {line}");
-        let name = parts[0].trim();
-        let sharpe: f64 = parts[1].trim().parse().expect("parse sharpe");
-        let trials = parse_csv(parts[2]);
-        let returns = parse_csv(parts[3]);
-        let sr0 = expected_max_sharpe_under_null(&trials);
-        let dsr = deflated_sharpe_ratio(sharpe, &trials, &returns);
-        println!("{name}_sr0={}", fmt(sr0));
-        println!("{name}_dsr={}", fmt(dsr));
-    }
-}
-'''
+# The matching Cargo example is tracked; building never rewrites source files.
 
 
 def run_rust(fixture: Path) -> Dict[str, float]:
-    (REPO_RUST / "examples" / "_parity_dsr.rs").write_text(RUST_DRIVER)
     build = subprocess.run(
         ["cargo", "build", "--jobs", "1", "--release",
          "--features", "dsr", "--example", "_parity_dsr"],

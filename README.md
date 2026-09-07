@@ -4,7 +4,6 @@
 
 [![parity](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/parity.yml/badge.svg)](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/parity.yml)
 [![docs](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml/badge.svg)](https://github.com/DaruFinance/quant-research-framework-rs/actions/workflows/docs.yml)
-[![crates.io](https://img.shields.io/crates/v/quant-research-framework-rs.svg)](https://crates.io/crates/quant-research-framework-rs)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19798591.svg)](https://doi.org/10.5281/zenodo.19798591)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
@@ -67,6 +66,21 @@ Run any piece on its own with `make parity`, `make leak`, or `make bench`. The l
 - **Parity-gated on the core surfaces only.** The stationary-bootstrap module (`backtester/bootstrap.py`) and the `examples/ml_*` strategies are Python-only: no Rust counterpart, no cross-engine check. See [open parity gaps](#what-is-not-yet-jointly-validated).
 
 ## Quick Start
+
+Build from a source checkout; this crate is not currently published on crates.io.
+
+```bash
+git clone https://github.com/DaruFinance/quant-research-framework-rs.git
+cd quant-research-framework-rs
+```
+
+The default ledger is `trade_list.csv`. Set `BT_EXPORT_PATH` or the library's
+`Config.export_path` to choose another destination, with surface files written
+beside the ledger. Batch workers use separate output directories.
+
+Each run holds an adjacent `.lock` file for its full lifetime;
+a conflicting run fails immediately. If a forced termination leaves a lock,
+remove it only after verifying the owning process has stopped.
 
 ```bash
 cargo build --release
@@ -191,7 +205,7 @@ stronger assertion. The same Rust source compiled for
 `aarch64-unknown-linux-gnu` reproduces every printed metric digit exactly:
 [`tools/parity_arch.py`](tools/parity_arch.py) string-compares the whole
 metric block against committed x86_64 goldens in `data/golden/` across all
-six bundled datasets (196 metric lines each, 1,176 in total). The
+six bundled datasets (194 metric lines each, 1,164 in total). The
 [`parity-arm64`](.github/workflows/parity_arm64.yml) workflow gates it on
 three runners: an x86_64 drift guard, the aarch64 build under
 `qemu-user-static`, and a native ARM runner.
@@ -302,11 +316,10 @@ other framework ships the whole bundle.
 
 ## Configuration
 
-Tunables are plain `const`s at the top of `src/main.rs`; edit and `cargo build --release` to apply. Names mirror the Python constants exactly:
+Tunables are plain `const`s at the top of `src/lib.rs`; edit and `cargo build --release` to apply. Names mirror the Python constants exactly. Pass the CSV path as the first command-line argument; there is no `CSV_FILE` constant.
 
 | Const | Default | Notes |
 |---|---|---|
-| `CSV_FILE` | `data/SOLUSDT_1h.csv` | overridable via CLI arg |
 | `ACCOUNT_SIZE` / `RISK_AMOUNT` | 100 000 / 2 500 | USD |
 | `BACKTEST_CANDLES` / `OOS_CANDLES_BASE` | 10 000 / 90 000 | IS / OOS window sizes |
 | `DEFAULT_LB` | 50 | lookback centre for the optimiser search range |

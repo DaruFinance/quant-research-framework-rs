@@ -32,6 +32,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write as IoWrite};
 use std::path::Path;
+mod ledger_lock;
+use ledger_lock::LedgerGuard;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
@@ -255,6 +257,8 @@ impl Metrics {
 
 #[derive(Clone)]
 pub struct Config {
+    /// Per-run ledger destination. Defaults to BT_EXPORT_PATH or trade_list.csv.
+    pub export_path: String,
     pub tp_percentage: f64,
     pub use_tp: bool,
     pub fee_pct: f64,
@@ -322,7 +326,8 @@ pub struct Config {
 impl Config {
     pub fn new() -> Self {
         let oos = if USE_OOS2 { OOS_CANDLES_BASE * 2 } else { OOS_CANDLES_BASE };
-        Config { tp_percentage: TP_PERCENTAGE_DEFAULT, use_tp: USE_TP_DEFAULT,
+        Config { export_path: std::env::var("BT_EXPORT_PATH").unwrap_or_else(|_| "trade_list.csv".into()),
+                 tp_percentage: TP_PERCENTAGE_DEFAULT, use_tp: USE_TP_DEFAULT,
                  fee_pct: FEE_PCT_DEFAULT, slippage_pct: SLIPPAGE_PCT_DEFAULT,
                  oos_candles: oos, position_size: RISK_AMOUNT,
                  use_forex: USE_FOREX,
@@ -1116,10 +1121,9 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
         if let Some(cached) = cache.get(&lb) { return cached.clone(); }
         let raw = sig_fn(bars, lb);
         let sig = parse_signals_for(&raw, bars, cfg);
-        let met;
-        if !OPTIMIZE_RRR {
+        let met = if !OPTIMIZE_RRR {
             let (_, m, _, _) = run_backtest(bars, &sig, cfg);
-            met = m;
+            m
         } else {
             let old_tp = cfg.tp_percentage;
             let old_use = cfg.use_tp;
@@ -1169,8 +1173,8 @@ fn optimiser(bars: &[Bar], cfg: &mut Config, sig_fn: RawSignalsFn) -> (Option<us
             m.rrr = Some(best_rrr);
             cfg.tp_percentage = old_tp;
             cfg.use_tp = old_use;
-            met = m;
-        }
+            m
+        };
         if met.trades < MIN_TRADES { cache.insert(lb, None); return None; }
         if let Some(dd_c) = cfg.dd_constraint() {
             if met.max_drawdown > dd_c { cache.insert(lb, None); return None; }
@@ -1348,6 +1352,7 @@ fn prettyprint(tag: &str, m: &Metrics, lb: Option<usize>) {
 // ============================================================================
 fn export_trades(trades: &[Trade], bars: &[Bar], strat: &str, window: &str, sample: &str,
     path: &str, write_header: bool) {
+    let _ledger = LedgerGuard::acquire(path);
     let mut file = if write_header {
         let mut f = File::create(path).expect("Cannot create export file");
         writeln!(f, "strategy,window,sample,side,entry_time,open_entry,high_entry,low_entry,close_entry,exit_time,open_exit,high_exit,low_exit,close_exit,pnl").unwrap();
@@ -1461,8 +1466,14 @@ pub struct ClassicResult {
 /// adds robustness + WFO + printing on top); external parallel drivers
 /// can call this directly to avoid stdout interleaving across workers.
 pub fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, sig_fn: RawSignalsFn) -> ClassicResult {
-    let export_path = "trade_list.csv";
-    let _ = std::fs::remove_file(export_path);
+    let _ledger = LedgerGuard::acquire(&cfg.export_path);
+    let export_path_owned = cfg.export_path.clone();
+    let export_path = export_path_owned.as_str();
+    if let Err(err) = std::fs::remove_file(export_path) {
+        if err.kind() != std::io::ErrorKind::NotFound {
+            panic!("Cannot reset trade ledger {}: {}", export_path, err);
+        }
+    }
     let n = all_bars.len();
     let oos_candles = cfg.oos_candles;
     // Mimic Python iloc negative index wrapping
@@ -1497,7 +1508,7 @@ pub fn classic_single_run(all_bars: &[Bar], cfg: &mut Config, strategy: &str, si
 
     // emit the baseline IS objective surface (opt-in, default off).
     if cfg.emit_opt_surface {
-        let header = !std::path::Path::new("opt_surface.csv").exists();
+        let header = !crate::opt_surface::surface_path(cfg).exists();
         crate::opt_surface::emit_surface_classic(is_bars, "baseline", cfg, sig_fn, header);
     }
 
@@ -1553,7 +1564,7 @@ fn run_wfo_window(is_bars: &[Bar], oos_bars: &[Bar], lb: usize, window_tag: &str
     cfg: &Config, strategy: &str, sig_fn: RawSignalsFn,
     rb_scenarios: &[(String, RobustnessOpts)], export_is: bool,
 ) -> (Vec<f64>, Vec<f64>) {
-    let export_path = "trade_list.csv";
+    let export_path = cfg.export_path.as_str();
 
     let raw_is = sig_fn(is_bars, lb);
     let sig_is = parse_signals_for(&raw_is, is_bars, cfg);
@@ -1664,7 +1675,7 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
         let lb = lb_roll.unwrap();
         // emit the per-window IS objective surface (opt-in, default off).
         if cfg.emit_opt_surface {
-            let header = !std::path::Path::new("opt_surface.csv").exists();
+            let header = !crate::opt_surface::surface_path(cfg).exists();
             crate::opt_surface::emit_surface_classic(
                 is_bars_roll, &format!("{:02}", window_no), cfg, sig_fn, header);
         }
@@ -1715,6 +1726,7 @@ pub fn walk_forward_collect(
     all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config,
     strategy: &str, sig_fn: RawSignalsFn,
 ) -> WfoOut {
+    let _ledger = LedgerGuard::acquire(&cfg.export_path);
     let _ = eq_is_baseline; // OOS-only fraction starts at base0; seed not needed
     let rb_scenarios_parsed: Vec<(String, RobustnessOpts)> = Vec::new(); // EMPTY
 
@@ -1865,6 +1877,7 @@ pub fn run(bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn) {
     let total_start = Instant::now();
     let bars = age_dataset(bars.to_vec(), AGE_DATASET);
     let mut cfg = Config::new();
+    let _ledger = LedgerGuard::acquire(&cfg.export_path);
     DISPLAY_FOREX.store(cfg.use_forex, Ordering::Relaxed);
     let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
 
@@ -1890,6 +1903,7 @@ pub fn run(bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn) {
 /// forex / session / oos2 modes from a single binary without forking
 /// `main.rs`. Mirrors `run_with_regime_cfg` but skips regime segmentation.
 pub fn run_cfg(bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn, mut cfg: Config) {
+    let _ledger = LedgerGuard::acquire(&cfg.export_path);
     let total_start = Instant::now();
     let bars = age_dataset(bars.to_vec(), AGE_DATASET);
     DISPLAY_FOREX.store(cfg.use_forex, Ordering::Relaxed);
@@ -2237,7 +2251,7 @@ fn walk_forward_regime(
         // emit the regime IS surface over the labels the engine TRADES
         // (regimes_is), holding non-swept regimes at the FINAL optimised best_lbs.
         if cfg.emit_opt_surface {
-            let header = !std::path::Path::new("opt_surface.csv").exists();
+            let header = !crate::opt_surface::surface_path(cfg).exists();
             crate::opt_surface::emit_surface_regime(
                 is_bars, regimes_is, &best_lbs, &regime_cfg.labels,
                 &format!("{:02}", window_no), cfg, header);
@@ -2329,6 +2343,7 @@ pub fn run_with_regime(
     let total_start = Instant::now();
     let bars = age_dataset(bars.to_vec(), AGE_DATASET);
     let mut cfg = Config::new();
+    let _ledger = LedgerGuard::acquire(&cfg.export_path);
     cfg.use_regime_seg = true;       // matches Python's global USE_REGIME_SEG flag
     DISPLAY_FOREX.store(cfg.use_forex, Ordering::Relaxed);
     let base = classic_single_run(&bars, &mut cfg, strategy, sig_fn);
@@ -2351,6 +2366,7 @@ pub fn run_with_regime_cfg(
     bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn,
     regime_cfg: RegimeConfig, mut cfg: Config,
 ) {
+    let _ledger = LedgerGuard::acquire(&cfg.export_path);
     let total_start = std::time::Instant::now();
     let bars = age_dataset(bars.to_vec(), AGE_DATASET);
     cfg.use_regime_seg = true;       // matches Python's global USE_REGIME_SEG flag
