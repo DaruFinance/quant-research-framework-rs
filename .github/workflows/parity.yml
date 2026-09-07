@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout this repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: quant-research-framework-rs
 
@@ -38,7 +38,7 @@ jobs:
           fi
 
       - name: Checkout the Python reference (matching branch, otherwise main)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: DaruFinance/quant-research-framework
           ref: ${{ steps.counterpart.outputs.ref }}
@@ -72,7 +72,7 @@ jobs:
         run: cargo build --release
 
       - name: Set up Python 3.10
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.10'
 
