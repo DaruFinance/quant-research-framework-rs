@@ -30,7 +30,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write as IoWrite};
+use std::io::{BufRead, BufReader, BufWriter, Write as IoWrite};
 use std::path::Path;
 mod ledger_lock;
 use ledger_lock::LedgerGuard;
@@ -1353,22 +1353,26 @@ fn prettyprint(tag: &str, m: &Metrics, lb: Option<usize>) {
 fn export_trades(trades: &[Trade], bars: &[Bar], strat: &str, window: &str, sample: &str,
     path: &str, write_header: bool) {
     let _ledger = LedgerGuard::acquire(path);
-    let mut file = if write_header {
-        let mut f = File::create(path).expect("Cannot create export file");
-        writeln!(f, "strategy,window,sample,side,entry_time,open_entry,high_entry,low_entry,close_entry,exit_time,open_exit,high_exit,low_exit,close_exit,pnl").unwrap();
-        f
+    let file = if write_header {
+        File::create(path).expect("Cannot create export file")
     } else {
         std::fs::OpenOptions::new().append(true).open(path).expect("Cannot open export file")
     };
+    let mut writer = BufWriter::new(file);
+    if write_header {
+        writeln!(writer, "strategy,window,sample,side,entry_time,open_entry,high_entry,low_entry,close_entry,exit_time,open_exit,high_exit,low_exit,close_exit,pnl")
+            .expect("Cannot write export header");
+    }
     for t in trades {
         let ei = t.entry_idx as usize; let xi = t.exit_idx as usize;
         let side_str = if t.side == 1 { "long" } else { "short" };
-        writeln!(file, "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+        writeln!(writer, "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
             strat, window, sample, side_str,
             bars[ei].time_unix, bars[ei].open, bars[ei].high, bars[ei].low, bars[ei].close,
             bars[xi].time_unix, bars[xi].open, bars[xi].high, bars[xi].low, bars[xi].close,
-            t.pnl).unwrap();
+            t.pnl).expect("Cannot write trade ledger");
     }
+    writer.flush().expect("Cannot flush trade ledger");
 }
 
 // ============================================================================
@@ -2380,3 +2384,6 @@ pub fn run_with_regime_cfg(
     walk_forward_regime(&bars, &mut cfg, &regime_cfg, &base.eq_is_raw);
     println!("\nTotal runtime: {:.2}s", total_start.elapsed().as_secs_f64());
 }
+
+#[cfg(test)]
+mod export_tests;
