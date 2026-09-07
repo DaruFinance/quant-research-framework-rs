@@ -12,6 +12,7 @@ not in the repo) is reconciled separately and is out of CI scope.
 
     python tools/check_consistency.py        # exit 0 = consistent, 1 = drift
 """
+import json
 import os
 import re
 import runpy
@@ -104,14 +105,25 @@ for name, cit in (("rust", cit_rs), ("python", cit_py)):
         must(f"license: {CANON_LICENSE}" in cit,
              f"[cite] {name} CITATION.cff does not declare license: {CANON_LICENSE}")
 
-# ---- 5. one speed band, identical across both READMEs ----
-def speed_band(txt):
-    mm = re.search(r'(\d+(?:\.\d+)?)\s*[–-]\s*(\d+(?:\.\d+)?)\s*×\s*(?:\*\*\s*)?faster', txt or "")
-    return f"{mm.group(1)}-{mm.group(2)}" if mm else None
+# ---- 5. measured results and README headline agree across both repos ----
+def benchmark_result(repo):
+    path = repo / "benchmarks" / "2026-09-07-results.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        fails.append(f"[speed] cannot read {path}: {exc}")
+        return None
 
-b_rs, b_py = speed_band(rd(REPO_RS / "README.md")), speed_band(rd(REPO_PY / "README.md"))
-must(b_rs is not None and b_rs == b_py,
-     f"[speed] README speed-up bands differ or missing: rust={b_rs} python={b_py}")
+
+result_rs, result_py = benchmark_result(REPO_RS), benchmark_result(REPO_PY)
+must(result_rs is not None and result_rs == result_py,
+     "[speed] machine-readable benchmark results differ across repositories")
+if result_rs:
+    ratio = result_rs["wfo"]["python_over_rust_wall_ratio"]
+    expected = f"{ratio:.2f} times less wall time"
+    for name, repo in (("rust", REPO_RS), ("python", REPO_PY)):
+        must(expected in (rd(repo / "README.md") or ""),
+             f"[speed] {name} README does not report {expected!r}")
 
 # ---- 6. README metric totals come from the committed golden files ----
 goldens = sorted((REPO_RS / "data" / "golden").glob("*.x86_64.txt"))
