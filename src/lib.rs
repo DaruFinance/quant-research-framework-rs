@@ -30,7 +30,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write as IoWrite};
+use std::io::{BufRead, BufReader, BufWriter, Write as IoWrite};
 use std::path::Path;
 mod ledger_lock;
 use ledger_lock::LedgerGuard;
@@ -642,7 +642,7 @@ fn parse_signals_for(raw: &[i8], bars: &[Bar], cfg: &Config) -> Vec<i8> {
 // ============================================================================
 // 5. BACKTEST CORE
 // ============================================================================
-fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics, Vec<f64>, Vec<f64>) {
+fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config, use_sl: bool) -> (Vec<Trade>, Metrics, Vec<f64>, Vec<f64>) {
     let n = bars.len();
     let fee_rate = cfg.fee_rate();
     let funding_rate = cfg.funding_rate();
@@ -782,7 +782,7 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
             let hit_sl = if open_pos == 1 { bars[idx].low <= sl_pr } else { bars[idx].high >= sl_pr };
             let mut hit_tp = if open_pos == 1 { bars[idx].high >= tp_pr } else { bars[idx].low <= tp_pr };
             if hit_sl && hit_tp { hit_tp = false; }
-            let is_sl_hit = if USE_SL && hit_sl { Some(true) }
+            let is_sl_hit = if use_sl && hit_sl { Some(true) }
                             else if cfg.use_tp && hit_tp { Some(false) }
                             else { None };
             if let Some(sl_hit) = is_sl_hit {
@@ -959,7 +959,23 @@ fn backtest_core(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics
 }
 
 fn run_backtest(bars: &[Bar], sig: &[i8], cfg: &Config) -> (Vec<Trade>, Metrics, Vec<f64>, Vec<f64>) {
-    backtest_core(bars, sig, cfg)
+    backtest_core(bars, sig, cfg, USE_SL)
+}
+
+/// Benchmark-only access to the existing signal-driven core with SL/TP
+/// exits disabled. The `benchmark-internal` feature keeps this adapter out
+/// of the default public API while allowing external engines to consume the
+/// same precomputed event codes and execution contract.
+#[cfg(feature = "benchmark-internal")]
+#[doc(hidden)]
+pub fn benchmark_backtest(
+    bars: &[Bar],
+    sig: &[i8],
+    cfg: &Config,
+) -> (Vec<Trade>, Metrics, Vec<f64>, Vec<f64>) {
+    let mut cfg = cfg.clone();
+    cfg.use_tp = false;
+    backtest_core(bars, sig, &cfg, false)
 }
 
 /// cost decomposition for a single trade leg. Returns
@@ -1353,22 +1369,26 @@ fn prettyprint(tag: &str, m: &Metrics, lb: Option<usize>) {
 fn export_trades(trades: &[Trade], bars: &[Bar], strat: &str, window: &str, sample: &str,
     path: &str, write_header: bool) {
     let _ledger = LedgerGuard::acquire(path);
-    let mut file = if write_header {
-        let mut f = File::create(path).expect("Cannot create export file");
-        writeln!(f, "strategy,window,sample,side,entry_time,open_entry,high_entry,low_entry,close_entry,exit_time,open_exit,high_exit,low_exit,close_exit,pnl").unwrap();
-        f
+    let file = if write_header {
+        File::create(path).expect("Cannot create export file")
     } else {
         std::fs::OpenOptions::new().append(true).open(path).expect("Cannot open export file")
     };
+    let mut writer = BufWriter::new(file);
+    if write_header {
+        writeln!(writer, "strategy,window,sample,side,entry_time,open_entry,high_entry,low_entry,close_entry,exit_time,open_exit,high_exit,low_exit,close_exit,pnl")
+            .expect("Cannot write export header");
+    }
     for t in trades {
         let ei = t.entry_idx as usize; let xi = t.exit_idx as usize;
         let side_str = if t.side == 1 { "long" } else { "short" };
-        writeln!(file, "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+        writeln!(writer, "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
             strat, window, sample, side_str,
             bars[ei].time_unix, bars[ei].open, bars[ei].high, bars[ei].low, bars[ei].close,
             bars[xi].time_unix, bars[xi].open, bars[xi].high, bars[xi].low, bars[xi].close,
-            t.pnl).unwrap();
+            t.pnl).expect("Cannot write trade ledger");
     }
+    writer.flush().expect("Cannot flush trade ledger");
 }
 
 // ============================================================================
@@ -2380,3 +2400,6 @@ pub fn run_with_regime_cfg(
     walk_forward_regime(&bars, &mut cfg, &regime_cfg, &base.eq_is_raw);
     println!("\nTotal runtime: {:.2}s", total_start.elapsed().as_secs_f64());
 }
+
+#[cfg(test)]
+mod export_tests;

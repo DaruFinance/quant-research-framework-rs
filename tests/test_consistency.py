@@ -1,4 +1,5 @@
 """The documentation guard must reject independently introduced claim drift."""
+import json
 import os
 from pathlib import Path
 import shutil
@@ -25,6 +26,10 @@ def artifact_pair(tmp_path):
             (target / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source / name, target / name)
     shutil.copytree(source_rs / "data/golden", rs / "data/golden")
+    for source, target in ((source_rs, rs), (source_py, py)):
+        benchmark = target / "benchmarks" / "2026-09-07-results.json"
+        benchmark.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source / "benchmarks" / benchmark.name, benchmark)
     return rs, py
 
 
@@ -56,6 +61,15 @@ def test_snapshot_drift_fails(artifact_pair):
     golden.write_text(golden.read_text(encoding="utf-8") + "extra metric\n", encoding="utf-8")
     result = run_guard(artifact_pair)
     assert result.returncode == 1 and "[golden]" in result.stdout
+
+
+def test_benchmark_result_drift_fails(artifact_pair):
+    benchmark = artifact_pair[1] / "benchmarks" / "2026-09-07-results.json"
+    result_data = json.loads(benchmark.read_text(encoding="utf-8"))
+    result_data["wfo"]["python_over_rust_wall_ratio"] = 99.0
+    benchmark.write_text(json.dumps(result_data), encoding="utf-8")
+    result = run_guard(artifact_pair)
+    assert result.returncode == 1 and "[speed]" in result.stdout
 
 
 def test_stale_sphinx_version_fails(artifact_pair):

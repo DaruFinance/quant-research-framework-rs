@@ -9,7 +9,7 @@
 
 **A walk-forward backtester written twice (a Python reference and a Rust port) that proves in CI the two produce the same numbers.** Walk-forward optimization (WFO), robustness stress tests, realism controls (fees, slippage, funding, SL/TP), and strict no-look-ahead enforced at the ledger level.
 
-It answers one question: *does an apparent edge survive out-of-sample evaluation under realistic frictions, or is it just fitting the past?* The Rust port answers it **28.5–39× faster** and in **29–62× less memory** than the Python reference ([benchmarks](#performance)), and a parity harness checks both engines agree within `1e-3` on every push.
+It answers one question: *does an apparent edge survive out-of-sample evaluation under realistic frictions, or is it just fitting the past?* A parity harness checks both engines agree within `1e-3` on every push. Current performance measurements and their exact boundaries are [reported below](#performance).
 
 ## Why two engines
 
@@ -253,37 +253,25 @@ If you disable those two sources of randomness, the outputs are identical down t
 
 ## Performance
 
-Both implementations run the same default pipeline (IS/OOS baseline +
-smart-optimiser + WFO + Monte Carlo + robustness overlays) on slices of the
-bundled `SOLUSDT_1h.csv`, single-threaded. The published benchmark is
-`tools/bench_paper.py`, the same harness, numbers, and methodology the
-[paper](#citation) reports: **median** warm wall-clock over `n=15` runs after
-one untimed warm-up (which absorbs Python's one-time Numba JIT cost), with a
-separately-reported Python cold run, and peak RSS as the max observed.
-Reproduce with:
+The current benchmark uses 150,000 real BTCUSDT 30-minute bars. One fresh
+process per engine runs ten fixed configurations, five signal families with
+two lookbacks each, through 28 full WFO windows. Python's first Numba compile
+and persisted ledgers are included; Rust compilation is excluded.
 
-```bash
-python tools/bench_paper.py --runs 15
-```
+| Engine | Wall | User + sys | Peak RSS |
+|---|---:|---:|---:|
+| Python reference | 112.37 s | 109.60 s | 287.37 MiB |
+| Rust port | 7.20 s | 5.54 s | 10.75 MiB |
 
-| Bars   | Python warm (s) | Rust (s) | Speed-up | Python RSS (MB) | Rust RSS (MB) |
-|-------:|----------------:|---------:|---------:|----------------:|--------------:|
-|  5,000 |    3.51 ± 8.6%  |   0.010  |   351×†  |             272 |           3.0 |
-| 15,000 |    4.35 ± 10.0% |   0.050  |  87.0×†  |             277 |           4.5 |
-| 30,000 |    5.86 ± 10.2% |   0.150  |  39.1×   |             280 |           7.2 |
-| 48,000 |    7.70 ± 11.5% |   0.270  |  28.5×   |             292 |          10.0 |
+This single batch observed 15.61 times less wall time and 26.73 times less
+peak memory for Rust. All ten ledger row counts matched, and the largest
+deterministic metric difference was `6.67e-14`. This is one observation under
+the stated workload, not a general speed guarantee.
 
-So **28.5–39× faster** and **29–62× less memory** across the 15k–48k range.
-†The 5,000-bar row is a measurement-floor artifact: Rust there (0.01 s) sits
-at the `/usr/bin/time` resolution of 0.01 s, as does 15,000; re-timed with a
-microsecond clock they fall to 251× and 65×, so neither should be
-over-interpreted. Dispersion is 9-12% on both engines, so treat every ratio
-here as good to two significant figures.
-The steady-state figure is the full 48k-bar row (28.5× faster, 29× less
-memory); the band widens at smaller N as Python's fixed overhead dominates.
-Rust's edge: no pandas, no NumPy, single-threaded with zero allocations in the
-hot loop. (`tools/bench.py` is a lighter quick-check variant of the same
-workload; `bench_paper.py` is the citable measurement.)
+A separate matched execution test compares QRF, vectorbt and Backtesting.py
+on identical frozen events. It does not include WFO or signal calculation.
+The full method, competitor results, data recipe and machine-readable evidence
+are in [`benchmarks/`](benchmarks/).
 
 ## Comparison vs other open-source backtesters
 

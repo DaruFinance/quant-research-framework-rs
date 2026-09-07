@@ -49,6 +49,9 @@ carry = ["panel"]
 dsr = ["dep:statrs"]
 # Shared indicator surface (item 5: indicator parity). Pure-Rust, zero new deps.
 indicators = []
+# Exposes the existing signal-driven core to the reproducible cross-engine
+# execution benchmark. It does not change the default library surface.
+benchmark-internal = []
 # Overfitting-statistics layer (item 3). Pulls in `dsr` so the multitest
 # example's dsr::{psr,...} imports resolve under --features overfit.
 overfit = ["dep:statrs", "dsr"]
@@ -58,6 +61,7 @@ overfit = ["dep:statrs", "dsr"]
 # runtime dependency of the engine and does not appear in the published
 # parity claim of three direct deps in §5.1 of the paper.
 rayon = "1.10"
+sha2 = "0.10"
 
 [[bin]]
 name = "backtester"
@@ -71,6 +75,16 @@ required-features = ["indicators"]
 [[example]]
 name = "benchmark_runner"
 path = "examples/benchmark_runner.rs"
+
+[[example]]
+name = "execution_benchmark"
+path = "examples/execution_benchmark.rs"
+required-features = ["benchmark-internal"]
+
+[[example]]
+name = "wfo_benchmark"
+path = "examples/wfo_benchmark.rs"
+required-features = ["indicators"]
 
 [[example]]
 name = "_parity_indicators"
