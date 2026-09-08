@@ -27,6 +27,11 @@ REPO_PY = Path(
 )
 
 CANON_LICENSE = "Apache-2.0"
+CANON_PUBLIC_AUTHOR = "Daniel Gatto"
+CANON_CITATION_FAMILY = "Gatto"
+CANON_CITATION_GIVEN = "Daniel V."
+CANON_ZENODO_CREATOR = "Gatto, Daniel V."
+CANON_PUBLIC_EMAIL = "daniel@daru.finance"
 fails: list[str] = []
 
 
@@ -38,6 +43,14 @@ def rd(p) -> str | None:
 def must(cond, msg):
     if not cond:
         fails.append(msg)
+
+
+def top_level_yaml_block(text, key):
+    match = re.search(
+        rf"(?ms)^{re.escape(key)}:\s*\n(.*?)(?=^[A-Za-z][A-Za-z0-9_-]*:\s*|\Z)",
+        text,
+    )
+    return match.group(1) if match else ""
 
 
 # ---- 1. LICENSE bodies are Apache-2.0, not MIT ----
@@ -105,6 +118,50 @@ for name, cit in (("rust", cit_rs), ("python", cit_py)):
         must(f"license: {CANON_LICENSE}" in cit,
              f"[cite] {name} CITATION.cff does not declare license: {CANON_LICENSE}")
 
+# ---- 4c. public author and contact metadata ----
+email_re = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+for name, repo, cit in (("rust", REPO_RS, cit_rs), ("python", REPO_PY, cit_py)):
+    authors = top_level_yaml_block(cit, "authors")
+    family_pattern = rf'(?m)^\s*-\s+family-names:\s*"{re.escape(CANON_CITATION_FAMILY)}"\s*$'
+    given_pattern = rf'(?m)^\s+given-names:\s*"{re.escape(CANON_CITATION_GIVEN)}"\s*$'
+    must(bool(re.search(family_pattern, authors)),
+         f"[author] {name} CITATION.cff family name is not {CANON_CITATION_FAMILY!r}")
+    must(bool(re.search(given_pattern, authors)),
+         f"[author] {name} CITATION.cff given names are not {CANON_CITATION_GIVEN!r}")
+    must(set(email_re.findall(authors)) == {CANON_PUBLIC_EMAIL},
+         f"[author] {name} CITATION.cff contact is not the public address")
+    try:
+        zenodo = json.loads((repo / ".zenodo.json").read_text(encoding="utf-8"))
+        creator = zenodo["creators"][0]["name"]
+    except (OSError, ValueError, KeyError, IndexError, TypeError) as exc:
+        creator = None
+        fails.append(f"[author] {name} .zenodo.json cannot be read: {exc}")
+    must(creator == CANON_ZENODO_CREATOR,
+         f"[author] {name} Zenodo creator differs: {creator!r}")
+
+py_author = re.search(
+    r'(?m)^authors\s*=\s*\[\{\s*name\s*=\s*"([^"]+)",\s*email\s*=\s*"([^"]+)"\s*\}\]\s*$',
+    pyproj,
+)
+must(bool(py_author), "[author] pyproject author record is missing")
+if py_author:
+    must(py_author.group(1) == CANON_PUBLIC_AUTHOR,
+         f"[author] pyproject author differs: {py_author.group(1)!r}")
+    must(py_author.group(2) == CANON_PUBLIC_EMAIL,
+         "[author] pyproject contact is not the public address")
+
+for label, manifest in (
+    ("Cargo.toml", cargo),
+    ("vendored Cargo.toml", rd(REPO_PY / "mc_bar_permutation" / "rust" / "vendor"
+                               / "quant-research-framework-rs" / "Cargo.toml") or ""),
+):
+    cargo_author = re.search(r'(?m)^authors\s*=\s*\["([^"]+)"\]\s*$', manifest)
+    expected = f"{CANON_PUBLIC_AUTHOR} <{CANON_PUBLIC_EMAIL}>"
+    must(bool(cargo_author) and cargo_author.group(1) == expected,
+         f"[author] {label} author record differs")
+    must(set(email_re.findall(manifest)) <= {CANON_PUBLIC_EMAIL},
+         f"[author] {label} contains a non-public contact address")
+
 # ---- 5. measured results and README headline agree across both repos ----
 def benchmark_result(repo):
     path = repo / "benchmarks" / "2026-09-07-results.json"
@@ -145,4 +202,4 @@ if fails:
         print("  ✗", f)
     print(f"\n{len(fails)} inconsistency(ies).")
     sys.exit(1)
-print("CONSISTENCY GUARD: OK, license / version / speed / golden counts consistent across repo artifacts.")
+print("CONSISTENCY GUARD: OK, license / version / author / speed / golden counts consistent across repo artifacts.")
