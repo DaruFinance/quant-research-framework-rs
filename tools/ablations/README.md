@@ -3,7 +3,7 @@
 Reproduces the §6.3 *tolerance sensitivity* table in the paper:
 
 > A. Reproducibility-First Walk-Forward Backtester with Tolerance-Bounded
-> Cross-Language Parity (Vieira Gatto, 2026).
+> Cross-Language Parity (Gatto, 2026).
 
 Each script applies a minimal-diff bug to `src/lib.rs` on a throwaway
 branch, runs `cargo build --release`, runs `tools/parity_check.py`

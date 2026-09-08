@@ -330,9 +330,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three parity surfaces remain at 56/56, 98/98, 56/56, sum 210/210.
 
 ### Author
-- Sole author of record canonicalised to **Daniel Vieira Gatto**
-  in `CITATION.cff` (alias: `DaruFinance`); previous variants
-  deprecated for citation-tracking consistency.
+- Sole author of record uses **Daniel Gatto** in package bylines and
+  **Gatto, D. V.** in academic citations. The `DaruFinance` alias remains
+  in `CITATION.cff` for citation tracking.
 
 ## [0.3.1] - 2026-04-30
 

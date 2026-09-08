@@ -15,7 +15,7 @@ def artifact_pair(tmp_path):
     source_py = Path(os.environ.get("QRF_PY_DIR", source_rs.parent / "quant-research-framework"))
     rs, py = tmp_path / "rust", tmp_path / "python"
     for source, target in ((source_rs, rs), (source_py, py)):
-        for name in ("LICENSE", "README.md", "CHANGELOG.md", "CITATION.cff"):
+        for name in ("LICENSE", "README.md", "CHANGELOG.md", "CITATION.cff", ".zenodo.json"):
             target.mkdir(exist_ok=True)
             shutil.copy2(source / name, target / name)
     for source, target, names in (
@@ -25,6 +25,9 @@ def artifact_pair(tmp_path):
         for name in names:
             (target / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source / name, target / name)
+    vendored_cargo = Path("mc_bar_permutation/rust/vendor/quant-research-framework-rs/Cargo.toml")
+    (py / vendored_cargo).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_py / vendored_cargo, py / vendored_cargo)
     shutil.copytree(source_rs / "data/golden", rs / "data/golden")
     for source, target in ((source_rs, rs), (source_py, py)):
         benchmark = target / "benchmarks" / "2026-09-07-results.json"
@@ -85,3 +88,51 @@ def test_stale_readme_version_fails(artifact_pair):
         "currently `0.7.6`", "currently `0.6.0`"), encoding="utf-8")
     result = run_guard(artifact_pair)
     assert result.returncode == 1 and "README current version differs" in result.stdout
+
+
+@pytest.mark.parametrize("repo_index", [0, 1])
+def test_citation_author_drift_fails(artifact_pair, repo_index):
+    citation = artifact_pair[repo_index] / "CITATION.cff"
+    citation.write_text(citation.read_text(encoding="utf-8").replace(
+        'given-names: "Daniel V."', 'given-names: "Wrong Name"'), encoding="utf-8")
+    result = run_guard(artifact_pair)
+    assert result.returncode == 1 and "[author]" in result.stdout
+
+
+def test_public_contact_missing_fails(artifact_pair):
+    pyproject = artifact_pair[1] / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text(encoding="utf-8").replace(
+        'email = "daniel@daru.finance"', 'email = ""'), encoding="utf-8")
+    result = run_guard(artifact_pair)
+    assert result.returncode == 1 and "[author]" in result.stdout
+
+
+@pytest.mark.parametrize("repo_index", [0, 1])
+def test_citation_contact_drift_fails(artifact_pair, repo_index):
+    citation = artifact_pair[repo_index] / "CITATION.cff"
+    citation.write_text(citation.read_text(encoding="utf-8").replace(
+        "daniel@daru.finance", "contact@example.invalid"), encoding="utf-8")
+    result = run_guard(artifact_pair)
+    assert result.returncode == 1 and "[author]" in result.stdout
+
+
+@pytest.mark.parametrize("repo_index,relative_path", [
+    (0, Path("Cargo.toml")),
+    (1, Path("mc_bar_permutation/rust/vendor/quant-research-framework-rs/Cargo.toml")),
+])
+def test_cargo_author_contact_drift_fails(artifact_pair, repo_index, relative_path):
+    manifest = artifact_pair[repo_index] / relative_path
+    manifest.write_text(manifest.read_text(encoding="utf-8").replace(
+        "daniel@daru.finance", "contact@example.invalid"), encoding="utf-8")
+    result = run_guard(artifact_pair)
+    assert result.returncode == 1 and "[author]" in result.stdout
+
+
+@pytest.mark.parametrize("repo_index", [0, 1])
+def test_zenodo_creator_drift_fails(artifact_pair, repo_index):
+    zenodo_path = artifact_pair[repo_index] / ".zenodo.json"
+    zenodo = json.loads(zenodo_path.read_text(encoding="utf-8"))
+    zenodo["creators"][0]["name"] = "Wrong Name"
+    zenodo_path.write_text(json.dumps(zenodo), encoding="utf-8")
+    result = run_guard(artifact_pair)
+    assert result.returncode == 1 and "[author]" in result.stdout
