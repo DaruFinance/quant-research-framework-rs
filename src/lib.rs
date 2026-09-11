@@ -82,6 +82,24 @@ pub const OPTIMIZE_RRR: bool = true;
 pub const USE_WFO: bool = true;
 const WFO_TRIGGER_MODE: &str = "candles";
 pub const WFO_TRIGGER_VAL: usize = 5000;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WfoWindowMode {
+    Rolling,
+    Expanding,
+}
+
+impl WfoWindowMode {
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "rolling" => Ok(Self::Rolling),
+            "expanding" => Ok(Self::Expanding),
+            _ => Err(format!(
+                "BT_WFO_WINDOW_MODE must be 'rolling' or 'expanding'; got {value:?}"
+            )),
+        }
+    }
+}
 const FAST_EMA_SPAN: usize = 20;
 
 // Forex mode: when true, funding fees are skipped (FX brokers don't charge
@@ -275,6 +293,7 @@ pub struct Config {
     pub fee_pct: f64,
     pub slippage_pct: f64,
     pub oos_candles: usize,
+    pub wfo_window_mode: WfoWindowMode,
     pub position_size: f64,
     pub use_forex: bool,
     /// false = per-trade Sharpe (default); true = bar-based standard Sharpe.
@@ -345,17 +364,23 @@ pub struct Config {
 }
 impl Config {
     pub fn new() -> Self {
-        let oos = if USE_OOS2 { OOS_CANDLES_BASE * 2 } else { OOS_CANDLES_BASE };
+        let default_oos = if USE_OOS2 { OOS_CANDLES_BASE * 2 } else { OOS_CANDLES_BASE };
+        let oos = std::env::var("BT_OOS_CANDLES")
+            .map(|value| value.parse::<usize>().expect("BT_OOS_CANDLES must be a positive integer"))
+            .unwrap_or(default_oos);
         let mc_mode = std::env::var("BT_MC_MODE")
             .map(|value| MonteCarloMode::parse(&value).unwrap_or_else(|error| panic!("{error}")))
             .unwrap_or(MC_MODE);
+        let wfo_window_mode = std::env::var("BT_WFO_WINDOW_MODE")
+            .map(|value| WfoWindowMode::parse(&value).unwrap_or_else(|error| panic!("{error}")))
+            .unwrap_or(WfoWindowMode::Rolling);
         let mc_runs = std::env::var("BT_MC_RUNS")
             .map(|value| value.parse::<usize>().expect("BT_MC_RUNS must be a positive integer"))
             .unwrap_or_else(|_| mc_mode.default_runs());
         Config { export_path: std::env::var("BT_EXPORT_PATH").unwrap_or_else(|_| "trade_list.csv".into()),
                  tp_percentage: TP_PERCENTAGE_DEFAULT, use_tp: USE_TP_DEFAULT, use_sl: USE_SL,
                  fee_pct: FEE_PCT_DEFAULT, slippage_pct: SLIPPAGE_PCT_DEFAULT,
-                 oos_candles: oos, position_size: RISK_AMOUNT,
+                 oos_candles: oos, wfo_window_mode, position_size: RISK_AMOUNT,
                  use_forex: USE_FOREX,
                  sharpe_bar: std::env::var("BT_SHARPE_MODE").map(|v| v == "bar").unwrap_or(SHARPE_BAR),
                  use_monte_carlo: std::env::var("BT_USE_MONTE_CARLO")
@@ -380,6 +405,10 @@ impl Config {
                  funding_fee: FUNDING_FEE }
     }
     pub fn with_forex(mut self, on: bool) -> Self { self.use_forex = on; self }
+    pub fn with_wfo_window_mode(mut self, mode: WfoWindowMode) -> Self {
+        self.wfo_window_mode = mode;
+        self
+    }
     /// Switch the reported Sharpe to the standard bar-based calendar-time
     /// convention (default off = per-trade statistic).
     pub fn with_sharpe_bar(mut self, on: bool) -> Self { self.sharpe_bar = on; self }
@@ -1694,6 +1723,25 @@ fn run_wfo_window(is_bars: &[Bar], oos_bars: &[Bar], lb: usize, window_tag: &str
     (rets_oos, eq_is)
 }
 
+fn validate_wfo_window(n: usize, cfg: &Config) {
+    if cfg.wfo_window_mode == WfoWindowMode::Expanding
+        && (BACKTEST_CANDLES == 0
+            || cfg.oos_candles == 0
+            || n < cfg.oos_candles.saturating_add(BACKTEST_CANDLES))
+    {
+        panic!(
+            "expanding WFO requires data length >= oos_candles + BACKTEST_CANDLES with both windows positive; reduce oos_candles or the initial BACKTEST_CANDLES"
+        );
+    }
+}
+
+fn wfo_is_raw_start(cur_start: i64, first_is_start: i64, cfg: &Config) -> i64 {
+    match cfg.wfo_window_mode {
+        WfoWindowMode::Rolling => cur_start - BACKTEST_CANDLES as i64,
+        WfoWindowMode::Expanding => first_is_start,
+    }
+}
+
 fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, strategy: &str, sig_fn: RawSignalsFn) {
     let scenarios = robustness_scenarios();
     let items: Vec<_> = scenarios.iter().take(MAX_ROBUSTNESS_SCENARIOS).collect();
@@ -1710,6 +1758,8 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
     let oos_candles = cfg.oos_candles as i64;
     // Python: start_total = n - OOS_CANDLES  (can be negative, e.g. 48094-90000 = -41906)
     let start_total: i64 = ni - oos_candles;
+    validate_wfo_window(n, cfg);
+    let first_is_start = start_total - BACKTEST_CANDLES as i64;
     let mut cur_start: i64 = start_total;
     let mut window_no = 1usize;
     let mut all_oos_rets: Vec<f64> = Vec::new();
@@ -1720,7 +1770,10 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
             (cur_start + WFO_TRIGGER_VAL as i64).min(ni)
         } else {
             let cs_idx = python_iloc_idx(cur_start as isize, n);
-            let is_win_start = cs_idx.saturating_sub(BACKTEST_CANDLES);
+            let is_win_start = match cfg.wfo_window_mode {
+                WfoWindowMode::Rolling => cs_idx.saturating_sub(BACKTEST_CANDLES),
+                WfoWindowMode::Expanding => first_is_start as usize,
+            };
             let is_bars_roll = &all_bars[is_win_start..cs_idx];
             let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
             if lb_roll.is_none() { break; }
@@ -1736,7 +1789,7 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
         // Python: is_win_start = cur_start - BACKTEST_CANDLES
         // Python: is_df_roll = df.iloc[is_win_start:cur_start]
         // Python: dfo = df.iloc[cur_start:cur_end]
-        let is_raw_start = cur_start - BACKTEST_CANDLES as i64;
+        let is_raw_start = wfo_is_raw_start(cur_start, first_is_start, cfg);
         let (is_s, is_e) = python_iloc_slice(is_raw_start, cur_start, n);
         let (oos_s, oos_e) = python_iloc_slice(cur_start, cur_end, n);
         let is_bars_roll = &all_bars[is_s..is_e];
@@ -1778,7 +1831,7 @@ fn walk_forward(all_bars: &[Bar], eq_is_baseline: &[f64], cfg: &mut Config, stra
 // so this is harvest-equivalent. No existing caller of `walk_forward` changes.
 // ============================================================================
 
-/// Out-of-sample harvest of one rolling walk-forward run (benchmark path).
+/// Out-of-sample harvest of one walk-forward run (benchmark path).
 /// `all_oos_rets` = concatenated OOS per-trade stream; `eq_wfo_oos_fraction` =
 /// OOS-only equity fraction (1.0 crypto / 0.0 forex, NOT seed-prefixed, so MDD
 /// agrees with the Python runner); `agg` = aggregated Metrics; `per_window_oos`
@@ -1788,6 +1841,12 @@ pub struct WfoOut {
     pub eq_wfo_oos_fraction: Vec<f64>,
     pub agg: Metrics,
     pub per_window_oos: Vec<Metrics>,
+    /// Half-open `(start, end)` bar indices for each IS window.
+    pub per_window_is_ranges: Vec<(usize, usize)>,
+    /// Half-open `(start, end)` bar indices for each OOS window.
+    pub per_window_oos_ranges: Vec<(usize, usize)>,
+    /// Lookback selected independently on each IS window.
+    pub per_window_lbs: Vec<usize>,
 }
 
 /// Like `walk_forward` but RETURNS the OOS harvest (no summary print) and runs
@@ -1804,10 +1863,15 @@ pub fn walk_forward_collect(
     let ni = n as i64;
     let oos_candles = cfg.oos_candles as i64;
     let start_total: i64 = ni - oos_candles;
+    validate_wfo_window(n, cfg);
+    let first_is_start = start_total - BACKTEST_CANDLES as i64;
     let mut cur_start: i64 = start_total;
     let mut window_no = 1usize;
     let mut all_oos_rets: Vec<f64> = Vec::new();
     let mut per_window_oos: Vec<Metrics> = Vec::new();
+    let mut per_window_is_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut per_window_oos_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut per_window_lbs: Vec<usize> = Vec::new();
     let base0 = if cfg.use_forex { 0.0 } else { 1.0 };
 
     while cur_start < ni {
@@ -1815,7 +1879,10 @@ pub fn walk_forward_collect(
             (cur_start + WFO_TRIGGER_VAL as i64).min(ni)
         } else {
             let cs_idx = python_iloc_idx(cur_start as isize, n);
-            let is_win_start = cs_idx.saturating_sub(BACKTEST_CANDLES);
+            let is_win_start = match cfg.wfo_window_mode {
+                WfoWindowMode::Rolling => cs_idx.saturating_sub(BACKTEST_CANDLES),
+                WfoWindowMode::Expanding => first_is_start as usize,
+            };
             let is_bars_roll = &all_bars[is_win_start..cs_idx];
             let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
             if lb_roll.is_none() { break; }
@@ -1828,14 +1895,17 @@ pub fn walk_forward_collect(
             else { (cur_start + tr_tmp[WFO_TRIGGER_VAL.min(tr_tmp.len()) - 1].exit_idx as i64 + 1).min(ni) }
         };
 
-        let is_raw_start = cur_start - BACKTEST_CANDLES as i64;
+        let is_raw_start = wfo_is_raw_start(cur_start, first_is_start, cfg);
         let (is_s, is_e) = python_iloc_slice(is_raw_start, cur_start, n);
         let (oos_s, oos_e) = python_iloc_slice(cur_start, cur_end, n);
         let is_bars_roll = &all_bars[is_s..is_e];
         let (lb_roll, _) = optimiser(is_bars_roll, cfg, sig_fn);
         if lb_roll.is_none() { break; }
         let lb = lb_roll.unwrap();
+        per_window_lbs.push(lb);
         let oos_slice = &all_bars[oos_s..oos_e];
+        per_window_is_ranges.push((is_s, is_e));
+        per_window_oos_ranges.push((oos_s, oos_e));
 
         let (rets_oos, _eq_is_window) = run_wfo_window(
             is_bars_roll, oos_slice, lb, &format!("W{:02}", window_no),
@@ -1856,7 +1926,15 @@ pub fn walk_forward_collect(
     for r in &all_oos_rets { acc += r; eq.push(acc); }
     let agg = compute_metrics_for(&all_oos_rets, &eq, cfg.use_forex);
 
-    WfoOut { all_oos_rets, eq_wfo_oos_fraction: eq, agg, per_window_oos }
+    WfoOut {
+        all_oos_rets,
+        eq_wfo_oos_fraction: eq,
+        agg,
+        per_window_oos,
+        per_window_is_ranges,
+        per_window_oos_ranges,
+        per_window_lbs,
+    }
 }
 
 /// The engine's built-in default raw-signal function (EMA(FAST_EMA_SPAN) x
@@ -1973,6 +2051,7 @@ pub fn run(bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn) {
 /// forex / session / oos2 modes from a single binary without forking
 /// `main.rs`. Mirrors `run_with_regime_cfg` but skips regime segmentation.
 pub fn run_cfg(bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn, mut cfg: Config) {
+    validate_wfo_window(bars.len(), &cfg);
     let _ledger = LedgerGuard::acquire(&cfg.export_path);
     let total_start = Instant::now();
     let bars = age_dataset(bars.to_vec(), AGE_DATASET);
@@ -2291,6 +2370,8 @@ fn walk_forward_regime(
     let ni = n as i64;
     let oos_candles = cfg.oos_candles as i64;
     let start_total: i64 = ni - oos_candles;
+    validate_wfo_window(n, cfg);
+    let first_is_start = start_total - BACKTEST_CANDLES as i64;
     let mut cur_start: i64 = start_total;
     let mut window_no = 1usize;
     let mut all_oos_rets: Vec<f64> = Vec::new();
@@ -2298,7 +2379,7 @@ fn walk_forward_regime(
 
     while cur_start < ni {
         let cur_end: i64 = (cur_start + WFO_TRIGGER_VAL as i64).min(ni);
-        let is_raw_start = cur_start - BACKTEST_CANDLES as i64;
+        let is_raw_start = wfo_is_raw_start(cur_start, first_is_start, cfg);
         let (is_s, is_e) = python_iloc_slice(is_raw_start, cur_start, n);
         let (oos_s, oos_e) = python_iloc_slice(cur_start, cur_end, n);
         if is_e <= is_s || oos_e <= oos_s { break; }
@@ -2332,14 +2413,42 @@ fn walk_forward_regime(
         let is_ema20 = compute_ema(&is_close, 20);
         let raw_is = create_regime_signals_internal(&is_close, &is_ema20, &best_lbs, regimes_is);
         let sig_is = parse_signals_for(&raw_is, is_bars, cfg);
-        let (_, met_is, eq_is, _) = run_backtest(is_bars, &sig_is, cfg);
+        let (tr_is, met_is, eq_is, _) = run_backtest(is_bars, &sig_is, cfg);
 
         // OOS run
         let oos_close: Vec<f64> = oos_bars.iter().map(|b| b.close).collect();
         let oos_ema20 = compute_ema(&oos_close, 20);
         let raw_oos = create_regime_signals_internal(&oos_close, &oos_ema20, &best_lbs, regimes_oos);
         let sig_oos = parse_signals_for(&raw_oos, oos_bars, cfg);
-        let (_, met_oos, _, rets_oos) = run_backtest(oos_bars, &sig_oos, cfg);
+        let (tr_oos, met_oos, _, rets_oos) = run_backtest(oos_bars, &sig_oos, cfg);
+
+        // The legacy rolling regime path did not export its WFO ledger. Keep
+        // that output unchanged, while expanding mode appends to the baseline
+        // ledger using the same header rules as run_wfo_window.
+        if cfg.wfo_window_mode == WfoWindowMode::Expanding {
+            let header_needed = !Path::new(&cfg.export_path).exists();
+            if window_no == 1 {
+                export_trades(
+                    &tr_is,
+                    is_bars,
+                    "Regime-WFO",
+                    &format!("W{:02}", window_no),
+                    "IS",
+                    &cfg.export_path,
+                    header_needed,
+                );
+            }
+            let header_needed = !Path::new(&cfg.export_path).exists();
+            export_trades(
+                &tr_oos,
+                oos_bars,
+                "Regime-WFO",
+                &format!("W{:02}", window_no),
+                "OOS",
+                &cfg.export_path,
+                header_needed,
+            );
+        }
 
         prettyprint_str(&format!("W{:02} IS",  window_no), &met_is,  &lb_tag);
         prettyprint_str(&format!("W{:02} OOS", window_no), &met_oos, &lb_tag);
@@ -2436,6 +2545,7 @@ pub fn run_with_regime_cfg(
     bars: &[Bar], strategy: &str, sig_fn: RawSignalsFn,
     regime_cfg: RegimeConfig, mut cfg: Config,
 ) {
+    validate_wfo_window(bars.len(), &cfg);
     let _ledger = LedgerGuard::acquire(&cfg.export_path);
     let total_start = std::time::Instant::now();
     let bars = age_dataset(bars.to_vec(), AGE_DATASET);

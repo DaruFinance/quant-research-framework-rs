@@ -133,6 +133,13 @@ See [`examples/README.md`](examples/README.md) for the contract in detail and `e
 - Baseline IS/OOS test with raw default look-back
 - Per-window re-optimisation and forward testing
 - Configurable trigger: fixed candle count or fixed trade count per window
+- Training windows default to `WfoWindowMode::Rolling`. Use
+  `Config::new().with_wfo_window_mode(WfoWindowMode::Expanding)` to keep the
+  first IS start fixed while each later optimisation includes the history
+  observed so far; for the bundled SOL data, run the binary with
+  `BT_WFO_WINDOW_MODE=expanding BT_OOS_CANDLES=12500`, where `BACKTEST_CANDLES`
+  remains the initial IS length. The engine rejects expanding runs whose data
+  cannot hold the initial IS plus the configured OOS span.
 - Replication ratio printed before and after optimisation
 - **Second OOS split** (`USE_OOS2`): doubles the final OOS so the
   framework reports both halves separately as an extra layer of OOS
